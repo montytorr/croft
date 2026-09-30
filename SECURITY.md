@@ -146,7 +146,7 @@ What this does **not** hide, by design:
 - Workspace isolation is not tenant isolation: a member who must not see another member's
   projects needs a separate Croft deployment.
 - Private subjects keep work from colleagues, not from an administrator set on reading
-  it. An administrator cannot mint a key for someone (refused since 0.4.1), but can still
+  it. An administrator cannot mint a key for someone (refused since 0.4.2), but can still
   reset their password and sign in as them, or disable them (which brings their private
   subjects under the admin exception) and restore them afterwards. Each leaves a trace the
   person can find (a sign-out, a disabled spell), but neither is refused.
