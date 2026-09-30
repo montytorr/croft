@@ -9,11 +9,11 @@ import { isUntouchedAutoCheckpoint } from '@/lib/checkpoint-origin'
  * session and checkpoints what it held; Codex has only Stop, and OpenClaw has
  * neither — its nearest equivalents are `command:new` and a daily auto-reset.
  * So on every runtime a claim can outlive its session, and the board fills
- * with holds nobody is acting on: 22 were held when CAIRN-284 was filed, 17 of
+ * with holds nobody is acting on: 22 were held when CROFT-284 was filed, 17 of
  * them silent for more than 20 hours.
  *
- * Run on a schedule as the maintenance identity (`CAIRN_AGENT=maintenance
- * cairn reconcile`, installed by scripts/install-cron.mjs), this releases every
+ * Run on a schedule as the maintenance identity (`CROFT_AGENT=maintenance
+ * croft reconcile`, installed by scripts/install-cron.mjs), this releases every
  * quiet claim in the workspace and says so on the task. Run by any other agent
  * it releases only that agent's own, which is all it ever did — and why the
  * scheduled job, holding nothing itself, released nothing for two weeks.
@@ -79,13 +79,13 @@ type HeldClaim = {
  *
  * Every sign of life counts, not just an explicit beat. A task being worked
  * on accumulates notes, checkpoints and edits whether or not anyone remembers
- * to call `cairn beat`, and releasing over a missing beat alone would punish
+ * to call `croft beat`, and releasing over a missing beat alone would punish
  * the agents doing the work most carefully.
  *
  * Except the one written without anyone looking: "Still held, not progressed"
  * is the session-end hook recording that a claim was held while the session
  * worked elsewhere. Counting its timestamp let a runtime that records a
- * session every 30 minutes keep a week-old claim alive forever (CAIRN-283).
+ * session every 30 minutes keep a week-old claim alive forever (CROFT-283).
  */
 export const lastSignOfLife = (
   task: Pick<HeldClaim, 'heartbeat_at' | 'claimed_at' | 'checkpoint_at' | 'updated_at' | 'checkpoint_summary'>,

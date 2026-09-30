@@ -148,7 +148,7 @@ describe('layoutGraph', () => {
   })
 })
 
-describe('layoutGraph determinism (CAIRN-252)', () => {
+describe('layoutGraph determinism (CROFT-252)', () => {
   /**
    * The existing tests vary NODE order, which is why this survived: the node
    * path was already protected by components() sorting, and the LINK list

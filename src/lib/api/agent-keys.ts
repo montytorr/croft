@@ -3,7 +3,7 @@ import { pool } from '@/lib/db/client'
 /**
  * An agent key as any API response shows it — the admin's view of someone's
  * keys and a person's view of their own are the same resource, so they are
- * the same shape (CAIRN-317). Never the hash, never the secret: the plaintext
+ * the same shape (CROFT-317). Never the hash, never the secret: the plaintext
  * is shown once, when the key is created, and nothing here could reproduce it.
  */
 export type AgentKey = {

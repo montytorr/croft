@@ -3,7 +3,7 @@ import { clientAddress } from './client-address'
 
 const headers = (xff?: string) => new Headers(xff === undefined ? {} : { 'x-forwarded-for': xff })
 
-afterEach(() => { delete process.env.CAIRN_TRUSTED_PROXY_HOPS })
+afterEach(() => { delete process.env.CROFT_TRUSTED_PROXY_HOPS })
 
 describe('the address a login is counted against', () => {
   it('is the entry the nearest proxy added, not the one the client wrote', () => {
@@ -13,7 +13,7 @@ describe('the address a login is counted against', () => {
   })
 
   it('counts back further when there are more trusted proxies', () => {
-    process.env.CAIRN_TRUSTED_PROXY_HOPS = '2'
+    process.env.CROFT_TRUSTED_PROXY_HOPS = '2'
     expect(clientAddress(headers('6.6.6.6, 203.0.113.9, 10.0.0.2'))).toBe('203.0.113.9')
   })
 

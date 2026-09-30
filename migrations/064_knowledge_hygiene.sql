@@ -1,11 +1,11 @@
 -- ===========================================================================
 -- 064: knowledge hygiene — provenance, sweep-proof recall, length-fair ranking
---      (CAIRN-289)
+--      (CROFT-289)
 --
--- Measured by the CAIRN-282 audit over the live store (425 rows):
+-- Measured by the CROFT-282 audit over the live store (425 rows):
 --
 --   * 0 rows carry source_session_id or source_task_id. The CLI already sends
---     the session on every request (X-Cairn-Session); nothing stored it.
+--     the session on every request (X-Croft-Session); nothing stored it.
 --   * 1,169 of 1,243 knowledge_reads came from audit loops reading 10-141
 --     distinct slugs a minute, and every one marked its entry as recalled
 --     (062), so 370 of 424 entries looked used and `know --unused` could not
@@ -35,7 +35,7 @@
 alter table knowledge add column if not exists source_session_ref text;
 
 comment on column knowledge.source_session_ref is
-  'The session that wrote this entry, as its runtime named it (X-Cairn-Session). '
+  'The session that wrote this entry, as its runtime named it (X-Croft-Session). '
   'source_session_id is filled only when that session''s row already existed; '
   'otherwise resolve this through sessions.external_id.';
 
@@ -53,8 +53,8 @@ comment on column knowledge_revisions.edited_session is
 --
 -- Kept as rows — a sweep is still something that happened — and tagged so
 -- that nothing counting recall counts them. Two ways in:
---   * declared: the CLI sends X-Cairn-Read: sweep (`know --sweep`,
---     CAIRN_SWEEP=1) and the API writes sweep = true;
+--   * declared: the CLI sends X-Croft-Read: sweep (`know --sweep`,
+--     CROFT_SWEEP=1) and the API writes sweep = true;
 --   * inferred: the audit loops declared nothing, so a read is also a sweep
 --     when the same actor has already read 9 OTHER slugs in the last minute.
 --     Organic use measured at most a handful a minute; the loops ran 10-141.
@@ -151,7 +151,7 @@ as $$
 $$;
 
 comment on function knowledge_recall_counts(timestamptz, uuid[]) is
-  'Per entry since p_since: how many searches returned it, how many direct reads fetched it (sweeps excluded, 064), and when it was last recalled either way. The session briefing and cairn recall are not counted — they record nothing.';
+  'Per entry since p_since: how many searches returned it, how many direct reads fetched it (sweeps excluded, 064), and when it was last recalled either way. The session briefing and croft recall are not counted — they record nothing.';
 
 -- ---------------------------------------------------------------------------
 -- 3. History: tag the sweeps already recorded, then recompute recall state.

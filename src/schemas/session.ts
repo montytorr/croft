@@ -25,7 +25,7 @@ export const sessionUpsert = z.object({
   /**
    * The checkout's `origin`, raw. Lets the server attribute the session when
    * the caller's map has no entry for this directory, exactly as it does for
-   * `cairn context`.
+   * `croft context`.
    */
   repo: z.string().max(500).optional(),
   startedAt: z.string().datetime().optional(),

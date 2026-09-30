@@ -1,7 +1,7 @@
 import { admin } from '@/lib/db/client'
 import { HEX, paletteFor, type Palette } from '@/lib/brand-colour'
 
-export const DEFAULT_NAME = 'Cairn'
+export const DEFAULT_NAME = 'Croft'
 
 export type Branding = {
   /** What this instance calls itself: the sidebar, the tab titles, the login page. */
@@ -47,7 +47,7 @@ export const brandingFrom = (row: Row | null): Branding => {
  * leave the save route clearing a memo the pages never read.
  */
 const TTL_MS = 30_000
-const MEMO = Symbol.for('cairn.branding')
+const MEMO = Symbol.for('croft.branding')
 type Memo = { at: number; value: Promise<Branding> }
 const store = globalThis as typeof globalThis & { [MEMO]?: Memo }
 

@@ -25,10 +25,10 @@ begin
          'activity_feed',
          'list_labels',
          'rename_label',
-         'cairn_pulse',
-         'cairn_work_shape',
-         'cairn_memory_use',
-         'cairn_vitals'
+         'croft_pulse',
+         'croft_work_shape',
+         'croft_memory_use',
+         'croft_vitals'
        ])
   loop
     definition := pg_get_functiondef(target.oid);
@@ -72,7 +72,7 @@ $migration$;
 
 -- Activity rows can outlive their task and can describe projects or knowledge,
 -- so the pulse must not reach them through an inner task/project join.
-create or replace function cairn_pulse(p_owner uuid, p_project text default null)
+create or replace function croft_pulse(p_owner uuid, p_project text default null)
 returns text
 language sql
 stable
@@ -103,4 +103,4 @@ as $$
   from scoped_tasks;
 $$;
 
-revoke all on function cairn_pulse from public;
+revoke all on function croft_pulse from public;

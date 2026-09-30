@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { knowledgeCreate, knowledgeUpdate, SLUG_PATTERN, slugify } from './knowledge'
 
 /**
- * The slug is the only name a fact has. `cairn know <subject>` decides between
+ * The slug is the only name a fact has. `croft know <subject>` decides between
  * fetching an entry and searching for one by testing the subject against
  * `SLUG_PATTERN`, and knowledge bodies cross-reference each other by slug —
  * so the shape of this string is the difference between following a reference
@@ -37,7 +37,7 @@ describe('knowledge slugs', () => {
   })
 })
 
-describe('SLUG_PATTERN — what `cairn know` treats as a slug rather than a query', () => {
+describe('SLUG_PATTERN — what `croft know` treats as a slug rather than a query', () => {
   it('accepts the shape slugify produces', () => {
     expect(SLUG_PATTERN.test('cache-warmup-race')).toBe(true)
     expect(SLUG_PATTERN.test('proxy-buffer-defaults')).toBe(true)
@@ -55,7 +55,7 @@ describe('SLUG_PATTERN — what `cairn know` treats as a slug rather than a quer
   })
 
   it('rejects uppercase, so a project key is never mistaken for a slug', () => {
-    expect(SLUG_PATTERN.test('CAIRN-42')).toBe(false)
+    expect(SLUG_PATTERN.test('CROFT-42')).toBe(false)
   })
 })
 
@@ -83,7 +83,7 @@ describe('slug length', () => {
   })
 })
 
-describe('knowledge bodies (CAIRN-289)', () => {
+describe('knowledge bodies (CROFT-289)', () => {
   it('refuses a missing, empty or blank body on create', () => {
     expect(knowledgeCreate.safeParse({ title: 'A claim' }).success).toBe(false)
     expect(knowledgeCreate.safeParse({ title: 'A claim', body: '' }).success).toBe(false)

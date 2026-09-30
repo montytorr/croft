@@ -20,7 +20,7 @@ const textButton =
   'text-[0.75rem] transition-colors duration-[var(--dur-1)] disabled:pointer-events-none disabled:opacity-40'
 
 /**
- * No `<form>` anywhere (CAIRN-171): every action is a `type="button"` that
+ * No `<form>` anywhere (CROFT-171): every action is a `type="button"` that
  * calls `mutate`, and every confirmation is inline — the row itself asks,
  * rather than a browser dialog that blocks the tab.
  */
@@ -65,7 +65,7 @@ export const OwnKeysManager = ({ keys }: { keys: OwnKey[] }) => {
           title="No agent keys yet."
           hint={
             <>
-              Run <code>cairn setup</code> on a machine and approve the link it opens: that pairs a key
+              Run <code>croft setup</code> on a machine and approve the link it opens: that pairs a key
               for each agent runtime on the machine.
             </>
           }
@@ -188,7 +188,7 @@ const HostCard = ({
         <span className="inline-flex items-center gap-1.5">
           {group.paired ? <Laptop size={11} aria-hidden /> : <KeyRound size={11} aria-hidden />}
           {group.paired
-            ? `${plural(active.length, 'active key')}, paired by cairn setup`
+            ? `${plural(active.length, 'active key')}, paired by croft setup`
             : 'Keys not named for a machine — issued by an administrator, or before pairing existed'}
         </span>
       }

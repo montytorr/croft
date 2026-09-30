@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Wires Cairn's memory hooks into the agent runtimes on this machine.
+ * Wires Croft's memory hooks into the agent runtimes on this machine.
  *
  * Two mechanisms, the same two everywhere:
  *   session start  -> inject the briefing
@@ -21,7 +21,7 @@
  *
  * Usage: node scripts/install-hooks.mjs [--dry-run] [--openclaw]
  *
- * `cairn setup` runs this for you, alongside pairing keys and copying the
+ * `croft setup` runs this for you, alongside pairing keys and copying the
  * skill; run it by hand only to re-wire the hooks on their own.
  */
 import { execFileSync } from 'node:child_process'
@@ -35,12 +35,12 @@ const FORCE_OPENCLAW = process.argv.includes('--openclaw')
 const HOME = homedir()
 const REPO = dirname(import.meta.dirname)
 
-const CONTEXT = join(HOME, '.cairn', 'hooks', 'cairn-context.mjs')
-const SESSION_END = join(HOME, '.cairn', 'hooks', 'cairn-session-end.mjs')
-const LEARN_NUDGE = join(HOME, '.cairn', 'hooks', 'cairn-learn-nudge.mjs')
+const CONTEXT = join(HOME, '.croft', 'hooks', 'croft-context.mjs')
+const SESSION_END = join(HOME, '.croft', 'hooks', 'croft-session-end.mjs')
+const LEARN_NUDGE = join(HOME, '.croft', 'hooks', 'croft-learn-nudge.mjs')
 
 /** Marks the entries this installer owns, so re-running replaces rather than duplicates. */
-const TAG = 'cairn-memory'
+const TAG = 'croft-memory'
 
 const log = (...a) => console.log(...a)
 
@@ -48,14 +48,14 @@ const log = (...a) => console.log(...a)
  * The hook set, in a form that compares.
  *
  * Two files can hold the same hooks and different bytes: JSON.stringify emits
- * keys in insertion order, so rebuilding an entry moves `cairn-memory` from
+ * keys in insertion order, so rebuilding an entry moves `croft-memory` from
  * after `timeout` to before it, and a file without a trailing newline gains
  * one. Nothing about the configuration changed; every byte of it moved.
  *
  * That is not cosmetic for Codex. It refuses to run a hook whose entry does
  * not match a `trusted_hash` under `[hooks.state]` in config.toml, so a
  * rewrite that changes nothing still takes its memory offline until somebody
- * re-trusts each entry by hand. CAIRN-167 was that failure, found the slow
+ * re-trusts each entry by hand. CROFT-167 was that failure, found the slow
  * way: the key worked, the scripts worked when run directly, and only the host
  * config was wrong.
  *
@@ -86,7 +86,7 @@ const writeJson = (path, value, before) => {
     return true
   }
   mkdirSync(dirname(path), { recursive: true })
-  if (existsSync(path)) copyFileSync(path, `${path}.bak-cairn`)
+  if (existsSync(path)) copyFileSync(path, `${path}.bak-croft`)
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`)
   return true
 }
@@ -104,9 +104,9 @@ const readJson = (path) => {
 const installScripts = () => {
   if (DRY) return log(`  would copy hooks into ${dirname(CONTEXT)}`)
   mkdirSync(dirname(CONTEXT), { recursive: true })
-  copyFileSync(join(REPO, 'hooks', 'cairn-context.mjs'), CONTEXT)
-  copyFileSync(join(REPO, 'hooks', 'cairn-session-end.mjs'), SESSION_END)
-  copyFileSync(join(REPO, 'hooks', 'cairn-learn-nudge.mjs'), LEARN_NUDGE)
+  copyFileSync(join(REPO, 'hooks', 'croft-context.mjs'), CONTEXT)
+  copyFileSync(join(REPO, 'hooks', 'croft-session-end.mjs'), SESSION_END)
+  copyFileSync(join(REPO, 'hooks', 'croft-learn-nudge.mjs'), LEARN_NUDGE)
   log(`  scripts -> ${dirname(CONTEXT)}`)
 }
 
@@ -126,9 +126,9 @@ const installScripts = () => {
  * the scripts lived somewhere else -- a different home, a checkout, a copy
  * under /opt -- still invokes the same two files, and matching the full path
  * would miss exactly the stale entry that most needs replacing. Nothing else
- * on a machine runs a file called `cairn-session-end.mjs`.
+ * on a machine runs a file called `croft-session-end.mjs`.
  */
-const SCRIPT_NAMES = ['cairn-context.mjs', 'cairn-session-end.mjs', 'cairn-learn-nudge.mjs']
+const SCRIPT_NAMES = ['croft-context.mjs', 'croft-session-end.mjs', 'croft-learn-nudge.mjs']
 
 const isMine = (hook) =>
   Boolean(hook?.[TAG]) ||
@@ -198,7 +198,7 @@ const canonicalHermesHooks = (hooks) =>
  * So PreCompact as well. A long session compacts repeatedly, and compaction is
  * the one event that is guaranteed to happen to a session too long to end --
  * it is what happens INSTEAD of ending. Recording there costs nothing extra in
- * correctness, because `cairn session end` upserts on (platform, id): the row
+ * correctness, because `croft session end` upserts on (platform, id): the row
  * is rewritten in place, progressively richer, and the compaction that finally
  * precedes a real SessionEnd just writes the same row once more.
  *
@@ -235,7 +235,7 @@ const installClaude = () => {
   replace('Stop', null, mine(`node ${LEARN_NUDGE}`, { timeout: 10 }))
 
   if (writeJson(path, settings, before)) {
-    log('  claude: SessionStart, SessionEnd, PreCompact, Stop (asks once per session to cairn learn)')
+    log('  claude: SessionStart, SessionEnd, PreCompact, Stop (asks once per session to croft learn)')
     if (unwired) log('  claude: removed the per-Read PreToolUse hook (CCS-40)')
   }
 }
@@ -245,7 +245,7 @@ const installClaude = () => {
 /**
  * Codex shares Claude Code's wire format exactly, so the same scripts serve it.
  * Codex long had no SessionEnd, so the recorder ran on Stop as a session end:
- * every turn closed the session and checkpointed held tasks (CAIRN-319). Codex
+ * every turn closed the session and checkpointed held tasks (CROFT-319). Codex
  * has SessionEnd now (0.155 at least). Stop records a live checkpoint
  * (`--ongoing`: no end time, held tasks untouched) so a session left open still
  * shows what it did, and SessionEnd closes it. Every handler has to be trusted
@@ -267,11 +267,11 @@ const installCodex = () => {
     config.hooks[event] = groups
   }
 
-  // CAIRN_AGENT names the runtime, and the CLI picks the matching key out of
-  // ~/.cairn/env. Without it every runtime on a machine shares one key, and
+  // CROFT_AGENT names the runtime, and the CLI picks the matching key out of
+  // ~/.croft/env. Without it every runtime on a machine shares one key, and
   // the key is the identity -- which is how one host had Codex's work all
   // filed under OpenClaw's name.
-  const env = 'CAIRN_AGENT=codex CAIRN_PLATFORM=codex'
+  const env = 'CROFT_AGENT=codex CROFT_PLATFORM=codex'
 
   replace('SessionStart', 'startup|resume|clear', mine(`${env} node ${CONTEXT}`, { timeout: 10 }))
   const unwired = strip(config.hooks, 'PreToolUse')
@@ -287,11 +287,11 @@ const installCodex = () => {
   // every run it is wallpaper, and the one run where it matters reads the same
   // as the twenty where it did not.
   if (writeJson(path, config, before)) {
-    log('  codex: SessionStart, Stop (live checkpoint; asks once per session to cairn learn), SessionEnd')
+    log('  codex: SessionStart, Stop (live checkpoint; asks once per session to croft learn), SessionEnd')
     if (unwired) log('  codex: removed the per-Read PreToolUse hook (CCS-40)')
     log('  codex: entries must be trusted on next launch — [hooks.state] in config.toml')
-    log('  codex: needs CAIRN_API_KEY_CODEX (`cairn setup` pairs one), or it writes as')
-    log('         whoever owns the plain CAIRN_API_KEY')
+    log('  codex: needs CROFT_API_KEY_CODEX (`croft setup` pairs one), or it writes as')
+    log('         whoever owns the plain CROFT_API_KEY')
   }
 
   // Said, never done. These are somebody else's hooks, and this installer has
@@ -299,10 +299,10 @@ const installCodex = () => {
   // and a session-end script written for Claude Code that makes a model call
   // becomes one billed call per turn. That is
   // what Quarry's hook did here after CCS-40 took it out of Claude Code only
-  // (CAIRN-290), and nothing said so.
+  // (CROFT-290), and nothing said so.
   const foreign = foreignHooks(config.hooks)
   if (foreign.length > 0) {
-    log(`  codex: ${foreign.length} hook(s) in ${path} are not Cairn's — left untouched:`)
+    log(`  codex: ${foreign.length} hook(s) in ${path} are not Croft's — left untouched:`)
     for (const { event, command } of foreign) {
       log(`         ${event}${event === 'Stop' ? ' (runs every turn)' : ''}: ${command}`)
     }
@@ -340,15 +340,15 @@ const installHermes = () => {
     return
   }
 
-  const hookCli = process.env.CAIRN_HOOK_CLI?.trim() || 'cairn'
+  const hookCli = process.env.CROFT_HOOK_CLI?.trim() || 'croft'
   if (!isSafeHookCli(hookCli)) {
-    console.error('  Hermes Agent by Nous Research: CAIRN_HOOK_CLI must be one safe executable path; refusing to write a hook that would not run')
+    console.error('  Hermes Agent by Nous Research: CROFT_HOOK_CLI must be one safe executable path; refusing to write a hook that would not run')
     process.exitCode = 1
     return
   }
 
   const hooks = JSON.parse(JSON.stringify(before))
-  const command = `env CAIRN_AGENT=hermes CAIRN_PLATFORM=hermes CAIRN_CLI=${hookCli} node ${CONTEXT}`
+  const command = `env CROFT_AGENT=hermes CROFT_PLATFORM=hermes CROFT_CLI=${hookCli} node ${CONTEXT}`
   const current = Array.isArray(hooks.pre_llm_call) ? hooks.pre_llm_call : []
   hooks.pre_llm_call = [...current.filter((entry) => !isMine(entry)), { command, timeout: 10 }]
 
@@ -394,7 +394,7 @@ const hermesHookInstalled = () => {
 /**
  * OpenClaw has no session-start event that returns text; what it has is
  * `agent:bootstrap`, with a mutable bootstrapFiles list. hooks/openclaw/
- * cairn-briefing is a hook for exactly that, shipped here so every OpenClaw
+ * croft-briefing is a hook for exactly that, shipped here so every OpenClaw
  * install gets the same one.
  *
  * Where it lives decides whether it runs, and the obvious places are wrong.
@@ -403,7 +403,7 @@ const hermesHookInstalled = () => {
  * bundle. A hook kept in some other tree is enabled in config and never loaded
  * — silently: one found this way had reached 0 of 406 sessions after the
  * workspace moved, and `hooks.path`, which looks like the setting, is the
- * webhook URL path. So the copy goes to a stable path under ~/.cairn (where
+ * webhook URL path. So the copy goes to a stable path under ~/.croft (where
  * sync-agent-files keeps it current, like the other two hooks), and OpenClaw
  * is told about it with its own documented command, `hooks install --link`,
  * which adds that one directory to extraDirs and enables the hook.
@@ -412,13 +412,13 @@ const hermesHookInstalled = () => {
  * and its transcripts are swept by the `openclaw-sessions` job in
  * scripts/install-cron.mjs.
  */
-const OPENCLAW_HOOK = join(HOME, '.cairn', 'hooks', 'openclaw', 'cairn-briefing')
+const OPENCLAW_HOOK = join(HOME, '.croft', 'hooks', 'openclaw', 'croft-briefing')
 const OPENCLAW_HOOK_FILES = ['HOOK.md', 'handler.ts']
-const OPENCLAW_HOOK_NAME = 'cairn-briefing'
+const OPENCLAW_HOOK_NAME = 'croft-briefing'
 const openclawArgs = (force = true) => ['hooks', 'install', '--link', OPENCLAW_HOOK, ...(force ? ['--force'] : [])]
 const openclawCommand = `openclaw ${openclawArgs().join(' ')}`
-/** `CAIRN_OPENCLAW_BIN` for an OpenClaw that is not on PATH as `openclaw`. */
-const OPENCLAW_BIN = process.env.CAIRN_OPENCLAW_BIN?.trim() || 'openclaw'
+/** `CROFT_OPENCLAW_BIN` for an OpenClaw that is not on PATH as `openclaw`. */
+const OPENCLAW_BIN = process.env.CROFT_OPENCLAW_BIN?.trim() || 'openclaw'
 
 const onPath = (bin) =>
   bin.includes('/')
@@ -468,7 +468,7 @@ const copyOpenclawHook = () => {
   mkdirSync(OPENCLAW_HOOK, { recursive: true })
   let changed = false
   for (const file of OPENCLAW_HOOK_FILES) {
-    const source = readFileSync(join(REPO, 'hooks', 'openclaw', 'cairn-briefing', file))
+    const source = readFileSync(join(REPO, 'hooks', 'openclaw', 'croft-briefing', file))
     const target = join(OPENCLAW_HOOK, file)
     if (existsSync(target) && readFileSync(target).equals(source)) continue
     writeFileSync(target, source)
@@ -478,9 +478,9 @@ const copyOpenclawHook = () => {
 }
 
 const openclawTail = () => {
-  log('  openclaw: `cairn setup` installs the `openclaw-sessions` job for you when it can find')
+  log('  openclaw: `croft setup` installs the `openclaw-sessions` job for you when it can find')
   log('            the sessions directory; running this installer alone, wire it up yourself with')
-  log('            scripts/install-cron.mjs. set CAIRN_AGENT=openclaw where the gateway starts,')
+  log('            scripts/install-cron.mjs. set CROFT_AGENT=openclaw where the gateway starts,')
   log('            and see docs/openclaw.md for the AGENTS.md block — `learn` needs an explicit')
   log('            scope outside a mapped checkout')
 }
@@ -503,13 +503,13 @@ const runOpenclawInstall = () => {
 const installOpenclaw = () => {
   if (!onPath(OPENCLAW_BIN)) {
     log('  openclaw: not on PATH — skipped. Where it runs, as the gateway user:')
-    log(`            cairn setup   (or: node scripts/install-hooks.mjs, or ${openclawCommand})`)
+    log(`            croft setup   (or: node scripts/install-hooks.mjs, or ${openclawCommand})`)
     return
   }
   // `openclaw` on PATH says it is installed, not that this user runs a gateway:
   // a global npm install puts it on every account's PATH. Linking from an
   // account that runs none would write a config no gateway reads (or fail on a
-  // locked client config) and leave the real gateway unbriefed (CAIRN-296).
+  // locked client config) and leave the real gateway unbriefed (CROFT-296).
   if (!FORCE_OPENCLAW && !openclawRunsGateway()) {
     const why = existsSync(openclawConfig())
       ? `${openclawConfig()} is a client config (no gateway in it)`
@@ -519,7 +519,7 @@ const installOpenclaw = () => {
     return
   }
   if (DRY) {
-    log(`  openclaw: would copy the cairn-briefing hook to ${OPENCLAW_HOOK}`)
+    log(`  openclaw: would copy the croft-briefing hook to ${OPENCLAW_HOOK}`)
     log(`  openclaw: would run: ${openclawCommand}`)
     log('  openclaw: then the gateway needs a restart to load it')
     return openclawTail()
@@ -527,7 +527,7 @@ const installOpenclaw = () => {
 
   const changed = copyOpenclawHook()
   if (openclawLinked()) {
-    log(`  openclaw: cairn-briefing already linked from ${OPENCLAW_HOOK}${changed ? ' — handler updated' : ' — unchanged'}`)
+    log(`  openclaw: croft-briefing already linked from ${OPENCLAW_HOOK}${changed ? ' — handler updated' : ' — unchanged'}`)
     if (changed) log('  openclaw: restart the gateway to load the new handler')
     return openclawTail()
   }
@@ -542,14 +542,14 @@ const installOpenclaw = () => {
     process.exitCode = 1
     return
   }
-  log(`  openclaw: agent:bootstrap -> cairn-briefing, linked from ${OPENCLAW_HOOK}`)
+  log(`  openclaw: agent:bootstrap -> croft-briefing, linked from ${OPENCLAW_HOOK}`)
   log('  openclaw: restart the gateway to load it (OpenClaw loads hooks only at start)')
   openclawTail()
 }
 
 const version = () => {
-  const cli = process.env.CAIRN_HOOK_CLI?.trim() || 'cairn'
-  if (!isSafeHookCli(cli)) return 'CAIRN_HOOK_CLI must be one safe executable path'
+  const cli = process.env.CROFT_HOOK_CLI?.trim() || 'croft'
+  if (!isSafeHookCli(cli)) return 'CROFT_HOOK_CLI must be one safe executable path'
   try {
     return execFileSync(cli, ['--help'], { encoding: 'utf8' }).split('\n')[0]
   } catch {
@@ -557,7 +557,7 @@ const version = () => {
   }
 }
 
-log(`Installing Cairn memory hooks${DRY ? ' (dry run)' : ''}`)
+log(`Installing Croft memory hooks${DRY ? ' (dry run)' : ''}`)
 log(`  ${version()}`)
 installScripts()
 installClaude()

@@ -1,6 +1,6 @@
 -- Count the widened searches, not the empty ones. See 026.
 
-create or replace function cairn_memory_use(p_owner uuid, p_hours int default 24)
+create or replace function croft_memory_use(p_owner uuid, p_hours int default 24)
 returns jsonb
 language sql
 stable

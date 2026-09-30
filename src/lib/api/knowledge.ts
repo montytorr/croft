@@ -12,7 +12,7 @@ import { projectIdForFormerKey } from './project-keys'
  * A task answers "what did we do about X". This answers "what do we know about
  * X" — the infra note, the convention, the gotcha that outlives every task it
  * was learned in. It belongs to no task, and usually to no single project,
- * which is why nothing in Cairn could hold it until now.
+ * which is why nothing in Croft could hold it until now.
  *
  * Knowledge is shared workspace data. Legacy owner ids remain attribution
  * metadata for existing rows; they are not an authorization boundary.
@@ -78,7 +78,7 @@ const resolveProjects = async (_userId: string, keys: string[]) => {
 
   // A key that is no longer current is still a key somebody wrote down. The
   // task paths resolve renames through `project_former_keys` (tasks.ts:69,
-  // search.ts:180) and this did not, so `cairn know --project OLDKEY` went on
+  // search.ts:180) and this did not, so `croft know --project OLDKEY` went on
   // returning nothing at all — defeating the reason former keys are kept.
   for (const key of wanted) {
     if (found.has(key)) continue
@@ -334,14 +334,14 @@ export const getKnowledge = async (_userId: string, slug: string): Promise<Knowl
 
 /**
  * Where a fact came from, filled in from the request rather than asked for
- * (CAIRN-289).
+ * (CROFT-289).
  *
- * 0 of 425 entries carried a session or a task: `cairn learn` never sent
+ * 0 of 425 entries carried a session or a task: `croft learn` never sent
  * either and nobody passed `--task`, so Mac and Clawdius writes, and the work
  * a fact came out of, could not be told apart — and staleness, which follows
  * a fact's source to the files that work touched, had nothing to follow.
  *
- * The session arrives on every request as `X-Cairn-Session`. It is stored as
+ * The session arrives on every request as `X-Croft-Session`. It is stored as
  * given (`source_session_ref`), because the `sessions` row it names is
  * normally written at session END, after the fact was learned: the foreign
  * key is filled only when the row already exists, and readers resolve the
@@ -442,7 +442,7 @@ export const createKnowledge = async (actor: Actor, input: KnowledgeCreate) => {
 }
 
 /**
- * The files an entry is explicitly about (CAIRN-269). Only this origin is the
+ * The files an entry is explicitly about (CROFT-269). Only this origin is the
  * caller's: paths the body names and files the source work touched are kept by
  * the `knowledge_files_sync` trigger, so they cannot drift from the text.
  */
@@ -479,7 +479,7 @@ const sameSet = (a: string[], b: string[]) => {
 }
 
 /**
- * Keep the version an edit is about to replace (CAIRN-266).
+ * Keep the version an edit is about to replace (CROFT-266).
  *
  * Decided by comparing values, not by which fields the patch carried: the
  * browser sends every field on every save, and a save that changes nothing is

@@ -3,7 +3,7 @@ import { shortDateWithYear } from '@/lib/dates'
 /**
  * What the screen says about a project key that changed.
  *
- * Resolution alone was never the problem — CAIRN-125 made AC-113 find HOL-113.
+ * Resolution alone was never the problem — CROFT-125 made AC-113 find HOL-113.
  * The problem is that it found it silently, so someone holding AC-113 from a
  * commit message landed on a page reading HOL-113 and could not tell whether
  * they had the right task. Everything here turns the rename record into a

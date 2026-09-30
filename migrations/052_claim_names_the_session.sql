@@ -11,7 +11,7 @@
 --   - `release` matched on the label and released somebody else's claim.
 --   - `--mine` answered "this human's agents" while looking like "this session".
 --   - checkpointHeldTasks stamped its summary onto every task the LABEL held,
---     so one session's afternoon landed on another session's tasks. CAIRN-182
+--     so one session's afternoon landed on another session's tasks. CROFT-182
 --     fixed the version of this that stamped untouched tasks; this is the same
 --     bug arriving through identity instead of through the file list.
 --   - and nobody could answer "which session is holding this", which cost a

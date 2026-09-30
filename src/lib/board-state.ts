@@ -9,7 +9,7 @@ import {
 import type { BoardProject, BoardTask } from '@/lib/board-data'
 
 /**
- * Pure grouping, filtering and URL-encoding logic for `/board` (CAIRN-72).
+ * Pure grouping, filtering and URL-encoding logic for `/board` (CROFT-72).
  *
  * Kept free of React so it can be unit tested directly, the same split
  * `applySelection` (src/lib/selection.ts) uses for the same reason.

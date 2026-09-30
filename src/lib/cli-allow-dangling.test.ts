@@ -40,11 +40,11 @@ const serve = (seen: { body?: Record<string, unknown> }) =>
   })
 
 const run = async (args: string[], base: string) => {
-  const home = await mkdtemp(join(tmpdir(), 'cairn-flag-'))
+  const home = await mkdtemp(join(tmpdir(), 'croft-flag-'))
   directories.push(home)
   return new Promise<number | null>((resolve, reject) => {
-    const child = spawn('node', ['cli/cairn.mjs', ...args], {
-      env: { ...process.env, HOME: home, CAIRN_BASE_URL: base, CAIRN_API_KEY: 'test-key' },
+    const child = spawn('node', ['cli/croft.mjs', ...args], {
+      env: { ...process.env, HOME: home, CROFT_BASE_URL: base, CROFT_API_KEY: 'test-key' },
     })
     child.stdout.resume()
     child.stderr.resume()

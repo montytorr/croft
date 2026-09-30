@@ -6,9 +6,9 @@
  * the compose deployment runs (it migrates in a separate `migrate` service).
  * A platform with no one-off tasks — App Runner — cannot run that service, so:
  *
- * - CAIRN_MIGRATE_ON_START=1 applies migrations before serving. Safe with
+ * - CROFT_MIGRATE_ON_START=1 applies migrations before serving. Safe with
  *   several containers starting at once: migrate() holds an advisory lock.
- * - CAIRN_BOOTSTRAP_ADMIN_EMAIL / _PASSWORD (/ _NAME) create the first
+ * - CROFT_BOOTSTRAP_ADMIN_EMAIL / _PASSWORD (/ _NAME) create the first
  *   administrator when there is none, and do nothing once there is one. Remove
  *   them after the first start; they are not a way to reset a password.
  *
@@ -23,23 +23,23 @@ const url = process.env.DATABASE_URL
 
 // Each chore is imported only when it is asked for, so a start with neither
 // set loads nothing but the server — exactly what the image ran before.
-if (process.env.CAIRN_MIGRATE_ON_START === '1') {
+if (process.env.CROFT_MIGRATE_ON_START === '1') {
   const { migrate } = await import('./migrate.mjs')
   await migrate(url, { dir: join(root, 'migrations'), log: (line) => console.log(`[migrate] ${line}`) })
 }
 
-const bootstrapEmail = process.env.CAIRN_BOOTSTRAP_ADMIN_EMAIL?.trim()
+const bootstrapEmail = process.env.CROFT_BOOTSTRAP_ADMIN_EMAIL?.trim()
 if (bootstrapEmail) {
   const { ensureOperator } = await import('./create-operator.mjs')
   const outcome = await ensureOperator({
     url,
     email: bootstrapEmail,
-    password: process.env.CAIRN_BOOTSTRAP_ADMIN_PASSWORD,
-    displayName: process.env.CAIRN_BOOTSTRAP_ADMIN_NAME?.trim() || null,
+    password: process.env.CROFT_BOOTSTRAP_ADMIN_PASSWORD,
+    displayName: process.env.CROFT_BOOTSTRAP_ADMIN_NAME?.trim() || null,
     onlyIfNoAdmin: true,
   })
   console.log(outcome === 'exists'
-    ? '[bootstrap] an administrator already exists; nothing to do (remove CAIRN_BOOTSTRAP_ADMIN_*)'
+    ? '[bootstrap] an administrator already exists; nothing to do (remove CROFT_BOOTSTRAP_ADMIN_*)'
     : `[bootstrap] administrator ${bootstrapEmail} created`)
 }
 

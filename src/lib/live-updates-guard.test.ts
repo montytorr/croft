@@ -70,7 +70,7 @@ describe('pages stay current', () => {
       join(process.cwd(), 'src/app/api/v1/events/route.ts'),
       'utf8',
     )
-    expect(route).toContain('cairn_pulse')
+    expect(route).toContain('croft_pulse')
 
     const migration = readFileSync(
       join(process.cwd(), 'migrations/037_pulse.sql'),

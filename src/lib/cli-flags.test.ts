@@ -8,13 +8,13 @@ import { join } from 'node:path'
  *
  * It was built by grepping `flags.X`, which missed every flag read dynamically:
  * `flags[k]` looping over ['type','status','priority'], and the [flag, field]
- * pairs in `run` and `session end`. It shipped, and `cairn add --priority high`
+ * pairs in `run` and `session end`. It shipped, and `croft add --priority high`
  * — documented in the CLI's own help — started exiting 2.
  *
  * A whitelist is only as trustworthy as its enumeration, so this compares it
  * against the help text, which is the contract people actually read.
  */
-const source = readFileSync(join(process.cwd(), 'cli/cairn.mjs'), 'utf8')
+const source = readFileSync(join(process.cwd(), 'cli/croft.mjs'), 'utf8')
 
 /** JSDoc in this file discusses `flags.X` in prose; prose is not a read. */
 const withoutComments = (): string =>
@@ -22,7 +22,7 @@ const withoutComments = (): string =>
 
 const knownFlags = (): Set<string> => {
   const block = /const KNOWN_FLAGS = new Set\(\[([\s\S]*?)\]\)/.exec(source)
-  if (!block) throw new Error('KNOWN_FLAGS not found in cli/cairn.mjs')
+  if (!block) throw new Error('KNOWN_FLAGS not found in cli/croft.mjs')
   return new Set([...block[1]!.matchAll(/'([^']+)'/g)].map((m) => m[1]!))
 }
 

@@ -27,7 +27,7 @@ afterAll(async () => {
   const client = new pg.Client({ connectionString: databaseUrl })
   await client.connect()
   await client.query(`drop table if exists ${table}`)
-  await client.query('delete from _cairn_migrations where name = any($1)', [names])
+  await client.query('delete from _croft_migrations where name = any($1)', [names])
   for (const email of emails) {
     await client.query('delete from user_profiles where id in (select id from app_users where email = $1)', [email])
     await client.query('delete from app_users where email = $1', [email])
@@ -39,11 +39,11 @@ afterAll(async () => {
 describe('migrating from several containers at once', () => {
   /**
    * Without the advisory lock both runners see the same unapplied file, both
-   * apply it, and the second fails on the `_cairn_migrations` primary key —
+   * apply it, and the second fails on the `_croft_migrations` primary key —
    * which on App Runner is a container that refuses to start.
    */
   it('applies each migration once and lets every runner start', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'cairn-migrations-'))
+    const dir = await mkdtemp(join(tmpdir(), 'croft-migrations-'))
     dirs.push(dir)
     await writeFile(join(dir, names[0]!), `create table ${table} (n int); select pg_sleep(0.3);`)
     await writeFile(join(dir, names[1]!), `insert into ${table} values (1);`)

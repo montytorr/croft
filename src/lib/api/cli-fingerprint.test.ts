@@ -5,7 +5,7 @@ import { CLI_FINGERPRINT, CLI_HEADER, fingerprintOf } from './cli-fingerprint'
 import { ok, fail, VERSION_HEADER } from './response'
 
 /**
- * CAIRN-246 put the release version on every response; CAIRN-261 found that
+ * CROFT-246 put the release version on every response; CROFT-261 found that
  * it almost never fires, because 133 commits fitted inside v0.5.1 and a
  * hand-cut release is a coarse clock. These assertions are about the finer
  * one: a content hash, which is the only thing a CLI copied into
@@ -13,7 +13,7 @@ import { ok, fail, VERSION_HEADER } from './response'
  */
 describe('the CLI fingerprint a deployment advertises', () => {
   const sourceDigest = createHash('sha256')
-    .update(readFileSync('cli/cairn.mjs'))
+    .update(readFileSync('cli/croft.mjs'))
     .digest('hex')
     .slice(0, 16)
 
@@ -27,14 +27,14 @@ describe('the CLI fingerprint a deployment advertises', () => {
   })
 
   it('is the same digest the installer prints', () => {
-    // scripts/sync-agent-files.mjs logs `cli  05b4c2f475bff8ff  cli/cairn.mjs`.
+    // scripts/sync-agent-files.mjs logs `cli  05b4c2f475bff8ff  cli/croft.mjs`.
     // If the two disagreed, the installer's line and the server's header would
     // describe the same file with two different strings and neither could be
     // checked against the other.
     expect(readFileSync('scripts/sync-agent-files.mjs', 'utf8')).toContain(
       "createHash('sha256').update(buffer).digest('hex').slice(0, 16)",
     )
-    expect(fingerprintOf(readFileSync('cli/cairn.mjs'))).toBe(sourceDigest)
+    expect(fingerprintOf(readFileSync('cli/croft.mjs'))).toBe(sourceDigest)
   })
 
   it('rides on every success and every failure', () => {
@@ -53,7 +53,7 @@ describe('the CLI fingerprint a deployment advertises', () => {
 })
 
 /**
- * /api/v1/health is the endpoint `cairn --version` calls, and it was the one
+ * /api/v1/health is the endpoint `croft --version` calls, and it was the one
  * route that built its response by hand — so the single command whose whole
  * job is to answer "am I current?" was the one that could not.
  */
@@ -65,7 +65,7 @@ describe('the health probe', () => {
     const body = await response.json()
     // The shape callers already parse must not have moved.
     expect(body.success).toBe(true)
-    expect(body.data.service).toBe('cairn')
+    expect(body.data.service).toBe('croft')
     expect(body.data.version).toBeTruthy()
     expect(body.data).toHaveProperty('build')
   })

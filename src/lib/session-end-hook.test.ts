@@ -5,12 +5,12 @@ import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 /**
- * The session-end hook, end to end, against a fake `cairn` and a fake
- * `claude -p`. CAIRN-287: summariser runs were being recorded as sessions
+ * The session-end hook, end to end, against a fake `croft` and a fake
+ * `claude -p`. CROFT-287: summariser runs were being recorded as sessions
  * (46% of Mac rows), summariser failures vanished without a trace, and a
  * failed summary left "hello" or a whole skill expansion as the request.
  */
-const HOOK = resolve('hooks/cairn-session-end.mjs')
+const HOOK = resolve('hooks/croft-session-end.mjs')
 const SUMMARISER_PROMPT = 'You are writing one entry in an engineering memory that other agents read months later.'
 
 let dir: string
@@ -48,8 +48,8 @@ const run = (payload: unknown, env: Record<string, string> = {}, args: string[] 
   new Promise<number | null>((done) => {
     const childEnv: NodeJS.ProcessEnv = {
       PATH: process.env.PATH ?? '', HOME: dir, OUT: dir,
-      CAIRN_CLI: join(dir, 'cairn'), CAIRN_SUMMARY_CLI: join(dir, 'claude'),
-      CAIRN_SUMMARY_MIN_INTERVAL_MS: '0', ...env,
+      CROFT_CLI: join(dir, 'croft'), CROFT_SUMMARY_CLI: join(dir, 'claude'),
+      CROFT_SUMMARY_MIN_INTERVAL_MS: '0', ...env,
     } as unknown as NodeJS.ProcessEnv
     const child = spawn('node', [HOOK, ...args], { env: childEnv, stdio: ['pipe', 'ignore', 'ignore'] })
     child.on('close', done)
@@ -69,7 +69,7 @@ process.stdin.on('data', (d) => { input += d })
 process.stdin.on('end', () => {
   fs.appendFileSync(process.env.OUT + '/summariser.jsonl', JSON.stringify({
     args, cwd: process.cwd(),
-    flags: [process.env.CAIRN_SUMMARISER, process.env.QUARRY_SUMMARISER, process.env.AGENT_MEMORY_SUMMARISER],
+    flags: [process.env.CROFT_SUMMARISER, process.env.QUARRY_SUMMARISER, process.env.AGENT_MEMORY_SUMMARISER],
   }) + '\\n')
   const mode = process.env.FAKE_MODE ?? 'ok'
   if (mode === 'fail') { process.stderr.write('Not logged in · Please run /login'); process.exit(1) }
@@ -82,8 +82,8 @@ process.stdin.on('end', () => {
 })`
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'cairn-hook-'))
-  fake('cairn', `require('fs').appendFileSync(process.env.OUT + '/cli.jsonl', JSON.stringify(process.argv.slice(2)) + '\\n')`)
+  dir = mkdtempSync(join(tmpdir(), 'croft-hook-'))
+  fake('croft', `require('fs').appendFileSync(process.env.OUT + '/cli.jsonl', JSON.stringify(process.argv.slice(2)) + '\\n')`)
   fake('claude', FAKE_CLAUDE)
 })
 
@@ -92,7 +92,7 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }))
 describe('the session-end hook', () => {
   it('never records a summariser run', async () => {
     const path = transcript('child', [
-      user(`${SUMMARISER_PROMPT}\n\nReturn ONLY a JSON object…\n\n---\n\n# What was asked\nwork on CAIRN-12`),
+      user(`${SUMMARISER_PROMPT}\n\nReturn ONLY a JSON object…\n\n---\n\n# What was asked\nwork on CROFT-12`),
       assistant([{ type: 'text', text: '{"request":"x"}' }]),
     ])
     await run({ transcript_path: path, session_id: 'child', cwd: '/work/demo' })
@@ -149,7 +149,7 @@ describe('the session-end hook', () => {
     const path = transcript('failed', [
       user('<local-command-caveat>Caveat: …</local-command-caveat>', { isMeta: true }),
       user('hello'),
-      user('Base directory for this skill: /skills/cairn\n\n# Cairn\n…', { isMeta: true }),
+      user('Base directory for this skill: /skills/croft\n\n# Croft\n…', { isMeta: true }),
       user('  Audit   the vitals\nendpoint for stale rows  '),
       edit('/work/demo/vitals.ts'),
     ])
@@ -158,23 +158,23 @@ describe('the session-end hook', () => {
     const [first] = lines('cli.jsonl')
     expect(argValue(first, '--request')).toBe('Audit the vitals endpoint for stale rows')
     expect(first).not.toContain('--learned')
-    expect(readFileSync(join(dir, '.cairn', 'summariser.log'), 'utf8')).toMatch(/claude failed: exit 1: Not logged in/)
-    expect(Object.keys(JSON.parse(readFileSync(join(dir, '.cairn', 'unsummarised.json'), 'utf8')))).toEqual(['failed'])
+    expect(readFileSync(join(dir, '.croft', 'summariser.log'), 'utf8')).toMatch(/claude failed: exit 1: Not logged in/)
+    expect(Object.keys(JSON.parse(readFileSync(join(dir, '.croft', 'unsummarised.json'), 'utf8')))).toEqual(['failed'])
 
     // The next session to end with a working summariser picks it up.
     const next = transcript('next', [user('Tidy the README'), edit('/work/demo/README.md')])
-    await run({ transcript_path: next, session_id: 'next', cwd: '/work/demo' }, { CAIRN_SUMMARY_RETRY_SPACING_MS: '0' })
+    await run({ transcript_path: next, session_id: 'next', cwd: '/work/demo' }, { CROFT_SUMMARY_RETRY_SPACING_MS: '0' })
 
     const calls = lines('cli.jsonl')
     expect(calls.map((a) => argValue(a, '--id'))).toEqual(['failed', 'next', 'failed'])
     const retry = calls[2]
     expect(retry).toContain('--no-checkpoint')
     expect(argValue(retry, '--learned')).toBe('The cookie was lax')
-    expect(JSON.parse(readFileSync(join(dir, '.cairn', 'unsummarised.json'), 'utf8'))).toEqual({})
+    expect(JSON.parse(readFileSync(join(dir, '.croft', 'unsummarised.json'), 'utf8'))).toEqual({})
   })
 
   /**
-   * CAIRN-319: Codex's Stop fires every turn. Recorded as a session end, it
+   * CROFT-319: Codex's Stop fires every turn. Recorded as a session end, it
    * closed the session on its first turn and checkpointed every held task each
    * time the agent handed back.
    */
@@ -184,7 +184,7 @@ describe('the session-end hook', () => {
     expect(lines('cli.jsonl')[0]?.slice(0, 3)).toEqual(['session', 'checkpoint', '--id'])
 
     const next = transcript('ended', [user('Tidy the README'), edit('/work/demo/README.md')])
-    await run({ transcript_path: next, session_id: 'ended', cwd: '/work/demo' }, { CAIRN_SUMMARY_RETRY_SPACING_MS: '0' })
+    await run({ transcript_path: next, session_id: 'ended', cwd: '/work/demo' }, { CROFT_SUMMARY_RETRY_SPACING_MS: '0' })
     const calls = lines('cli.jsonl')
     expect(calls.map((a) => [a[1], argValue(a, '--id')])).toEqual([
       ['checkpoint', 'live'],
@@ -195,7 +195,7 @@ describe('the session-end hook', () => {
 
   it('stops paying for live checkpoints of a session whose row is already closed', async () => {
     // Refuses checkpoints the way the CLI does for a 409 session_closed.
-    fake('cairn', `const a = process.argv.slice(2); require('fs').appendFileSync(process.env.OUT + '/cli.jsonl', JSON.stringify(a) + '\\n'); process.exit(a[1] === 'checkpoint' ? 11 : 0)`)
+    fake('croft', `const a = process.argv.slice(2); require('fs').appendFileSync(process.env.OUT + '/cli.jsonl', JSON.stringify(a) + '\\n'); process.exit(a[1] === 'checkpoint' ? 11 : 0)`)
     const path = transcript('closed', [user('Please fix the login redirect'), edit('/work/demo/a.ts')])
     const turn = () => run({ transcript_path: path, session_id: 'closed', cwd: '/work/demo' }, {}, ['--ongoing'])
 
@@ -215,7 +215,7 @@ describe('the session-end hook', () => {
     const a = transcript('a', [user('Please fix the login redirect'), edit('/work/demo/a.ts')])
     const b = transcript('b', [user('Please fix the logout redirect'), edit('/work/demo/b.ts')])
     await run({ transcript_path: a, session_id: 'a' }, { FAKE_MODE: 'fail' })
-    await run({ transcript_path: b, session_id: 'b' }, { FAKE_MODE: 'fail', CAIRN_SUMMARY_RETRY_SPACING_MS: '0' })
+    await run({ transcript_path: b, session_id: 'b' }, { FAKE_MODE: 'fail', CROFT_SUMMARY_RETRY_SPACING_MS: '0' })
     expect(lines('summariser.jsonl')).toHaveLength(2)
     expect(lines('cli.jsonl').map((args) => argValue(args, '--id'))).toEqual(['a', 'b'])
   })
@@ -240,7 +240,7 @@ describe('the session-end hook', () => {
       say('user', '[OpenClaw conversation info: sender={"id":"42"}]\nRotate the staging certificate'),
       codex('response_item', { type: 'function_call', arguments: '{"cmd":"edit deploy/certs.sh"}' }),
     ])
-    await run({ transcript_path: path }, { FAKE_MODE: 'fail', CAIRN_PLATFORM: 'openclaw' })
+    await run({ transcript_path: path }, { FAKE_MODE: 'fail', CROFT_PLATFORM: 'openclaw' })
     const [args] = lines('cli.jsonl')
     expect(argValue(args, '--request')).toBe('Rotate the staging certificate')
     expect(argValue(args, '--platform')).toBe('openclaw')
@@ -261,7 +261,7 @@ describe('the session-end hook', () => {
       { type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: `[OpenClaw conversation info: sender={"id":"42"}]\n${SUMMARISER_PROMPT}\n---\nedited src/a.ts` }] } },
       { type: 'response_item', payload: { type: 'function_call', arguments: '{"cmd":"edit src/a.ts"}' } },
     ])
-    await run({ transcript_path: path }, { CAIRN_PLATFORM: 'openclaw' })
+    await run({ transcript_path: path }, { CROFT_PLATFORM: 'openclaw' })
     expect(lines('cli.jsonl')).toEqual([])
   })
 
@@ -276,25 +276,25 @@ describe('the session-end hook', () => {
   })
 
   /**
-   * CAIRN-297: with several instances and nothing saying which one this
+   * CROFT-297: with several instances and nothing saying which one this
    * directory is for, the CLI exits 10. A hook cannot ask anyone, and must
-   * neither guess nor drop the session: it parks it for `cairn route add`.
+   * neither guess nor drop the session: it parks it for `croft route add`.
    */
   it('parks a session the CLI cannot route, with everything needed to send it later', async () => {
-    fake('cairn', `require('fs').appendFileSync(process.env.OUT + '/cli.jsonl', JSON.stringify(process.argv.slice(2)) + '\\n'); process.exit(10)`)
+    fake('croft', `require('fs').appendFileSync(process.env.OUT + '/cli.jsonl', JSON.stringify(process.argv.slice(2)) + '\\n'); process.exit(10)`)
     const path = transcript('unrouted', [user('Please fix the login redirect'), edit('/work/demo/a.ts')])
-    await run({ transcript_path: path, session_id: 'unrouted-1', cwd: '/work/demo' }, { CAIRN_AGENT: 'claude-code', CAIRN_PLATFORM: 'claude' })
+    await run({ transcript_path: path, session_id: 'unrouted-1', cwd: '/work/demo' }, { CROFT_AGENT: 'claude-code', CROFT_PLATFORM: 'claude' })
 
-    const parked = JSON.parse(readFileSync(join(dir, '.cairn', 'unrouted', 'unrouted-1.json'), 'utf8'))
+    const parked = JSON.parse(readFileSync(join(dir, '.croft', 'unrouted', 'unrouted-1.json'), 'utf8'))
     expect(parked).toMatchObject({ sessionId: 'unrouted-1', cwd: '/work/demo', platform: 'claude', agent: 'claude-code' })
     expect(parked.args.slice(0, 4)).toEqual(['session', 'end', '--id', 'unrouted-1'])
     expect(argValue(parked.args, '--cwd')).toBe('/work/demo')
   })
 
   it('parks nothing when the CLI simply fails', async () => {
-    fake('cairn', 'process.exit(1)')
+    fake('croft', 'process.exit(1)')
     const path = transcript('failing', [user('Please fix the login redirect'), edit('/work/demo/a.ts')])
     await run({ transcript_path: path, session_id: 'failing-1', cwd: '/work/demo' })
-    expect(existsSync(join(dir, '.cairn', 'unrouted'))).toBe(false)
+    expect(existsSync(join(dir, '.croft', 'unrouted'))).toBe(false)
   })
 })

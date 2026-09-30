@@ -6,10 +6,10 @@
 -- is already known about it. No search string, no decision to remember, no
 -- tool call the model has to choose to make.
 --
--- Cairn has had no file index whatsoever -- `cairn files` lists attachments.
+-- Croft has had no file index whatsoever -- `croft files` lists attachments.
 --
 -- Nothing here costs a model call. Paths come straight out of a transcript at
--- session end, or off `cairn note --file`. That is the whole reason this is
+-- session end, or off `croft note --file`. That is the whole reason this is
 -- affordable when per-tool-use observation was not.
 --
 -- Paths are stored repo-relative where a repo root can be determined, absolute

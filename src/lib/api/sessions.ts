@@ -52,7 +52,7 @@ export type SessionRow = {
 
 /**
  * Live or retired: a session recorded from a checkout still mapped to AC
- * belongs to the project AC became, not to no project at all (CAIRN-264).
+ * belongs to the project AC became, not to no project at all (CROFT-264).
  */
 const projectIdForKey = async (_userId: string, key?: string | null): Promise<string | null> => {
   if (!key) return null
@@ -60,13 +60,13 @@ const projectIdForKey = async (_userId: string, key?: string | null): Promise<st
 }
 
 /**
- * The same order `cairn context` uses: the caller's key, then the remote, then
+ * The same order `croft context` uses: the caller's key, then the remote, then
  * the directory.
  *
  * This used to be the key alone, and nothing sent one — the hook never passed
- * `--project` and `cairn session end` never looked it up — so 389 of 389 live
+ * `--project` and `croft session end` never looked it up — so 389 of 389 live
  * sessions landed with no project, `session list --project` was empty and the
- * briefing's "last session here" never answered (CAIRN-286). Current CLIs
+ * briefing's "last session here" never answered (CROFT-286). Current CLIs
  * resolve it themselves; this covers the ones already installed, and a sweep
  * whose checkout has no map entry.
  */
@@ -104,7 +104,7 @@ const RECORDED = AUTO_CHECKPOINT_MARKER
  *
  * Pure and exported beside splitHeldByWorked, because this is the other half
  * of the same silent failure: a wrong checkpoint reads exactly like a right
- * one, and `cairn context` hands it to the next agent as fact.
+ * one, and `croft context` hands it to the next agent as fact.
  *
  * A task whose claim names no session is kept. It was claimed before the
  * column existed, or by a runtime that cannot name itself, and dropping those
@@ -171,7 +171,7 @@ export type HeldForCheckpoint = {
  * On 2026-09-25 71 tasks carried "Still held, not progressed…" and 28 of them
  * had had a real checkpoint before it: BB-385's handoff — the one thing that
  * said which guard suite was green and what was uncommitted — was replaced
- * with a line about a different session's work (CAIRN-283).
+ * with a line about a different session's work (CROFT-283).
  *
  * - A claim naming another session is never touched.
  * - A task this session did not work gets the "held, not progressed" line only
@@ -222,7 +222,7 @@ const checkpointHeldTasks = async (actor: Actor, session: SessionRow): Promise<s
    * all match it. This used to write one session's checkpoint onto another
    * session's tasks: three knowledge-map tasks carried a report about merging
    * an unrelated pull request, because the identity matched and nothing else
-   * was consulted. CAIRN-182 fixed the version of this that stamped tasks the
+   * was consulted. CROFT-182 fixed the version of this that stamped tasks the
    * session never touched; the same wrong summary arrives here through
    * identity instead of through the file list.
    */
@@ -278,7 +278,7 @@ const checkpointHeldTasks = async (actor: Actor, session: SessionRow): Promise<s
  *
  * A transcript is scraped with a regex, and `[A-Z][A-Z0-9]+-\d+` matches
  * `SHA-256`, `HTTP-01`, `UTF-8` and the `Z0-9` out of a character class as
- * happily as it matches `CAIRN-64`. Filtering at the source would need a
+ * happily as it matches `CROFT-64`. Filtering at the source would need a
  * blocklist that is wrong the moment someone names a project ISO; the
  * workspace project keys are the only authority that stays right.
  */
@@ -302,7 +302,7 @@ export type SessionRedaction = SecretHit & { field: (typeof PROSE)[number] }
 /**
  * Session prose is written by a model from a raw transcript, so it carries
  * whatever the transcript did — a token pasted into a prompt, a connection
- * string in a command's output. It is redacted rather than refused (CAIRN-322):
+ * string in a command's output. It is redacted rather than refused (CROFT-322):
  * other writes get a 400 the author can fix, but this one is posted by a hook
  * nobody watches, and a refusal would drop the whole record without a trace.
  */

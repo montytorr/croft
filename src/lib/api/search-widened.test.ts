@@ -28,7 +28,7 @@ const row = (ref: string, widened: boolean) => ({
   ref,
   title: ref,
   subtitle: null,
-  project_key: 'CAIRN',
+  project_key: 'CROFT',
   status: 'done',
   type: 'bug',
   answered: true,
@@ -55,7 +55,7 @@ describe('what a widened search means now that both arms always run', () => {
     // 055 added, and under "any row is loose" this search — one good hit and
     // nineteen loose ones — would have been reported as a search that found
     // nothing precise.
-    returning([row('CAIRN-135', false), row('CAIRN-9', true), row('CAIRN-12', true)])
+    returning([row('CROFT-135', false), row('CROFT-9', true), row('CROFT-12', true)])
 
     const { widened } = await searchAll('user-1', QUERY, {}, 20)
 
@@ -63,7 +63,7 @@ describe('what a widened search means now that both arms always run', () => {
   })
 
   it('is widened when every row is a loose word overlap', async () => {
-    returning([row('CAIRN-9', true), row('CAIRN-12', true)])
+    returning([row('CROFT-9', true), row('CROFT-12', true)])
 
     const { widened } = await searchAll('user-1', QUERY, {}, 20)
 
@@ -84,7 +84,7 @@ describe('what a widened search means now that both arms always run', () => {
   it('still says which individual rows were loose', async () => {
     // The per-row flag is the one the CLI prints as "N precise, M loose" and
     // the one the merge orders on. Only the query-level summary changed.
-    returning([row('CAIRN-135', false), row('CAIRN-9', true)])
+    returning([row('CROFT-135', false), row('CROFT-9', true)])
 
     const { rows } = await searchAll('user-1', QUERY, {}, 20)
 

@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Only the commit `main` is on now deploys (CAIRN-318). Each CI run on main
+  # Only the commit `main` is on now deploys (CROFT-318). Each CI run on main
   # triggers a deploy of its own commit, and two pushes close together can
   # finish CI out of order: the older one's deploy then ran last and replaced
   # the newer build (v0.12.0's release commit was overwritten by its merge
@@ -23,14 +23,14 @@ jobs:
   gate:
     # Only where the self-hosted runner exists. A mirror of this repository
     # (another organisation's copy, deploying its own way) would otherwise
-    # queue this job forever waiting for a runner labelled `cairn`.
+    # queue this job forever waiting for a runner labelled `croft`.
     if: >-
-      github.repository == 'montytorr/cairn' &&
+      github.repository == 'montytorr/croft' &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == github.repository
-    runs-on: [self-hosted, cairn]
+    runs-on: [self-hosted, croft]
     timeout-minutes: 2
     outputs:
       current: ${{ steps.tip.outputs.current }}
@@ -57,7 +57,7 @@ jobs:
     if: needs.gate.outputs.current == 'true'
     # Runs on the box it deploys to, so there is no registry and no secrets
     # in transit — the image is built where it runs.
-    runs-on: [self-hosted, cairn]
+    runs-on: [self-hosted, croft]
     timeout-minutes: 20
     env:
       DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
@@ -76,34 +76,34 @@ jobs:
           subject="$(git log -1 --pretty=%s | head -c 180)"
           subject="${subject//@/＠}"
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          printf -v message '📦 **Cairn pushed** `%s` to `main` by %s\n%s\n🚀 Deploy started · <%s>' \
+          printf -v message '📦 **Croft pushed** `%s` to `main` by %s\n%s\n🚀 Deploy started · <%s>' \
             "$short" "$PUSHER" "$subject" "$run_url"
-          sudo /usr/local/bin/cairn-discord-send "$message" || echo "::warning::Discord start notification failed"
+          sudo /usr/local/bin/croft-discord-send "$message" || echo "::warning::Discord start notification failed"
 
       - name: link runtime configuration
         # Secrets live outside the workspace, owned by the runner user, and
         # are never checked out. The compose file reads .env.local for the
         # container and .env for label interpolation.
         env:
-          CAIRN_DOMAIN: ${{ vars.CAIRN_DOMAIN }}
-          CAIRN_PROXY_NETWORK: ${{ vars.CAIRN_PROXY_NETWORK }}
-          CAIRN_DATABASE_NETWORK: ${{ vars.CAIRN_DATABASE_NETWORK }}
+          CROFT_DOMAIN: ${{ vars.CROFT_DOMAIN }}
+          CROFT_PROXY_NETWORK: ${{ vars.CROFT_PROXY_NETWORK }}
+          CROFT_DATABASE_NETWORK: ${{ vars.CROFT_DATABASE_NETWORK }}
         run: |
           set -euo pipefail
-          test -f "$HOME/cairn-secrets/app.env" || { echo "missing app.env"; exit 1; }
-          install -m 600 "$HOME/cairn-secrets/app.env" .env.local
+          test -f "$HOME/croft-secrets/app.env" || { echo "missing app.env"; exit 1; }
+          install -m 600 "$HOME/croft-secrets/app.env" .env.local
           # Required, not defaulted. A fallback here meant one person's
           # hostname and container names sat in a public file, and a fork that
           # forgot to configure them would deploy against names that are not
           # theirs — failing confusingly instead of immediately.
-          : "${CAIRN_DOMAIN:?set the CAIRN_DOMAIN repository variable}"
-          : "${CAIRN_PROXY_NETWORK:?set the CAIRN_PROXY_NETWORK repository variable}"
-          : "${CAIRN_DATABASE_NETWORK:?set the CAIRN_DATABASE_NETWORK repository variable}"
+          : "${CROFT_DOMAIN:?set the CROFT_DOMAIN repository variable}"
+          : "${CROFT_PROXY_NETWORK:?set the CROFT_PROXY_NETWORK repository variable}"
+          : "${CROFT_DATABASE_NETWORK:?set the CROFT_DATABASE_NETWORK repository variable}"
 
           cat > .env <<ENV
-          CAIRN_DOMAIN=${CAIRN_DOMAIN}
-          CAIRN_PROXY_NETWORK=${CAIRN_PROXY_NETWORK}
-          CAIRN_DATABASE_NETWORK=${CAIRN_DATABASE_NETWORK}
+          CROFT_DOMAIN=${CROFT_DOMAIN}
+          CROFT_PROXY_NETWORK=${CROFT_PROXY_NETWORK}
+          CROFT_DATABASE_NETWORK=${CROFT_DATABASE_NETWORK}
           GIT_SHA=${DEPLOY_SHA::7}
           ENV
           cp docker-compose.example.yml docker-compose.yml
@@ -114,10 +114,10 @@ jobs:
         # and leaves the old image dangling — reachable by id, and by nothing
         # else. Without this there is nothing to go back to.
         run: |
-          image=$(docker inspect cairn --format '{{.Image}}' 2>/dev/null || true)
-          name=$(docker inspect cairn --format '{{.Config.Image}}' 2>/dev/null || true)
+          image=$(docker inspect croft --format '{{.Image}}' 2>/dev/null || true)
+          name=$(docker inspect croft --format '{{.Config.Image}}' 2>/dev/null || true)
           echo "image=$image" >> "$GITHUB_OUTPUT"
-          echo "name=${name:-cairn-cairn}" >> "$GITHUB_OUTPUT"
+          echo "name=${name:-croft-croft}" >> "$GITHUB_OUTPUT"
           echo "currently running ${image:-nothing}"
 
       - name: build
@@ -133,22 +133,22 @@ jobs:
         run: |
           set -euo pipefail
           for i in $(seq 1 30); do
-            state=$(docker inspect cairn --format '{{.State.Health.Status}}' 2>/dev/null || echo starting)
+            state=$(docker inspect croft --format '{{.State.Health.Status}}' 2>/dev/null || echo starting)
             [ "$state" = "healthy" ] && { echo "healthy after ${i}0s"; exit 0; }
             sleep 10
           done
           echo "never became healthy"
-          docker compose logs --tail=40 cairn
+          docker compose logs --tail=40 croft
           exit 1
 
       - name: smoke test
         # Through the public URL, so this exercises Traefik and TLS too — a
         # container that is healthy but unreachable is still a failed deploy.
         env:
-          CAIRN_DOMAIN: ${{ vars.CAIRN_DOMAIN }}
+          CROFT_DOMAIN: ${{ vars.CROFT_DOMAIN }}
         run: |
           set -euo pipefail
-          code=$(curl -s -o /dev/null -w '%{http_code}' "https://${CAIRN_DOMAIN}/api/v1/health")
+          code=$(curl -s -o /dev/null -w '%{http_code}' "https://${CROFT_DOMAIN}/api/v1/health")
           [ "$code" = "200" ] || { echo "health endpoint returned $code"; exit 1; }
           echo "deployed $DEPLOY_SHA"
 
@@ -160,7 +160,7 @@ jobs:
         # every machine reads instructions that contradict the running code.
         # Measured 2026-09-21: merge 16:14, previous sync 15:23, 51 minutes, and
         # up to 59 in the general case. That day the sentence being contradicted
-        # was the one the merge had just fixed (CAIRN-257).
+        # was the one the merge had just fixed (CROFT-257).
         #
         # The deploy runs on a self-hosted runner on the box the files live on,
         # so closing the window needs no webhook, no secret and no network hop:
@@ -199,7 +199,7 @@ jobs:
         timeout-minutes: 3
         run: |
           set -uo pipefail
-          schedule=/opt/cairn-maintenance/install-cron.mjs
+          schedule=/opt/croft-maintenance/install-cron.mjs
 
           if [ ! -r "$schedule" ]; then
             echo "::warning::$schedule is not installed here — the hourly cron still covers this"
@@ -241,7 +241,7 @@ jobs:
           docker compose up -d --no-build
 
           for _ in $(seq 1 18); do
-            state=$(docker inspect cairn --format '{{.State.Health.Status}}' 2>/dev/null || echo starting)
+            state=$(docker inspect croft --format '{{.State.Health.Status}}' 2>/dev/null || echo starting)
             if [ "$state" = healthy ]; then
               echo "rolled back to the previous build, healthy"
               exit 1   # the deploy still failed; say so
@@ -261,8 +261,8 @@ jobs:
           short="${DEPLOY_SHA::7}"
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           case "$DEPLOY_STATUS" in
-            success) message="✅ **Cairn deployed** \`${short}\` · healthy and smoke-tested · <${run_url}>" ;;
-            cancelled) message="⚠️ **Cairn deploy cancelled** \`${short}\` · <${run_url}>" ;;
-            *) message="❌ **Cairn deploy failed** \`${short}\` · rollback attempted · <${run_url}>" ;;
+            success) message="✅ **Croft deployed** \`${short}\` · healthy and smoke-tested · <${run_url}>" ;;
+            cancelled) message="⚠️ **Croft deploy cancelled** \`${short}\` · <${run_url}>" ;;
+            *) message="❌ **Croft deploy failed** \`${short}\` · rollback attempted · <${run_url}>" ;;
           esac
-          sudo /usr/local/bin/cairn-discord-send "$message" || echo "::warning::Discord result notification failed"
+          sudo /usr/local/bin/croft-discord-send "$message" || echo "::warning::Discord result notification failed"

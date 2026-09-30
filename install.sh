@@ -1,11 +1,11 @@
 #!/bin/sh
-# Connect a machine to Cairn in one line:
+# Connect a machine to Croft in one line:
 #
-#   curl -fsSL https://raw.githubusercontent.com/montytorr/cairn/main/install.sh | sh -s -- --url https://your-cairn
+#   curl -fsSL https://raw.githubusercontent.com/montytorr/croft/main/install.sh | sh -s -- --url https://your-croft
 #
-# This script does exactly two things: put a recent cli/cairn.mjs on PATH,
+# This script does exactly two things: put a recent cli/croft.mjs on PATH,
 # and hand off to it. Everything else -- pairing keys, the skill, the hooks,
-# the scheduled jobs -- is `cairn setup`'s job (cli/cairn.mjs), not this
+# the scheduled jobs -- is `croft setup`'s job (cli/croft.mjs), not this
 # script's; duplicating that logic here in POSIX sh would be a second place
 # for it to drift out of step with the CLI it is supposed to install.
 set -eu
@@ -13,9 +13,9 @@ set -eu
 # Everything in one function, called on the last line: a download cut off
 # halfway defines a function it never calls, instead of running half a script.
 main() {
-  REPO="montytorr/cairn"
+  REPO="montytorr/croft"
   BIN_DIR="$HOME/.local/bin"
-  BIN="$BIN_DIR/cairn"
+  BIN="$BIN_DIR/croft"
 
   log() { printf '%s\n' "$*" >&2; }
   die() { log "install.sh: $*"; exit 1; }
@@ -28,7 +28,7 @@ main() {
     ''|*[!0-9]*) die "could not read node's version from 'node --version'" ;;
   esac
   if [ "$node_major" -lt 22 ]; then
-    die "node $(node --version) is too old — cairn needs Node 22 or newer"
+    die "node $(node --version) is too old — croft needs Node 22 or newer"
   fi
 
   # The latest release's tag, or main if the API is unreachable (rate limited,
@@ -40,9 +40,9 @@ main() {
       | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1)
   fi
   ref="${tag:-main}"
-  [ -n "$tag" ] || log "could not resolve the latest release; installing cli/cairn.mjs from $ref instead"
+  [ -n "$tag" ] || log "could not resolve the latest release; installing cli/croft.mjs from $ref instead"
 
-  url="https://raw.githubusercontent.com/$REPO/$ref/cli/cairn.mjs"
+  url="https://raw.githubusercontent.com/$REPO/$ref/cli/croft.mjs"
 
   mkdir -p "$BIN_DIR"
   tmp="$BIN.download"
@@ -51,7 +51,7 @@ main() {
   elif command -v wget >/dev/null 2>&1; then
     wget -qO "$tmp" "$url" || die "could not download $url"
   else
-    die "need curl or wget to download cairn"
+    die "need curl or wget to download croft"
   fi
   chmod +x "$tmp"
   mv "$tmp" "$BIN"

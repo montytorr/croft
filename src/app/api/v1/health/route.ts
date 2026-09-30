@@ -28,14 +28,14 @@ const build = (() => {
  *
  * Goes through `ok()` rather than NextResponse so that it carries the same
  * version and CLI-fingerprint headers as every other route. It is the one
- * endpoint `cairn --version` calls, and it was the one endpoint that could not
- * answer "is my copy the current file?" (CAIRN-261). The body is unchanged:
+ * endpoint `croft --version` calls, and it was the one endpoint that could not
+ * answer "is my copy the current file?" (CROFT-261). The body is unchanged:
  * `ok()` produces exactly the `{ success, data }` this already returned.
  */
 export const GET = () =>
   ok({
     status: 'ok',
-    service: 'cairn',
+    service: 'croft',
     // The released version, and the exact commit it was built from. The
     // first tells a CLI whether it is out of step; the second tells a human
     // whether their fix is live.

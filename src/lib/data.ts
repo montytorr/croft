@@ -147,7 +147,7 @@ export type TaskListItem = Pick<
   /**
    * Present only on a task filed elsewhere and linked into this project. The
    * row keeps its own ref, so the list has to say which project that ref
-   * belongs to — a row reading CAIRN-83 in the HM list otherwise looks like a
+   * belongs to — a row reading CROFT-83 in the HM list otherwise looks like a
    * bug. The list view already renders `project_key` when it is set, which is
    * why this reuses that field rather than adding a parallel one.
    */
@@ -201,7 +201,7 @@ export const listTasks = async (
   const closedFilter = ['done', 'cancelled']
 
   // Tasks filed elsewhere and linked here. The API route has included these
-  // since cross-project links shipped; this did not, so `cairn list --project HM`
+  // since cross-project links shipped; this did not, so `croft list --project HM`
   // and the HM page in a browser disagreed about what was in HM.
   const { data: links } = await admin()
     .from('task_projects')

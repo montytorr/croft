@@ -10,7 +10,7 @@ type Config<P, B> = {
   schema?: ZodType<B>
   /**
    * Body fields that are stored and read back to other agents, checked for
-   * secret-shaped strings after validation (CAIRN-285). One shared detector,
+   * secret-shaped strings after validation (CROFT-285). One shared detector,
    * applied here so no write path can forget it.
    */
   secretFields?: readonly string[]
@@ -29,7 +29,7 @@ const firstHop = (value: string | null): string | null => value?.split(',')[0]?.
  * is the deployment the README documents. The proxy forwards a plaintext
  * request, so the URL reads `http://`, while the browser announces `https://`,
  * and the comparison below could never match: every browser write was refused
- * with "Browser mutations must come from the Cairn origin", including the first
+ * with "Browser mutations must come from the Croft origin", including the first
  * agent key a fresh install has to issue.
  *
  * Trusting these headers assumes the application is reachable only through the
@@ -93,7 +93,7 @@ export const route = <P = Record<string, string>, B = unknown>(config: Config<P,
         return fail('unauthorized', 'Provide a bearer API key or sign in.')
       }
       if (!isTrustedMutationOrigin(req)) {
-        return fail('forbidden', 'Browser mutations must come from the Cairn origin.')
+        return fail('forbidden', 'Browser mutations must come from the Croft origin.')
       }
 
       const limit = checkRateLimit(actor.rateKey)

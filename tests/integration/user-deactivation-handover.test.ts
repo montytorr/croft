@@ -5,7 +5,7 @@ import { deactivateUser } from '@/lib/api/users'
 
 /**
  * Disabling a user never leaves their open tasks with an assignee nobody can
- * reach (CAIRN-310): it is refused until someone is named to take them over,
+ * reach (CROFT-310): it is refused until someone is named to take them over,
  * and the hand-over and its history land in the same transaction.
  */
 

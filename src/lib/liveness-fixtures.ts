@@ -31,7 +31,7 @@ export type LivenessCase = {
   expectedHoursAgo: number
 }
 
-const untouched = `${UNTOUCHED_CHECKPOINT_PREFIX}: the session that held this claim worked on CAIRN-277.\n\n${AUTO_CHECKPOINT_MARKER}`
+const untouched = `${UNTOUCHED_CHECKPOINT_PREFIX}: the session that held this claim worked on CROFT-277.\n\n${AUTO_CHECKPOINT_MARKER}`
 const worked = `Shipped the handler.\n\n${AUTO_CHECKPOINT_MARKER}`
 
 const base = {

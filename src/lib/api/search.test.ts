@@ -46,7 +46,7 @@ describe('widenedTerms', () => {
 
 describe('result refs must stay addressable', () => {
   /**
-   * A search result's `ref` is what an agent passes straight to `cairn show`.
+   * A search result's `ref` is what an agent passes straight to `croft show`.
    * Preferring the imported identifier there returns things like "LEGACY-373",
    * which looks like a ref and 404s, because no project has that key. The
    * imported id belongs in its own field.

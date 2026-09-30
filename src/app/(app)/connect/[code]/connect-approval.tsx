@@ -45,7 +45,7 @@ const Message = ({ title, body, done = false }: { title: string; body: string; d
 )
 
 /**
- * No nested forms (CAIRN-171): this is a plain card with `type="button"`
+ * No nested forms (CROFT-171): this is a plain card with `type="button"`
  * actions that call `fetch` directly, never a `<form>` wrapping the runtime
  * checkboxes.
  */
@@ -176,7 +176,7 @@ const PendingCard = ({
         <p className="text-fg-muted flex items-start gap-2 text-xs leading-relaxed">
           <TriangleAlert size={14} className="mt-px shrink-0 text-[var(--priority-high)]" aria-hidden />
           <span>
-            Approve only if you just ran <code className="font-mono">cairn setup</code> on this machine yourself. Never
+            Approve only if you just ran <code className="font-mono">croft setup</code> on this machine yourself. Never
             approve a link someone sent you: the keys would be yours, in their hands.
             {view.sameAddress ? null : (
               <strong className="text-fg mt-1 block font-medium">

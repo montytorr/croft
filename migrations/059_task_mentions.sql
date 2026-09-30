@@ -1,10 +1,10 @@
 -- ===========================================================================
--- 059: a task knows where else it was named (CAIRN-267)
+-- 059: a task knows where else it was named (CROFT-267)
 --
 -- Agents cross-reference constantly — "same cause as HERMES-92", "do NOT read
 -- this closure as permission for BB-333" — and the reference only ever pointed
 -- one way. BB-343's finding named BB-333 and said its decision must not be
--- generalised to BB-333's case; `cairn show BB-333` said nothing about it, so
+-- generalised to BB-333's case; `croft show BB-333` said nothing about it, so
 -- whoever picked BB-333 up would meet the conflict only by already knowing.
 --
 -- Nothing new is asked of anyone. The refs are already written; this indexes
@@ -16,7 +16,7 @@
 -- vector is a generated column: notes, comments, descriptions and resolutions
 -- are written from more places than one route, and an index that misses one
 -- path is an index nobody can trust. A ref is resolved when it is written,
--- through current keys and retired ones alike (CAIRN-264), so `AC-113` in an
+-- through current keys and retired ones alike (CROFT-264), so `AC-113` in an
 -- old note points at HOL-113.
 --
 -- The shape `KEY-N` also matches UTF-8, HTTP-404 and SHA-256. Only refs that

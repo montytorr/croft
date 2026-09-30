@@ -7,11 +7,11 @@ import { spawn } from 'node:child_process'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 /**
- * Several Cairn instances on one machine (CAIRN-299). The property every test
+ * Several Croft instances on one machine (CROFT-299). The property every test
  * here defends is the same one: a command reaches the instance it was told
  * to, with that instance's key, or it reaches nothing at all.
  */
-const cli = join(process.cwd(), 'cli', 'cairn.mjs')
+const cli = join(process.cwd(), 'cli', 'croft.mjs')
 
 type Seen = { auth?: string; path?: string; body?: string }[]
 
@@ -55,17 +55,17 @@ describe('several instances on one machine', () => {
       const merged: Record<string, string | undefined> = {
         ...process.env,
         HOME: home,
-        CAIRN_AGENT: 'claude-code',
-        CAIRN_DEADLINE_MS: '1',
+        CROFT_AGENT: 'claude-code',
+        CROFT_DEADLINE_MS: '1',
         NO_PROXY: '127.0.0.1,localhost',
         HTTP_PROXY: '',
         HTTPS_PROXY: '',
         ALL_PROXY: '',
         ...env,
       }
-      delete merged.CAIRN_BASE_URL
-      delete merged.CAIRN_API_KEY
-      delete merged.CAIRN_INSTANCE
+      delete merged.CROFT_BASE_URL
+      delete merged.CROFT_API_KEY
+      delete merged.CROFT_INSTANCE
       for (const [k, v] of Object.entries(env)) if (v !== undefined) merged[k] = v
       const child = spawn(process.execPath, [cli, ...args], {
         cwd: home,
@@ -80,20 +80,20 @@ describe('several instances on one machine', () => {
     })
 
   const configure = async (unclassified: object = { mode: 'ask' }) => {
-    await writeFile(join(home, '.cairn', 'instances.json'), JSON.stringify({
+    await writeFile(join(home, '.croft', 'instances.json'), JSON.stringify({
       version: 1,
       instances: { personal: { url: a }, work: { url: `${b}/` } },
       unclassified,
     }))
     for (const [name, key] of [['personal', 'crn_personal'], ['work', 'crn_work']] as const) {
-      await mkdir(join(home, '.cairn', 'instances', name), { recursive: true })
-      await writeFile(join(home, '.cairn', 'instances', name, 'env'), `CAIRN_API_KEY_CLAUDE_CODE=${key}\n`)
+      await mkdir(join(home, '.croft', 'instances', name), { recursive: true })
+      await writeFile(join(home, '.croft', 'instances', name, 'env'), `CROFT_API_KEY_CLAUDE_CODE=${key}\n`)
     }
   }
 
   beforeEach(async () => {
-    home = await mkdtemp(join(tmpdir(), 'cairn-instances-'))
-    await mkdir(join(home, '.cairn'), { recursive: true })
+    home = await mkdtemp(join(tmpdir(), 'croft-instances-'))
+    await mkdir(join(home, '.croft'), { recursive: true })
     seenA.length = 0
     seenB.length = 0
     const first = await serve(seenA)
@@ -117,9 +117,9 @@ describe('several instances on one machine', () => {
     expect(seenB.map((r) => r.auth)).toEqual(['Bearer crn_work'])
   })
 
-  it('takes the instance from CAIRN_INSTANCE, which is how a hook passes it', async () => {
+  it('takes the instance from CROFT_INSTANCE, which is how a hook passes it', async () => {
     await configure()
-    expect((await run(['note', 'ACME-1', 'x'], { CAIRN_INSTANCE: 'work' })).code).toBe(0)
+    expect((await run(['note', 'ACME-1', 'x'], { CROFT_INSTANCE: 'work' })).code).toBe(0)
     expect(seenA).toHaveLength(0)
     expect(seenB).toHaveLength(1)
   })
@@ -144,21 +144,21 @@ describe('several instances on one machine', () => {
 
   it('refuses a key from the environment, which cannot say which instance issued it', async () => {
     await configure({ mode: 'default', instance: 'work' })
-    const result = await run(['note', 'ACME-1', 'x'], { CAIRN_API_KEY: 'crn_from_env' })
+    const result = await run(['note', 'ACME-1', 'x'], { CROFT_API_KEY: 'crn_from_env' })
 
     expect(result.code).toBe(2)
-    expect(result.stderr).toContain('CAIRN_API_KEY is set in the environment')
+    expect(result.stderr).toContain('CROFT_API_KEY is set in the environment')
     expect(seenA.length + seenB.length).toBe(0)
   })
 
-  it('refuses a CAIRN_BASE_URL that disagrees with the chosen instance, and accepts one that agrees', async () => {
+  it('refuses a CROFT_BASE_URL that disagrees with the chosen instance, and accepts one that agrees', async () => {
     await configure()
-    const wrong = await run(['note', 'ACME-1', 'x', '--instance', 'work'], { CAIRN_BASE_URL: a })
+    const wrong = await run(['note', 'ACME-1', 'x', '--instance', 'work'], { CROFT_BASE_URL: a })
     expect(wrong.code).toBe(2)
     expect(wrong.stderr).toContain('different server than instance "work"')
     expect(seenA.length + seenB.length).toBe(0)
 
-    const same = await run(['note', 'ACME-1', 'x', '--instance', 'work'], { CAIRN_BASE_URL: `${b}/` })
+    const same = await run(['note', 'ACME-1', 'x', '--instance', 'work'], { CROFT_BASE_URL: `${b}/` })
     expect(same.code).toBe(0)
     expect(seenB).toHaveLength(1)
   })
@@ -169,16 +169,16 @@ describe('several instances on one machine', () => {
     expect(unknown.code).toBe(2)
     expect(unknown.stderr).toContain('no instance named "client"')
 
-    await rm(join(home, '.cairn', 'instances.json'))
-    const single = await run(['note', 'ACME-1', 'x', '--instance', 'work'], { CAIRN_BASE_URL: a, CAIRN_API_KEY: 'k' })
+    await rm(join(home, '.croft', 'instances.json'))
+    const single = await run(['note', 'ACME-1', 'x', '--instance', 'work'], { CROFT_BASE_URL: a, CROFT_API_KEY: 'k' })
     expect(single.code).toBe(2)
     expect(single.stderr).toContain('has one instance')
     expect(seenA.length + seenB.length).toBe(0)
   })
 
-  it('refuses a malformed instances.json instead of falling back to ~/.cairn/env', async () => {
-    await writeFile(join(home, '.cairn', 'env'), `CAIRN_BASE_URL=${a}\nCAIRN_API_KEY=crn_legacy\n`)
-    await writeFile(join(home, '.cairn', 'instances.json'), '{"version": 1, "instances": {}}')
+  it('refuses a malformed instances.json instead of falling back to ~/.croft/env', async () => {
+    await writeFile(join(home, '.croft', 'env'), `CROFT_BASE_URL=${a}\nCROFT_API_KEY=crn_legacy\n`)
+    await writeFile(join(home, '.croft', 'instances.json'), '{"version": 1, "instances": {}}')
     const result = await run(['note', 'ACME-1', 'x'])
 
     expect(result.code).toBe(2)
@@ -190,53 +190,53 @@ describe('several instances on one machine', () => {
     const down: Seen = []
     const offline = await serve(down, 503)
     servers.push(offline.server)
-    await writeFile(join(home, '.cairn', 'instances.json'), JSON.stringify({
+    await writeFile(join(home, '.croft', 'instances.json'), JSON.stringify({
       version: 1, instances: { work: { url: offline.url } }, unclassified: { mode: 'default', instance: 'work' },
     }))
-    await mkdir(join(home, '.cairn', 'instances', 'work'), { recursive: true })
-    await writeFile(join(home, '.cairn', 'instances', 'work', 'env'), 'CAIRN_API_KEY_CLAUDE_CODE=crn_work\n')
+    await mkdir(join(home, '.croft', 'instances', 'work'), { recursive: true })
+    await writeFile(join(home, '.croft', 'instances', 'work', 'env'), 'CROFT_API_KEY_CLAUDE_CODE=crn_work\n')
 
     const result = await run(['note', 'ACME-1', 'queued'])
     expect(result.stderr).toContain('queued locally')
-    expect(existsSync(join(home, '.cairn', 'instances', 'work', 'outbox.jsonl'))).toBe(true)
-    expect(existsSync(join(home, '.cairn', 'outbox.jsonl'))).toBe(false)
+    expect(existsSync(join(home, '.croft', 'instances', 'work', 'outbox.jsonl'))).toBe(true)
+    expect(existsSync(join(home, '.croft', 'outbox.jsonl'))).toBe(false)
   })
 
   it('tags the breadcrumb the session-end hook reads with the instance', async () => {
     await configure()
     await run(['note', 'ACME-1', 'x', '--instance', 'work'])
-    const acted = (await readFile(join(home, '.cairn', 'acted.jsonl'), 'utf8')).trim().split('\n').map((l) => JSON.parse(l))
+    const acted = (await readFile(join(home, '.croft', 'acted.jsonl'), 'utf8')).trim().split('\n').map((l) => JSON.parse(l))
     expect(acted.at(-1)).toMatchObject({ ref: 'ACME-1', instance: 'work' })
   })
 
   it('adds an instance and adopts this machine\'s existing files into it', async () => {
-    await writeFile(join(home, '.cairn', 'env'), `CAIRN_BASE_URL=${a}\nCAIRN_API_KEY_CLAUDE_CODE=crn_personal\n`)
-    await writeFile(join(home, '.cairn', 'projects.json'), '{"/x":"ACME"}')
-    await mkdir(join(home, '.cairn', 'ownership'))
-    await writeFile(join(home, '.cairn', 'outbox.jsonl'), '')
+    await writeFile(join(home, '.croft', 'env'), `CROFT_BASE_URL=${a}\nCROFT_API_KEY_CLAUDE_CODE=crn_personal\n`)
+    await writeFile(join(home, '.croft', 'projects.json'), '{"/x":"ACME"}')
+    await mkdir(join(home, '.croft', 'ownership'))
+    await writeFile(join(home, '.croft', 'outbox.jsonl'), '')
 
     const added = await run(['instance', 'add', 'personal', '--url', a, '--default', '--adopt'])
     expect(added.code).toBe(0)
     expect(added.stdout).toContain('instance personal')
-    const dir = join(home, '.cairn', 'instances', 'personal')
+    const dir = join(home, '.croft', 'instances', 'personal')
     for (const file of ['env', 'projects.json', 'ownership', 'outbox.jsonl']) {
       expect(existsSync(join(dir, file))).toBe(true)
-      expect(existsSync(join(home, '.cairn', file))).toBe(false)
+      expect(existsSync(join(home, '.croft', file))).toBe(false)
     }
-    expect(((await stat(join(home, '.cairn', 'instances.json'))).mode & 0o777).toString(8)).toBe('600')
+    expect(((await stat(join(home, '.croft', 'instances.json'))).mode & 0o777).toString(8)).toBe('600')
 
     expect((await run(['note', 'ACME-1', 'after adoption'])).code).toBe(0)
     expect(seenA.map((r) => r.auth)).toEqual(['Bearer crn_personal'])
   })
 
   it('refuses to adopt files that belong to a different server', async () => {
-    await writeFile(join(home, '.cairn', 'env'), `CAIRN_BASE_URL=${a}\nCAIRN_API_KEY=crn_personal\n`)
+    await writeFile(join(home, '.croft', 'env'), `CROFT_BASE_URL=${a}\nCROFT_API_KEY=crn_personal\n`)
     const result = await run(['instance', 'add', 'work', '--url', b, '--adopt'])
 
     expect(result.code).not.toBe(0)
     expect(result.stderr).toContain('wrong instance')
-    expect(existsSync(join(home, '.cairn', 'env'))).toBe(true)
-    expect(existsSync(join(home, '.cairn', 'instances.json'))).toBe(false)
+    expect(existsSync(join(home, '.croft', 'env'))).toBe(true)
+    expect(existsSync(join(home, '.croft', 'instances.json'))).toBe(false)
   })
 
   it('lists instances without ever printing a key', async () => {
@@ -270,49 +270,49 @@ describe('several instances on one machine', () => {
     expect(seenA).toHaveLength(0)
   })
 
-  it('refuses to adopt when the existing setup reached another server through CAIRN_BASE_URL', async () => {
-    await writeFile(join(home, '.cairn', 'env'), 'CAIRN_API_KEY=crn_work\n')
-    const result = await run(['instance', 'add', 'personal', '--url', a, '--adopt'], { CAIRN_BASE_URL: b })
+  it('refuses to adopt when the existing setup reached another server through CROFT_BASE_URL', async () => {
+    await writeFile(join(home, '.croft', 'env'), 'CROFT_API_KEY=crn_work\n')
+    const result = await run(['instance', 'add', 'personal', '--url', a, '--adopt'], { CROFT_BASE_URL: b })
 
     expect(result.code).not.toBe(0)
     expect(result.stderr).toContain('wrong instance')
-    expect(existsSync(join(home, '.cairn', 'env'))).toBe(true)
+    expect(existsSync(join(home, '.croft', 'env'))).toBe(true)
   })
 
   it('refuses to adopt keys that were only ever used with localhost into a remote instance', async () => {
-    await writeFile(join(home, '.cairn', 'env'), 'CAIRN_API_KEY=crn_local\n')
+    await writeFile(join(home, '.croft', 'env'), 'CROFT_API_KEY=crn_local\n')
     const result = await run(['instance', 'add', 'personal', '--url', a, '--adopt'])
     expect(result.code).not.toBe(0)
     expect(result.stderr).toContain('http://localhost:3000')
   })
 
   it('finishes an interrupted adoption on a re-run without losing writes already moved', async () => {
-    await writeFile(join(home, '.cairn', 'env'), `CAIRN_BASE_URL=${a}\nCAIRN_API_KEY_CLAUDE_CODE=crn_personal\n`)
-    const dir = join(home, '.cairn', 'instances', 'personal')
+    await writeFile(join(home, '.croft', 'env'), `CROFT_BASE_URL=${a}\nCROFT_API_KEY_CLAUDE_CODE=crn_personal\n`)
+    const dir = join(home, '.croft', 'instances', 'personal')
     await mkdir(dir, { recursive: true })
     await writeFile(join(dir, 'outbox.jsonl'), '{"id":"moved-before-the-crash"}\n')
-    await writeFile(join(home, '.cairn', 'outbox.jsonl'), '{"id":"still-at-the-top"}\n')
+    await writeFile(join(home, '.croft', 'outbox.jsonl'), '{"id":"still-at-the-top"}\n')
 
     const result = await run(['instance', 'add', 'personal', '--url', a, '--adopt'])
     expect(result.code).toBe(0)
     const outbox = await readFile(join(dir, 'outbox.jsonl'), 'utf8')
     expect(outbox).toContain('moved-before-the-crash')
     expect(outbox).toContain('still-at-the-top')
-    expect(existsSync(join(home, '.cairn', 'outbox.jsonl'))).toBe(false)
+    expect(existsSync(join(home, '.croft', 'outbox.jsonl'))).toBe(false)
   })
 
   it('adds a first instance on a machine with nothing to adopt', async () => {
-    await rm(join(home, '.cairn'), { recursive: true })
+    await rm(join(home, '.croft'), { recursive: true })
     const result = await run(['instance', 'add', 'work', '--url', b, '--adopt'])
     expect(result.code).toBe(0)
-    expect(existsSync(join(home, '.cairn', 'instances.json'))).toBe(true)
+    expect(existsSync(join(home, '.croft', 'instances.json'))).toBe(true)
   })
 
   it('says what is wrong with the configuration on --version too, and still answers locally', async () => {
     await configure()
     const result = await run(['--version', '--instance', 'client'])
     expect(result.code).toBe(0)
-    expect(result.stdout).toContain('cairn ')
+    expect(result.stdout).toContain('croft ')
     expect(result.stderr).toContain('no instance named "client"')
     expect(seenA.length + seenB.length).toBe(0)
   })
@@ -324,7 +324,7 @@ describe('several instances on one machine', () => {
     ['no url', JSON.stringify({ version: 1, instances: { work: {} } }), 'needs an http(s) "url"'],
     ['a default that is not an instance', JSON.stringify({ version: 1, instances: { work: { url: 'https://x' } }, unclassified: { mode: 'default', instance: 'home' } }), '"unclassified" must be'],
   ])('refuses an instances.json with %s', async (_label, content, message) => {
-    await writeFile(join(home, '.cairn', 'instances.json'), content)
+    await writeFile(join(home, '.croft', 'instances.json'), content)
     const result = await run(['note', 'ACME-1', 'x'])
     expect(result.code).toBe(2)
     expect(result.stderr).toContain(message)
@@ -332,7 +332,7 @@ describe('several instances on one machine', () => {
 
   it('keeps saved routes when another instance is added', async () => {
     await configure()
-    const cfgPath = join(home, '.cairn', 'instances.json')
+    const cfgPath = join(home, '.croft', 'instances.json')
     const cfg = JSON.parse(await readFile(cfgPath, 'utf8'))
     await writeFile(cfgPath, JSON.stringify({ ...cfg, routes: [{ path: '/srv/client', match: 'exact', instance: 'work' }] }))
 
@@ -344,7 +344,7 @@ describe('several instances on one machine', () => {
 
   it('sets what an unrouted directory does with instance policy', async () => {
     await configure()
-    const cfgPath = join(home, '.cairn', 'instances.json')
+    const cfgPath = join(home, '.croft', 'instances.json')
 
     expect((await run(['instance', 'policy', 'default', 'work'])).code).toBe(0)
     expect(JSON.parse(await readFile(cfgPath, 'utf8')).unclassified).toEqual({ mode: 'default', instance: 'work' })
@@ -363,8 +363,8 @@ describe('several instances on one machine', () => {
     expect((await run(['instance', 'add', 'personal', '--url', a])).code).toBe(0)
     const second = await run(['instance', 'add', 'work', '--url', b])
     expect(second.code).toBe(0)
-    expect(second.stdout).toContain('cairn instance policy default <name>')
-    expect(JSON.parse(await readFile(join(home, '.cairn', 'instances.json'), 'utf8')).unclassified).toBeUndefined()
+    expect(second.stdout).toContain('croft instance policy default <name>')
+    expect(JSON.parse(await readFile(join(home, '.croft', 'instances.json'), 'utf8')).unclassified).toBeUndefined()
   })
 
   /** The policy was written; exiting 2 would tell a caller it was not. */
@@ -377,7 +377,7 @@ describe('several instances on one machine', () => {
   })
 
   it('changes nothing on a machine with no instances.json', async () => {
-    await writeFile(join(home, '.cairn', 'env'), `CAIRN_BASE_URL=${a}\nCAIRN_API_KEY=crn_legacy\n`)
+    await writeFile(join(home, '.croft', 'env'), `CROFT_BASE_URL=${a}\nCROFT_API_KEY=crn_legacy\n`)
     expect((await run(['note', 'ACME-1', 'x'])).code).toBe(0)
     expect(seenA.map((r) => r.auth)).toEqual(['Bearer crn_legacy'])
   })

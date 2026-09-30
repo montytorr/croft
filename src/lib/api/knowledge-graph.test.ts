@@ -31,7 +31,7 @@ describe('reading references out of a body', () => {
     // The renderer never linkifies inside a fence, because the parser hands it
     // a code node rather than text. Reading raw bodies has no such help, so an
     // EXAMPLE in a fence would otherwise become a real edge.
-    const body = ['Prose [[real-one]].', '```', 'cairn know [[an-example]]', '```'].join('\n')
+    const body = ['Prose [[real-one]].', '```', 'croft know [[an-example]]', '```'].join('\n')
 
     expect(referencesIn(body)).toEqual(['real-one'])
   })

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Applies migrations/*.sql in filename order, inside a transaction,
- * recording what has run in a `_cairn_migrations` table.
+ * recording what has run in a `_croft_migrations` table.
  *
  * Deliberately plain: numbered SQL files are easier to reason about than a
  * generated migration chain, and they are what the self-hosting instructions
@@ -28,13 +28,13 @@ export const migrate = async (url, { dir = join(process.cwd(), 'migrations'), lo
     // Session-level: released when the connection closes, however this ends.
     await client.query('select pg_advisory_lock($1)', [MIGRATION_LOCK])
     await client.query(`
-      create table if not exists _cairn_migrations (
+      create table if not exists _croft_migrations (
         name       text primary key,
         applied_at timestamptz not null default now()
       )
     `)
 
-    const { rows } = await client.query('select name from _cairn_migrations')
+    const { rows } = await client.query('select name from _croft_migrations')
     const applied = new Set(rows.map((r) => r.name))
     const files = (await readdir(dir)).filter((f) => f.endsWith('.sql')).sort()
 
@@ -46,7 +46,7 @@ export const migrate = async (url, { dir = join(process.cwd(), 'migrations'), lo
       try {
         await client.query('begin')
         await client.query(sql)
-        await client.query('insert into _cairn_migrations (name) values ($1)', [file])
+        await client.query('insert into _croft_migrations (name) values ($1)', [file])
         await client.query('commit')
         ran += 1
       } catch (error) {

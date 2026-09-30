@@ -1,5 +1,5 @@
 /**
- * Whether a task body reads as markdown or as a wall of text (CAIRN-312).
+ * Whether a task body reads as markdown or as a wall of text (CROFT-312).
  *
  * Agents filed bodies like "WHY EMPTY TODAY: hermes Production → Appels =
  * call.controller.search (hermes src/…/call.controller.js:303-304): non-managers

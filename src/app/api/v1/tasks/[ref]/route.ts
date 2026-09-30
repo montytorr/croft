@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic'
  *
  * `requested_ref` and `renamed_from` appear only then. AC-113 answered with
  * HOL-113 and nothing else, and an agent whose commit message said AC-113 had
- * no way to tell it had the same task (CAIRN-264). `former_refs` lists the refs
+ * no way to tell it had the same task (CROFT-264). `former_refs` lists the refs
  * this task was actually issued under, which excludes keys retired before the
  * task existed.
  */
@@ -77,7 +77,7 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
     const archived = refuseArchived(task)
     if (archived) return archived
 
-    const unreadable = refuseUnreadableBody(actor, body.description, `cairn update ${params.ref} --body -`)
+    const unreadable = refuseUnreadableBody(actor, body.description, `croft update ${params.ref} --body -`)
     if (unreadable) return unreadable
 
     const nextStatus = body.status ?? (task.status as string)
@@ -103,7 +103,7 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
      *
      * It was accepted silently. An agent wrote the answer, believed it had
      * finished, and the task sat in backlog carrying an answered dot — which
-     * also offers it to `check` as settled prior work, the failure CAIRN-120
+     * also offers it to `check` as settled prior work, the failure CROFT-120
      * found on OD-36. Refused rather than auto-closed, because `done` and
      * `cancelled` are different claims about the work and only the caller
      * knows which one it is making.
@@ -453,7 +453,7 @@ export const DELETE = route<{ ref: string }>({
      * name through the task, and a detached row had nothing to show but the
      * project key. Stamping it now is the last moment anything can.
      */
-    await admin().rpc('cairn_stamp_ref', { p_task: task.id, p_ref: ref })
+    await admin().rpc('croft_stamp_ref', { p_task: task.id, p_ref: ref })
 
     const { error } = await admin().from('tasks').delete().eq('id', task.id)
     if (error) return failFromDb(error)

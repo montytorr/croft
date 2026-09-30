@@ -6,7 +6,7 @@ import { mentionsOf } from '@/lib/api/mentions'
 export const dynamic = 'force-dynamic'
 
 /**
- * Every place another task named this one (CAIRN-267): notes, comments,
+ * Every place another task named this one (CROFT-267): notes, comments,
  * descriptions and resolutions, decisions and findings first. The digest
  * carries the first few; this is the rest.
  */

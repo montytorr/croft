@@ -1,6 +1,6 @@
 -- Whether the memory is ever actually consulted.
 --
--- Cairn's whole premise is `cairn check` before starting work, and nothing
+-- Croft's whole premise is `croft check` before starting work, and nothing
 -- recorded whether that happened. Every other number here describes what was
 -- written; none described whether any of it was read. A store nobody queries is
 -- an expensive way to write into a drawer.

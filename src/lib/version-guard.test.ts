@@ -14,9 +14,9 @@ import pkg from '../../package.json'
  */
 describe('the CLI reports the version it was released as', () => {
   it('matches package.json', () => {
-    const source = readFileSync(join(process.cwd(), 'cli/cairn.mjs'), 'utf8')
+    const source = readFileSync(join(process.cwd(), 'cli/croft.mjs'), 'utf8')
     const declared = /const VERSION = '([^']+)'/.exec(source)?.[1]
-    expect(declared, 'cli/cairn.mjs must declare a VERSION').toBeDefined()
+    expect(declared, 'cli/croft.mjs must declare a VERSION').toBeDefined()
     expect(declared).toBe(pkg.version)
   })
 

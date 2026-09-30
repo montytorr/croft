@@ -8,7 +8,7 @@ vi.mock('@/lib/api/sessions', () => ({
 }))
 import { POST } from './route'
 
-const post = (body: object) => POST(new Request('https://cairn.example.test/api/v1/sessions', {
+const post = (body: object) => POST(new Request('https://croft.example.test/api/v1/sessions', {
   method: 'POST', headers: { authorization: 'Bearer test', 'Content-Type': 'application/json' },
   body: JSON.stringify(body),
 }), { params: Promise.resolve({}) })

@@ -7,9 +7,9 @@ const WALL = 'WHY EMPTY TODAY: call.controller.search returns nothing for CS use
 const agent = { actorType: 'agent' as const }
 const human = { actorType: 'human' as const }
 
-describe('refuseUnreadableBody (CAIRN-312)', () => {
+describe('refuseUnreadableBody (CROFT-312)', () => {
   it('refuses an agent\'s unreadable body with every problem, in the field and in the message', async () => {
-    const refused = refuseUnreadableBody(agent, WALL, 'cairn update ACME-42 --body -')
+    const refused = refuseUnreadableBody(agent, WALL, 'croft update ACME-42 --body -')
     expect(refused?.status).toBe(400)
     const payload = await refused!.json()
     expect(payload.code).toBe('validation_failed')
@@ -19,7 +19,7 @@ describe('refuseUnreadableBody (CAIRN-312)', () => {
       'Wrap `call.controller.search` in backticks — it is code.',
     ])
     // A client that prints only `error` still gets the remedy and the list.
-    expect(payload.error).toContain('`cairn update ACME-42 --body -` reads the body from stdin')
+    expect(payload.error).toContain('`croft update ACME-42 --body -` reads the body from stdin')
     for (const problem of payload.problems) expect(payload.error).toContain(`  - ${problem}`)
   })
 

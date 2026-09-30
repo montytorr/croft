@@ -1,4 +1,4 @@
--- Cairn's own vital signs.
+-- Croft's own vital signs.
 --
 -- Three failures this week were found by a person looking, not by the system
 -- saying anything: sessions silently recorded nothing for two days, ten tasks
@@ -11,7 +11,7 @@
 -- the same function answers "is anything wrong right now" and "what did last
 -- week look like".
 
-create or replace function cairn_vitals(p_owner uuid, p_hours int default 24)
+create or replace function croft_vitals(p_owner uuid, p_hours int default 24)
 returns jsonb
 language sql
 stable

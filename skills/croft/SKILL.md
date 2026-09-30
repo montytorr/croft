@@ -1,13 +1,13 @@
 ---
-name: cairn
+name: croft
 description: Shared task tracker and memory for agents. Use BEFORE starting work on any subject to check what has already been done, tried, or debugged; and to file, claim, annotate, learn, checkpoint, and close tasks. Triggers on "have we done this before", "check if we fixed", "what did we try for", "create a task", "log this", "learn this", "checkpoint this", "what's the status of", "claim this task", "mark it done", "end the session". Not for work already covered by a task you hold, a question answered by reading a file, or throwaway exploration that changes nothing: it is for durable work and durable answers, not for every request that has a verb in it.
 ---
 
-# Cairn
+# Croft
 
 Shared memory for everything worked on here: **tasks** (what needs doing and how it ended),
 **notes** (what was tried, including what failed), **knowledge** (what is now true, outliving
-any task) and **sessions** (recorded for you). `cairn check` searches all four at once.
+any task) and **sessions** (recorded for you). `croft check` searches all four at once.
 Refs like `ACME-42` are your project key plus a number.
 
 ## The lifecycle — every time you do durable work
@@ -15,24 +15,24 @@ Refs like `ACME-42` are your project key plus a number.
 Durable means it changes something, decides something, or rules something out: a fix, a
 config change, a deploy, a migration, an investigation, a delegation. Size is irrelevant.
 
-1. **Check.** `cairn check "<subject>"` before reading deeply, changing anything or
+1. **Check.** `croft check "<subject>"` before reading deeply, changing anything or
    delegating; `show` the hits that matter. Do not re-debug something already answered.
-2. **Own it.** Reuse an open task, or file one. From an agent runtime `cairn add` **claims
+2. **Own it.** Reuse an open task, or file one. From an agent runtime `croft add` **claims
    by default** (it says so; `--no-start` only files), holding back, saying why, when
-   similar open work exists or you already hold a task there. Otherwise `cairn claim <ref>`
+   similar open work exists or you already hold a task there. Otherwise `croft claim <ref>`
    — it sets `doing` and prints what bears on the task. **Exit 9 means another agent holds
    it: pick different work**, never force it. What you file is **your human's** unless
    `--assignee <who>`.
-3. **Record as it happens.** `cairn note <ref> "…" --kind attempt|finding|decision|handoff`.
+3. **Record as it happens.** `croft note <ref> "…" --kind attempt|finding|decision|handoff`.
    **Dead ends are `--kind attempt`** — "tried X, no change" is the note the next agent
    needs most, because the trying is the expensive part.
-4. **Checkpoint before you yield.** `cairn checkpoint <ref> --summary "state + next step"`
+4. **Checkpoint before you yield.** `croft checkpoint <ref> --summary "state + next step"`
    after each milestone and before pausing, delegating or ending the turn. It alone
    tells whoever resumes where you got to.
-5. **Written but not landed → `cairn update <ref> --status in-review`**, with a note saying
+5. **Written but not landed → `croft update <ref> --status in-review`**, with a note saying
    which: uncommitted, unmerged, or awaiting deploy. `done` would be a lie and `doing` says
    someone is still typing.
-6. **Close with how.** `cairn done <ref> --resolution "what changed and why" --kind <kind>`:
+6. **Close with how.** `croft done <ref> --resolution "what changed and why" --kind <kind>`:
    `fixed` · **`verified`** (someone else's fix was already there and you checked — `fixed`
    would claim their work) · `answered` · `wont-fix` · `duplicate` · `not-reproducible` ·
    `superseded`. With no `--kind` it records `fixed` and says so. `show` the ref first: a
@@ -50,7 +50,7 @@ with `--no-start`.
 **When not to file.** A tracker that fires on everything costs more than it records.
 - **A task you hold already covers it** — note on it, or `--parent` a genuinely separate piece.
 - **Another agent holds it** — a live claim in `check` is an answer; pick different work.
-- **Reading a file answers it** — Cairn knows what happened to the code, not what it says.
+- **Reading a file answers it** — Croft knows what happened to the code, not what it says.
   `check` first only if the subject has a past (a recurring failure, a decision, a try).
 - **Throwaway exploration** — until you change something or learn something durable.
 - **A fact that expires** ("staging is three commits behind") — a note, or nothing.
@@ -64,12 +64,12 @@ session that changed or ruled something out and left no trace.
 ## Check, show, recall
 
 ```bash
-cairn check "flaky auth redirect"  # index: one line per hit, answered?, ~token cost
-cairn show ACME-42          # digest: the answer, findings, a clipped body
-cairn show ACME-42 --full   # everything, when the digest is not enough
-cairn log ACME-42           # what agents said · cairn history: what actually changed
-cairn recall ACME-42        # decisions and facts that bear on this task
-cairn know <slug>           # read a knowledge hit
+croft check "flaky auth redirect"  # index: one line per hit, answered?, ~token cost
+croft show ACME-42          # digest: the answer, findings, a clipped body
+croft show ACME-42 --full   # everything, when the digest is not enough
+croft log ACME-42           # what agents said · croft history: what actually changed
+croft recall ACME-42        # decisions and facts that bear on this task
+croft know <slug>           # read a knowledge hit
 ```
 
 `#0` means the subject is new. `--kinds task,note,knowledge,session` narrows `check` (the
@@ -84,21 +84,21 @@ look for.
 ## Evidence, as opposed to narration
 
 ```bash
-cairn commit ACME-42 a1b2c3d --message "cap pool_size at 15"
-cairn push   ACME-42 a1b2c3d --branch main
-cairn run    ACME-42 "npm test" --status passed --exit-code 0
+croft commit ACME-42 a1b2c3d --message "cap pool_size at 15"
+croft push   ACME-42 a1b2c3d --branch main
+croft run    ACME-42 "npm test" --status passed --exit-code 0
 ```
 
 They record; none executes anything. "I fixed it" cannot be checked; `run_result failed
 exit 1` can. Repeats dedupe, so retrying is safe. Name another task's ref in a
 `decision` or `finding` note when your work constrains it — it shows under that task's
-`mentionedIn`; the ref in prose is the link. `cairn comment` addresses the human, not the
+`mentionedIn`; the ref in prose is the link. `croft comment` addresses the human, not the
 next agent.
 
 ## Filing, and the body
 
 ```bash
-cairn add "title" --project ACME --type bug --body - --assignee bob@acme.io   # body on stdin
+croft add "title" --project ACME --type bug --body - --assignee bob@acme.io   # body on stdin
 ```
 
 `--type feature|bug|improvement|chore|spike|docs` · `--priority urgent|high|medium|low`.
@@ -128,9 +128,9 @@ resolution; the withdrawn text stays in `history`.
 ## Knowledge: what we know, not what we did
 
 ```bash
-cairn know                              # what applies here
-cairn know "postgrest ambiguous embed"  # search
-cairn learn "Supavisor pools are per-tenant, not per-connection-string" \
+croft know                              # what applies here
+croft know "postgrest ambiguous embed"  # search
+croft learn "Supavisor pools are per-tenant, not per-connection-string" \
   --slug supavisor-pools-per-tenant --label supabase --body -
 ```
 
@@ -138,7 +138,7 @@ Write it the moment you learn something that will be true next month. If you wou
 surfaced on an unrelated project, it is knowledge; bound to one task and moment, a note.
 
 - **Scope is explicit or inferred, never assumed global.** `--project ACME`, `--entity acme`
-  (a business, stack or subsystem — `cairn entities`), or `--global`. With none, `learn`
+  (a business, stack or subsystem — `croft entities`), or `--global`. With none, `learn`
   takes this directory's project and **refuses where there is none** — outside a mapped
   checkout, pass a scope. Scope narrowly only when the fact is narrow; the narrower one
   is shown first ("true for this business, except here").
@@ -158,11 +158,11 @@ surfaced on an unrelated project, it is knowledge; bound to one task and moment,
   memory store fails. When `learn` lists same-subject entries, supersede the wrong one.
 
 ```bash
-cairn relearn <slug> --body - --reason "why"    # it changed (old version kept)
-cairn relearn <slug> --entity E --project none  # re-scope: none clears a side; --global both
-cairn unlearn <old> --superseded-by <new>       # it was wrong
-cairn verify <slug>                             # still true; you checked
-cairn know <slug> --history
+croft relearn <slug> --body - --reason "why"    # it changed (old version kept)
+croft relearn <slug> --entity E --project none  # re-scope: none clears a side; --global both
+croft unlearn <old> --superseded-by <new>       # it was wrong
+croft verify <slug>                             # still true; you checked
+croft know <slug> --history
 ```
 
 A fact is linked to the backticked paths in its body, its source task's files, and any
@@ -172,25 +172,25 @@ evidence of change. Either way: check it, then `verify` or `relearn`. Confirming
 fact is as useful as a new one, and faster.
 
 `know --unused|--gaps|--orphans|--dangling` show what is *not* connected. **Scripted reads
-are not recalls:** pass `--sweep` (or `CAIRN_SWEEP=1`) when looping over entries.
+are not recalls:** pass `--sweep` (or `CROFT_SWEEP=1`) when looping over entries.
 
 **If this machine also has Trig** (the map of what exists): ask *could a re-scan
-rediscover this?* Yes → `trig learn`; no → `cairn learn`. Unsure → Cairn: Trig ingests
-Cairn knowledge on every scan, while a fact hand-written into Trig is never superseded.
+rediscover this?* Yes → `trig learn`; no → `croft learn`. Unsure → Croft: Trig ingests
+Croft knowledge on every scan, while a fact hand-written into Trig is never superseded.
 
 ## Claims and liveness
 
 ```bash
-cairn claim ACME-42      # sets doing; exit 9 = held by someone else
-cairn beat ACME-42       # optional heartbeat during long silent work
-cairn checkpoint ACME-42 --summary "migration written, tests not run"
-cairn release ACME-42    # handing it back: a held doing task returns to todo
+croft claim ACME-42      # sets doing; exit 9 = held by someone else
+croft beat ACME-42       # optional heartbeat during long silent work
+croft checkpoint ACME-42 --summary "migration written, tests not run"
+croft release ACME-42    # handing it back: a held doing task returns to todo
 ```
 
 - A claim is execution state, independent of status: `doing` and unclaimed means a human
   is on it. Only claim open work — reopen settled work first if it truly needs revision.
 - **A claim is not ownership.** The assignee is the human accountable before and after
-  it. `list --mine` is what you hold; `--assignee me`, what your human owns; `cairn
+  it. `list --mine` is what you hold; `--assignee me`, what your human owns; `croft
   people`, who can be assigned.
 - **A checkpoint on an unheld open task claims it** (and says so); a note does not. Neither
   steals: a checkpoint on someone else's claim is refused.
@@ -206,17 +206,17 @@ cairn release ACME-42    # handing it back: a held doing task returns to todo
   of life) only if it has no checkpoint. Your own checkpoint is the handoff.
 
 Sessions are created by the runtime; there is no `session create`. For a manual handoff
-with a real session id, `cairn session end --id <id>` — never fabricate one.
+with a real session id, `croft session end --id <id>` — never fabricate one.
 
 ## Dependencies, parents, duplicates
 
 ```bash
-cairn deps ACME-42                   # what blocks this, and what it blocks
-cairn blockedby ACME-42 ACME-40      # ACME-40 must finish first (unblockedby removes)
-cairn block ACME-42 --reason "…"     # stuck on something outside Cairn
-cairn add "write the migration" --project ACME --parent ACME-42
-cairn children ACME-42               # the split, and how much is closed
-cairn done ACME-42 --duplicate-of ACME-31 --resolution "same cause; fixed there"
+croft deps ACME-42                   # what blocks this, and what it blocks
+croft blockedby ACME-42 ACME-40      # ACME-40 must finish first (unblockedby removes)
+croft block ACME-42 --reason "…"     # stuck on something outside Croft
+croft add "write the migration" --project ACME --parent ACME-42
+croft children ACME-42               # the split, and how much is closed
+croft done ACME-42 --duplicate-of ACME-31 --resolution "same cause; fixed there"
 ```
 
 A task with open blockers is not ready, whatever its status says. A dependency shows on
@@ -226,10 +226,10 @@ containment, blockers ordering. Name a duplicate's original.
 ## Briefing and what next
 
 ```bash
-cairn context                 # what you hold, in flight, where the last session stopped
-cairn context --scope project [--project KEY]
-cairn next [--project KEY] [--assignee me]  # the recommendation, and why it won
-cairn map ACME                # this checkout is that project (once per repo)
+croft context                 # what you hold, in flight, where the last session stopped
+croft context --scope project [--project KEY]
+croft next [--project KEY] [--assignee me]  # the recommendation, and why it won
+croft map ACME                # this checkout is that project (once per repo)
 ```
 
 A hook usually runs `context` at session start; run it when you have lost your place.
@@ -250,11 +250,11 @@ checkpoint for you.
 ## Output and rare verbs
 
 TSV by default (`#count`, a header, rows); `--json` to parse, `--pretty` for a human;
-`cairn --help` is the reference. `replay` sends writes queued offline. `task delete <ref>
+`croft --help` is the reference. `replay` sends writes queued offline. `task delete <ref>
 --confirm <ref>` is for junk only; `cancel` keeps the record and the reason.
 
-Requires `cairn` on PATH and a key per runtime (`~/.cairn/env`; a person pairs them with
-`cairn setup`): the key is who wrote a thing.
-**Exit 10: several Cairn instances, none known here.** Ask the user which, run the `cairn
+Requires `croft` on PATH and a key per runtime (`~/.croft/env`; a person pairs them with
+`croft setup`): the key is who wrote a thing.
+**Exit 10: several Croft instances, none known here.** Ask the user which, run the `croft
 route add …` it prints, retry. Never pick one yourself. Stale/ambiguous project keys exit 10;
 use `--instance` only when certain.

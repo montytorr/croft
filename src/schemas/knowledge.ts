@@ -55,7 +55,7 @@ export const slugify = (title: string): string => {
  * while every one of the 377 real slugs uses hyphens — the convention came in
  * wholesale with the claude-mem import and nothing reconciled the two.
  *
- * That is not cosmetic. `cairn know <subject>` only attempts a fetch when the
+ * That is not cosmetic. `croft know <subject>` only attempts a fetch when the
  * subject looks like a slug, so an underscore spelling fell through to
  * full-text search and could miss the entry entirely while looking like an
  * answer. Normalising on lookup makes both spellings resolve without
@@ -69,7 +69,7 @@ export const normalizeSlugRef = (raw: string): string =>
   raw.trim().toLowerCase().replace(/_/g, '-')
 
 /**
- * A body is required and must say something (CAIRN-289).
+ * A body is required and must say something (CROFT-289).
  *
  * It defaulted to '' and the CLI sent `flags.body ?? ''`, so a fact could be
  * filed as a bare title — two were, and they read in every list exactly like
@@ -91,7 +91,7 @@ export const knowledgeCreate = z.object({
   projects: z.array(z.string().min(1).max(10)).max(20).default([]),
   /** Groupings this is true of — a business, a stack, a subsystem. */
   entities: z.array(z.string().min(1).max(40)).max(20).default([]),
-  /** Files this is about, beyond the paths its body names (CAIRN-269). */
+  /** Files this is about, beyond the paths its body names (CROFT-269). */
   files: z.array(z.string().min(1).max(500)).max(50).optional(),
   sourceTaskRef: z.string().max(40).optional(),
   sourceSessionId: z.string().uuid().optional(),

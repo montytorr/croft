@@ -11,7 +11,7 @@ import { recentFormerRefs } from './context'
 import { noSuchTaskMessage, renameFields } from './tasks'
 
 /**
- * A key rename, told rather than only resolved (CAIRN-264).
+ * A key rename, told rather than only resolved (CROFT-264).
  *
  * AC became HOL. Resolution already worked; what was missing was every surface
  * saying so, and the page claiming "(was AC-114)" for a task filed after the
@@ -109,14 +109,14 @@ describe('what a task response says about its ref', () => {
  * exercised without Postgres.
  */
 type Tables = { projects: Record<string, unknown>[]; project_former_keys: Record<string, unknown>[] }
-const scope = globalThis as typeof globalThis & { __cairnPool?: unknown; __cairnJsonColumns?: unknown }
+const scope = globalThis as typeof globalThis & { __croftPool?: unknown; __croftJsonColumns?: unknown }
 let prior: { pool: unknown; json: unknown }
 let statements: { sql: string; values: unknown[] }[] = []
 
 const install = (tables: Tables) => {
   statements = []
-  scope.__cairnJsonColumns = Promise.resolve(new Set<string>())
-  scope.__cairnPool = {
+  scope.__croftJsonColumns = Promise.resolve(new Set<string>())
+  scope.__croftPool = {
     connect: async () => ({
       query: async (sql: string, values: unknown[] = []) => {
         statements.push({ sql, values })
@@ -135,11 +135,11 @@ const install = (tables: Tables) => {
 }
 
 beforeEach(() => {
-  prior = { pool: scope.__cairnPool, json: scope.__cairnJsonColumns }
+  prior = { pool: scope.__croftPool, json: scope.__croftJsonColumns }
 })
 afterEach(() => {
-  scope.__cairnPool = prior.pool
-  scope.__cairnJsonColumns = prior.json
+  scope.__croftPool = prior.pool
+  scope.__croftJsonColumns = prior.json
 })
 
 const TABLES: Tables = {

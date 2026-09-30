@@ -6,9 +6,9 @@ import { RelativeTime } from '@/components/relative-time'
 /**
  * Whether what you are reading is still true.
  *
- * Cairn does not poll from the client — `LiveUpdates` holds an SSE stream that
+ * Croft does not poll from the client — `LiveUpdates` holds an SSE stream that
  * says only THAT something moved, and the page then re-renders through its
- * normal server path (see CAIRN-152). That is cheaper and more responsive than
+ * normal server path (see CROFT-152). That is cheaper and more responsive than
  * a timer, but it is also invisible: a stream that quietly died looks exactly
  * like a workspace where nothing is happening, and an agent's findings land on
  * a page that never updates again. This says which of the two you are in.

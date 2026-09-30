@@ -105,7 +105,7 @@ describe('context project scope', () => {
   })
 
   /**
-   * CAIRN-320: ordered by ended_at, an open session — no end yet — ranked
+   * CROFT-320: ordered by ended_at, an open session — no end yet — ranked
    * below every finished one, and the briefing showed an older session.
    */
   it('shows the open session over an older finished one, and says it is live', async () => {
@@ -152,7 +152,7 @@ describe('context project scope', () => {
 })
 
 /**
- * Whose work is in the briefing (CAIRN-310).
+ * Whose work is in the briefing (CROFT-310).
  *
  * A task the caller's human owns and no agent is on surfaced only when
  * somebody thought to ask for it, and a dropped task in flight gave no hint

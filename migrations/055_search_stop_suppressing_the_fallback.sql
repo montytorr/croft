@@ -1,7 +1,7 @@
 -- ===========================================================================
 -- 055: both arms run, and the precise one asks a question a row can answer
 --
--- CAIRN-247 was filed as "search is English-stemmed word overlap and half the
+-- CROFT-247 was filed as "search is English-stemmed word overlap and half the
 -- corpus is French". The spike measured it and the premise did not survive.
 -- French is the BEST-served subset (recall@20 0.92 against 0.43 for English),
 -- English Snowball handles Latinate French morphology, and the 'simple'
@@ -22,7 +22,7 @@
 -- irrelevant rows were enough to switch off the arm that answers the
 -- question. Demonstrated live and re-verified while writing this:
 --
---   cairn check "AWS list calls returning partial results without any error"
+--   croft check "AWS list calls returning partial results without any error"
 --     -> 4 precise rows, all irrelevant, widening suppressed, correct entry absent
 --   same query with one nonsense word appended (precise arm -> 0 rows)
 --     -> widening fires, `unpaginated-aws-list-calls-...` comes back at rank 7
@@ -45,7 +45,7 @@
 --    the highest bar the evaluation set will bear — the lowest coverage of
 --    any row tests/fixtures/search-eval.json calls correct is exactly half
 --    the live terms (fr-09, 3 of 6; fr-05 and fr-07, 3 of 5). One case sits
---    below it (en-04's CAIRN-246, 2 of 5), which is why the promotion is
+--    below it (en-04's CROFT-246, 2 of 5), which is why the promotion is
 --    capped rather than unbounded; see the `limit` below. Never fewer than
 --    two terms, because one word is not a question.
 --

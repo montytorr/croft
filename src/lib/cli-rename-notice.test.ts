@@ -6,11 +6,11 @@ import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 
 /**
- * A project key rename, as an agent actually meets it (CAIRN-264).
+ * A project key rename, as an agent actually meets it (CROFT-264).
  *
  * AC was renamed HOL on 2026-09-22. Old refs and `--project AC` went on
- * resolving, and nothing said so: `cairn show AC-113` printed HOL-113 with no
- * explanation, `cairn next --project AC` said "nothing open" about a project
+ * resolving, and nothing said so: `croft show AC-113` printed HOL-113 with no
+ * explanation, `croft next --project AC` said "nothing open" about a project
  * with open work, and the only way to change a key was a hand-written PATCH.
  *
  * Spawned against a fake server, because what matters is what lands on stdout
@@ -48,15 +48,15 @@ const serve = (handler: Handler, seen: Seen[] = []) =>
   })
 
 const run = async (args: string[], base: string, map?: Record<string, string>) => {
-  const home = await mkdtemp(join(tmpdir(), 'cairn-rename-'))
+  const home = await mkdtemp(join(tmpdir(), 'croft-rename-'))
   directories.push(home)
   if (map) {
-    await mkdir(join(home, '.cairn'), { recursive: true })
-    await writeFile(join(home, '.cairn', 'projects.json'), JSON.stringify(map))
+    await mkdir(join(home, '.croft'), { recursive: true })
+    await writeFile(join(home, '.croft', 'projects.json'), JSON.stringify(map))
   }
   return new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
-    const child = spawn('node', ['cli/cairn.mjs', ...args], {
-      env: { ...process.env, HOME: home, CAIRN_BASE_URL: base, CAIRN_API_KEY: 'test-key', CAIRN_AGENT: 'test' },
+    const child = spawn('node', ['cli/croft.mjs', ...args], {
+      env: { ...process.env, HOME: home, CROFT_BASE_URL: base, CROFT_API_KEY: 'test-key', CROFT_AGENT: 'test' },
     })
     let stdout = ''
     let stderr = ''
@@ -69,7 +69,7 @@ const run = async (args: string[], base: string, map?: Record<string, string>) =
 
 const ok = (data: unknown) => ({ body: { success: true, data } })
 
-describe('cairn show through a retired key', () => {
+describe('croft show through a retired key', () => {
   it('says the ref changed, on stderr, before the task', async () => {
     const base = await serve(() =>
       ok({ ref: 'HOL-113', number: 113, title: 'Wire the relay', status: 'doing',
@@ -108,7 +108,7 @@ describe('cairn show through a retired key', () => {
   })
 })
 
-describe('cairn check on an old exact ref', () => {
+describe('croft check on an old exact ref', () => {
   it('says which task the old ref reached', async () => {
     const base = await serve(() =>
       ok({ count: 1, results: [{ kind: 'task', ref: 'HOL-113', title: 'Wire the relay', status: 'doing',
@@ -144,26 +144,26 @@ describe('--project with a retired key', () => {
   })
 })
 
-describe('cairn projects lists former keys', () => {
+describe('croft projects lists former keys', () => {
   it('as a trailing `was` column, keeping every column readers already key on', async () => {
     const base = await serve(() =>
       ok([
         { id: 'id-hol', key: 'HOL', title: 'Holloway', description: null, status: 'active', task_counter: 120,
           created_at: '2026-09-10T00:00:00Z', updated_at: '2026-09-22T00:00:00Z',
           former_keys: [{ key: 'AC', retired_at: RENAME.at, retired_by: RENAME.by, new_key: 'HOL' }] },
-        { id: 'id-cairn', key: 'CAIRN', title: 'Cairn', description: 'd', status: 'active', task_counter: 264,
+        { id: 'id-croft', key: 'CROFT', title: 'Croft', description: 'd', status: 'active', task_counter: 264,
           created_at: '2026-09-10T00:00:00Z', updated_at: '2026-09-22T00:00:00Z', former_keys: [] },
       ]),
     )
     const { stdout } = await run(['projects'], base)
     // Not trimmed: an empty `was` is a trailing tab, and the cell count is the point.
-    const [count, header, hol, cairn] = stdout.split('\n')
+    const [count, header, hol, croft] = stdout.split('\n')
     expect(count).toBe('#2')
     expect(header).toBe('id\tkey\ttitle\tstatus\ttask_counter\tcreated_at\tupdated_at\tdescription\twas')
     const cols = header!.split('\t')
     expect(hol!.split('\t')[cols.indexOf('key')]).toBe('HOL')
     expect(hol!.split('\t')[cols.indexOf('was')]).toBe('AC')
-    expect(cairn!.split('\t')).toHaveLength(cols.length)
+    expect(croft!.split('\t')).toHaveLength(cols.length)
     expect(stdout).not.toContain('former_keys')
   })
 })
@@ -210,21 +210,21 @@ describe('the briefing after a rename', () => {
            inFlight: [], knowledge: [], staleClaims: [], lastSession: null }),
     )
     const { stdout } = await run(['context', '--project', 'AC'], base)
-    expect(stdout).toContain('## Cairn [HOL]')
+    expect(stdout).toContain('## Croft [HOL]')
     expect(stdout).toContain('AC was renamed HOL on 2026-09-22')
     expect(stdout).toContain('HOL-113 (was AC-113)  doing')
   })
 })
 
-describe('cairn map and a retired key', () => {
+describe('croft map and a retired key', () => {
   it('warns about a checkout still mapped to it', async () => {
     const base = await serve(() =>
       ok([{ id: 'id-hol', key: 'HOL', former_keys: [{ key: 'AC', retired_at: RENAME.at }] }]),
     )
-    const { stdout, stderr } = await run(['map'], base, { '/work/holloway': 'AC', '/work/cairn': 'CAIRN' })
+    const { stdout, stderr } = await run(['map'], base, { '/work/holloway': 'AC', '/work/croft': 'CROFT' })
     expect(stdout).toContain('AC\t/work/holloway')
     expect(stderr).toContain('/work/holloway is mapped to AC, which was renamed HOL on 2026-09-22')
-    expect(stderr).not.toContain('/work/cairn')
+    expect(stderr).not.toContain('/work/croft')
   })
 
   it('stays quiet, and still lists, when the server cannot say', async () => {

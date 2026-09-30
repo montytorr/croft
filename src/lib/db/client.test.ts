@@ -52,7 +52,7 @@ describe('bind', () => {
 
 describe('upsert SQL', () => {
   /**
-   * CAIRN-238: `cairn entities assign` was dead because the project_entities
+   * CROFT-238: `croft entities assign` was dead because the project_entities
    * upsert passed no options at all. Fixing the call site alone would have left
    * the trap in place for the next join table, so both levels are covered here.
    */
@@ -77,7 +77,7 @@ describe('upsert SQL', () => {
   })
 
   it('says "do nothing" for an all-key upsert even without ignoreDuplicates', async () => {
-    // The guard that stops the next join table repeating CAIRN-238.
+    // The guard that stops the next join table repeating CROFT-238.
     const [sql] = await capture(() =>
       admin()
         .from('project_entities')
@@ -89,7 +89,7 @@ describe('upsert SQL', () => {
   })
 
   it('returns only the rows a do-nothing upsert really inserted', async () => {
-    // CAIRN-240: `added` counted the ids it asked for, so a re-assign that
+    // CROFT-240: `added` counted the ids it asked for, so a re-assign that
     // wrote nothing still reported 1. RETURNING after `do nothing` yields only
     // the genuinely inserted rows, which is the honest count.
     const { statements, result } = await withFakePool(
@@ -141,7 +141,7 @@ describe('is filters', () => {
     (await withFakePool(run)).statements
 
   it('negates .not(column, "is", null) into IS NOT NULL', async () => {
-    // CAIRN-272: the negation was dropped, so this ran as IS NULL and the
+    // CROFT-272: the negation was dropped, so this ran as IS NULL and the
     // sessions agent filter, the cwd project fallback and stale claims all
     // read the opposite rows.
     const [sql] = await capture(() =>
@@ -159,8 +159,8 @@ describe('is filters', () => {
 })
 
 describe('not filters', () => {
-  it('unquotes a PostgREST quoted list, so done tasks stay out of cairn next', async () => {
-    // CAIRN-272: '("done","cancelled")' was bound as '"done"', which no status
+  it('unquotes a PostgREST quoted list, so done tasks stay out of croft next', async () => {
+    // CROFT-272: '("done","cancelled")' was bound as '"done"', which no status
     // equals, so the NOT IN excluded nothing.
     const { statements, parameters } = await withFakePool(() =>
       admin().from('tasks').select('id').not('status', 'in', '("done","cancelled")'),

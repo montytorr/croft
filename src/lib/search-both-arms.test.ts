@@ -88,7 +88,7 @@ describe('055 stops the precise arm suppressing the fallback', () => {
   it('removes the floor that switched the wide arm off', () => {
     // The whole bug: three irrelevant rows satisfying an AND over thirteen
     // words were enough to stop the arm that answers the question. Live, on
-    // the day this was written, `cairn check "AWS list calls returning partial
+    // the day this was written, `croft check "AWS list calls returning partial
     // results without any error"` returned four such rows and nothing else.
     expect(occurrences(INSTALLED, '(select count(*) from precise) < p_min_precise')).toBe(1)
     expect(REWRITTEN).not.toContain('< p_min_precise')
@@ -145,7 +145,7 @@ describe('055 makes the precise arm N of M', () => {
   })
 
   it('caps the promotion so a row that just misses the bar cannot be buried', () => {
-    // Measured: en-04's CAIRN-246 carries 2 of its query's 5 live terms, one
+    // Measured: en-04's CROFT-246 carries 2 of its query's 5 live terms, one
     // short of the threshold. Uncapped it would sink beneath every qualifying
     // row in the corpus; capped it moves from rank 6 to at worst rank 9.
     expect(REWRITTEN).toContain('least(p_limit, greatest(p_min_precise, 1))')

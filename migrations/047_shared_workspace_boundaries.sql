@@ -1,5 +1,5 @@
 -- Make the legacy owner columns attribution metadata rather than authorization
--- boundaries. Cairn has one shared workspace: identifiers are global, and any
+-- boundaries. Croft has one shared workspace: identifiers are global, and any
 -- active user may operate any task. The caller's user id remains on new events
 -- so historical ownership and actor attribution are preserved.
 

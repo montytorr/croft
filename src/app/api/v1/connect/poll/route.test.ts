@@ -11,7 +11,7 @@ import { POST } from './route'
 
 const post = (body: object) =>
   POST(
-    new Request('https://cairn.example.test/api/v1/connect/poll', {
+    new Request('https://croft.example.test/api/v1/connect/poll', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),

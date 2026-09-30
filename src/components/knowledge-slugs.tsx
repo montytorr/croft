@@ -11,7 +11,7 @@ import { createContext, useContext } from 'react'
  * given, so an empty list means "nothing exists" and paints every reference on
  * the page as broken. `null` means "nobody told me", and nothing is marked.
  *
- * That is also why CAIRN-192 left the marking unwired: the only slug list to
+ * That is also why CROFT-192 left the marking unwired: the only slug list to
  * hand was a page capped at 300 against a corpus of 377, and using it would
  * have declared 77 real entries missing. A partial list is worse here than no
  * list, so this carries the complete one or none at all.

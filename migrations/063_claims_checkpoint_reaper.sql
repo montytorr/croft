@@ -1,7 +1,7 @@
 -- ===========================================================================
 -- 063: a session-end checkpoint is not a sign of life, and a release means it
 --
--- CAIRN-283. checkpointHeldTasks wrote a summary onto every task the actor's
+-- CROFT-283. checkpointHeldTasks wrote a summary onto every task the actor's
 -- label held, and every write went through tasks_touch, so updated_at said
 -- "just edited" on claims nobody had opened in a week. The reaper reads
 -- updated_at as liveness, so those claims could never go quiet, and the text
@@ -13,7 +13,7 @@
 -- and the checkpoint it was planned against are all still what the plan saw,
 -- and it leaves updated_at alone.
 --
--- CAIRN-284. A release now clears claimed_session, and a manual release moves
+-- CROFT-284. A release now clears claimed_session, and a manual release moves
 -- a held `doing` task back to `todo` the way the reaper already did. The
 -- reaper's optimistic check compares timestamps at millisecond precision,
 -- which is all the application can hand back (see reconcile_task_atomic).
@@ -29,7 +29,7 @@
 create or replace function touch_updated_at() returns trigger
 language plpgsql as $$
 begin
-  if coalesce(current_setting('cairn.keep_updated_at', true), '') = 'on' then
+  if coalesce(current_setting('croft.keep_updated_at', true), '') = 'on' then
     return new;
   end if;
   new.updated_at := now();
@@ -76,7 +76,7 @@ declare
   written tasks%rowtype;
   wrote boolean;
 begin
-  perform set_config('cairn.keep_updated_at', 'on', true);
+  perform set_config('croft.keep_updated_at', 'on', true);
   update tasks set
     checkpoint_summary = p_summary,
     checkpoint_at = p_at
@@ -90,7 +90,7 @@ begin
   returning * into written;
   -- Captured before the reset: PERFORM sets FOUND too.
   wrote := found;
-  perform set_config('cairn.keep_updated_at', '', true);
+  perform set_config('croft.keep_updated_at', '', true);
   if not wrote then return false; end if;
 
   insert into task_activity_events

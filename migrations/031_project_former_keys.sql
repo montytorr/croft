@@ -7,7 +7,7 @@
 -- agent's note stopped resolving. Those artefacts are immutable — a rename
 -- cannot reach them — and refs are designed to escape into them.
 --
--- The damage reached inside Cairn too: bare refs in task bodies and notes are
+-- The damage reached inside Croft too: bare refs in task bodies and notes are
 -- linkified at render time against the list of live project keys, so an old
 -- ref still looked like a ref, was still a link, and led nowhere. The memory
 -- store broke its own cross-references.

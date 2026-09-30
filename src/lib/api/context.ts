@@ -20,7 +20,7 @@ import { TASK_PRIORITIES } from '@/schemas/task'
  * change what they would do next: what you are still holding, what is in
  * flight around you, where the last session in this directory stopped, and
  * what is known here. Titles and refs, never bodies — same contract as
- * `cairn check`.
+ * `croft check`.
  */
 
 /** Matches the claim lease in the claim route. A claim older than this is takeable. */
@@ -42,7 +42,7 @@ export type ContextPayload = {
   /**
    * Set when the project asked for is a key it used to have — typically a
    * checkout mapped before the rename. The briefing answers for the live
-   * project and says so, instead of briefing on nothing (CAIRN-264).
+   * project and says so, instead of briefing on nothing (CROFT-264).
    */
   projectRenamed?: KeyRename
   held: {
@@ -75,7 +75,7 @@ export type ContextPayload = {
      */
     stalled: boolean
     /**
-     * Whose it is — set ONLY when that is not the caller's human (CAIRN-310).
+     * Whose it is — set ONLY when that is not the caller's human (CROFT-310).
      * Absent means the caller's own, or that it cannot be told; the briefing
      * names an owner only when picking the task up would be taking someone
      * else's work.
@@ -336,7 +336,7 @@ export const buildContext = async (
   }
 
   // --- where the last session here stopped ------------------------------
-  // The latest by activity, open sessions included (CAIRN-320). Ordered by
+  // The latest by activity, open sessions included (CROFT-320). Ordered by
   // ended_at alone, an open session — no end yet — ranked below every finished
   // one, so the briefing showed an older session instead of the one in
   // progress. updated_at picks the candidates; a finished row re-posted late

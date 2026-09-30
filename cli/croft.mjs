@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * cairn — the single implementation every agent calls.
+ * croft — the single implementation every agent calls.
  *
  * Deliberately dependency-free: Node 22's built-in fetch is enough, so the CLI
  * can be dropped onto a box and run without an install step. Claude Code,
@@ -34,10 +34,10 @@ import { basename, dirname, isAbsolute, join } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { homedir, hostname } from 'node:os'
 
-const CAIRN_DIR = join(homedir(), '.cairn')
+const CROFT_DIR = join(homedir(), '.croft')
 
 /**
- * Credentials come from the environment, falling back to ~/.cairn/env — so an
+ * Credentials come from the environment, falling back to ~/.croft/env — so an
  * agent skill works without the user having to edit a shell profile first.
  * Format is plain KEY=value lines.
  */
@@ -66,25 +66,25 @@ const fileEnv = (path) => {
  * old was found writing under the wrong identity exactly once, which was
  * enough.
  */
-const VERSION = '0.12.1'
+const VERSION = '0.1.0'
 
 /**
- * Which Cairn this command talks to, on a machine that uses more than one.
+ * Which Croft this command talks to, on a machine that uses more than one.
  *
  * One machine can hold a personal and a professional instance, and nothing in
  * a task ref, a project key or a directory name says which a command is for.
  * Guessing is how a client's notes end up on the personal server, so the
- * choice is explicit or it is not made: `--instance`, CAIRN_INSTANCE, or the
- * default ~/.cairn/instances.json names. With none of them, and the file set to
+ * choice is explicit or it is not made: `--instance`, CROFT_INSTANCE, or the
+ * default ~/.croft/instances.json names. With none of them, and the file set to
  * ask, the command stops before any request with exit 10, which tells an agent
  * to ask the user rather than try again.
  *
- * Every instance keeps its own state in ~/.cairn/instances/<name>/ — env,
+ * Every instance keeps its own state in ~/.croft/instances/<name>/ — env,
  * outbox, ownership, projects.json — because a ref or a directory mapped on
  * one means nothing on the other. No instances.json is the single-instance
  * machine this CLI has always served, and nothing about it changes.
  */
-const INSTANCES_PATH = join(CAIRN_DIR, 'instances.json')
+const INSTANCES_PATH = join(CROFT_DIR, 'instances.json')
 const INSTANCE_NAME = /^[a-z0-9][a-z0-9-]{0,31}$/
 const UNDECIDED_EXIT = 10
 const EXIT_CODES = { already_claimed: 9, session_closed: 11 }
@@ -95,39 +95,39 @@ const readInstances = () => {
   try {
     config = JSON.parse(readFileSync(INSTANCES_PATH, 'utf8'))
   } catch (error) {
-    return { error: `~/.cairn/instances.json is not valid JSON (${error.message})` }
+    return { error: `~/.croft/instances.json is not valid JSON (${error.message})` }
   }
-  if (config?.version !== 1) return { error: '~/.cairn/instances.json: "version" must be 1' }
+  if (config?.version !== 1) return { error: '~/.croft/instances.json: "version" must be 1' }
   const instances = config.instances
   if (!instances || typeof instances !== 'object' || Array.isArray(instances) || !Object.keys(instances).length) {
-    return { error: '~/.cairn/instances.json: "instances" must name at least one instance' }
+    return { error: '~/.croft/instances.json: "instances" must name at least one instance' }
   }
   for (const [name, instance] of Object.entries(instances)) {
     if (!INSTANCE_NAME.test(name)) {
-      return { error: `~/.cairn/instances.json: "${name}" is not an instance name (lowercase letters, digits and dashes)` }
+      return { error: `~/.croft/instances.json: "${name}" is not an instance name (lowercase letters, digits and dashes)` }
     }
     let url
     try { url = new URL(instance?.url) } catch { /* reported below */ }
     if (!url || !['http:', 'https:'].includes(url.protocol)) {
-      return { error: `~/.cairn/instances.json: instance "${name}" needs an http(s) "url"` }
+      return { error: `~/.croft/instances.json: instance "${name}" needs an http(s) "url"` }
     }
   }
   const unclassified = config.unclassified ?? { mode: 'ask' }
   if (unclassified.mode === 'default' ? !instances[unclassified.instance] : unclassified.mode !== 'ask') {
     return {
-      error: '~/.cairn/instances.json: "unclassified" must be {"mode": "ask"} or ' +
+      error: '~/.croft/instances.json: "unclassified" must be {"mode": "ask"} or ' +
         '{"mode": "default", "instance": <one of the instances>}',
     }
   }
   if (config.routes !== undefined && !Array.isArray(config.routes)) {
-    return { error: '~/.cairn/instances.json: "routes" must be a list' }
+    return { error: '~/.croft/instances.json: "routes" must be a list' }
   }
   // Compared canonically, so a hand-written /tmp/x matches the /private/tmp/x
   // a directory resolves to on macOS.
   const routes = (config.routes ?? []).map((r) => (typeof r?.path === 'string' && isAbsolute(r.path) ? { ...r, path: realDir(r.path) } : r))
   for (const route of routes) {
     const problem = routeProblem(route, instances, routes)
-    if (problem) return { error: `~/.cairn/instances.json: ${problem}` }
+    if (problem) return { error: `~/.croft/instances.json: ${problem}` }
   }
   return { instances, unclassified, routes, raw: config }
 }
@@ -170,7 +170,7 @@ const earlyPositional = (() => {
 const requestedInstance = () => {
   const flag = earlyFlag('instance')
   if (flag !== undefined) return flag ? { name: flag } : { error: '--instance needs the name of an instance' }
-  const fromEnv = process.env.CAIRN_INSTANCE?.trim()
+  const fromEnv = process.env.CROFT_INSTANCE?.trim()
   return fromEnv ? { name: fromEnv } : {}
 }
 
@@ -178,8 +178,8 @@ const requestedInstance = () => {
 // routes: which instance a directory, a ref or a session belongs to
 // ---------------------------------------------------------------------------
 const HOME = homedir()
-const SESSION_ROUTES_DIR = join(CAIRN_DIR, 'session-routes')
-const UNROUTED_DIR = join(CAIRN_DIR, 'unrouted')
+const SESSION_ROUTES_DIR = join(CROFT_DIR, 'session-routes')
+const UNROUTED_DIR = join(CROFT_DIR, 'unrouted')
 const SESSION_ID = /^[A-Za-z0-9._:-]{1,100}$/
 const REF_ARG = /^([A-Z][A-Z0-9]{1,9})-\d+$/
 
@@ -252,7 +252,7 @@ const routeProblem = (route, instances, routes) => {
   return null
 }
 
-const instanceDir = (name) => join(CAIRN_DIR, 'instances', name)
+const instanceDir = (name) => join(CROFT_DIR, 'instances', name)
 
 /**
  * The project keys each instance was last seen to have, refreshed by that
@@ -314,7 +314,7 @@ const neverReachedInstance = (name) => {
 /**
  * A fixed, short budget for finding out whether a stale cache is merely old
  * or genuinely unreachable, tried only for instances resolveRoute already
- * knows are stale. Not CAIRN_DEADLINE_MS: that constant is not defined yet
+ * knows are stale. Not CROFT_DEADLINE_MS: that constant is not defined yet
  * when this file's top-level routing runs (it is read from the environment
  * further down, after the instance is already chosen), and this must not
  * inherit a caller's much longer budget anyway — routing is a hint, and a
@@ -342,7 +342,7 @@ const refreshInstanceKeysFor = async (name, instances) => {
   const url = (instances[name]?.url ?? '').replace(/\/+$/, '')
   if (!url) return false
   const env = fileEnv(join(instanceDir(name), 'env'))
-  const key = env.CAIRN_API_KEY || Object.entries(env).find(([k]) => k.startsWith('CAIRN_API_KEY_'))?.[1]
+  const key = env.CROFT_API_KEY || Object.entries(env).find(([k]) => k.startsWith('CROFT_API_KEY_'))?.[1]
   if (!key) return false
   try {
     const res = await fetch(`${url}/api/v1/projects`, {
@@ -370,7 +370,7 @@ const refreshInstanceKeysFor = async (name, instances) => {
 const routeSession = () => {
   const argv = process.argv.slice(2)
   const raw = argv[0] === 'session' ? earlyFlag('id') : undefined
-  const id = (raw || process.env.CAIRN_SESSION_ID || process.env.CLAUDE_CODE_SESSION_ID || process.env.CODEX_THREAD_ID || '').trim()
+  const id = (raw || process.env.CROFT_SESSION_ID || process.env.CLAUDE_CODE_SESSION_ID || process.env.CODEX_THREAD_ID || '').trim()
   return SESSION_ID.test(id) ? id : null
 }
 
@@ -421,7 +421,7 @@ const resolveRoute = async ({ config, dir, session, ref }) => {
     return {
       name: route.instance,
       why: `${route.match === 'folder' ? 'folder ' : ''}route ${tilde(route.path)}`,
-      ...(elsewhere ? { hint: `cairn: ${ref} is a project on ${owners[0]}, and this directory is routed to ${route.instance}; add --instance ${owners[0]} if it is meant for ${owners[0]}` } : {}),
+      ...(elsewhere ? { hint: `croft: ${ref} is a project on ${owners[0]}, and this directory is routed to ${route.instance}; add --instance ${owners[0]} if it is meant for ${owners[0]}` } : {}),
     }
   }
   const bySession = sessionRoute(session, instances)
@@ -435,7 +435,7 @@ const resolveRoute = async ({ config, dir, session, ref }) => {
   // ownership cache may have changed. An explicit --instance or saved route
   // remains available, and the next request to that instance refreshes keys.
   //
-  // CAIRN-305 refined this, and CAIRN-316 is why it had to: keys are
+  // CROFT-305 refined this, and CROFT-316 is why it had to: keys are
   // PER-INSTANCE, so `owners` below looks at every instance's last-known
   // cache, stale or fresh, and only an instance whose cache actually LISTS
   // this ref's key is in it. Blocking every ref-shaped command whenever ANY
@@ -478,12 +478,12 @@ const resolveRoute = async ({ config, dir, session, ref }) => {
   if (staleOwners.length > 0) {
     return {
       name: null,
-      error: `cairn: ${staleOwners.join(', ')} last claimed ${ref} but could not be reached just now to confirm it still does; ` +
+      error: `croft: ${staleOwners.join(', ')} last claimed ${ref} but could not be reached just now to confirm it still does; ` +
         `retry with an explicit --instance once it answers`,
     }
   }
   if (owners.length > 1) {
-    return { name: null, error: `cairn: ${ref} is claimed by multiple Cairn instances (${owners.join(', ')}); use --instance <name>` }
+    return { name: null, error: `croft: ${ref} is claimed by multiple Croft instances (${owners.join(', ')}); use --instance <name>` }
   }
   if (owners.length === 1) {
     // Every remaining owner is fresh (staleOwners was empty above); an
@@ -495,7 +495,7 @@ const resolveRoute = async ({ config, dir, session, ref }) => {
       name: owners[0],
       why: `${ref} is a project there`,
       ...(uncheckable.length
-        ? { hint: `cairn: ${uncheckable.join(', ')} could not be checked (stale project cache); routing ${ref} to ${owners[0]} on its own record` }
+        ? { hint: `croft: ${uncheckable.join(', ')} could not be checked (stale project cache); routing ${ref} to ${owners[0]} on its own record` }
         : {}),
     }
   }
@@ -511,7 +511,7 @@ const resolveRoute = async ({ config, dir, session, ref }) => {
     if (unseen.length > 0) {
       return {
         name: null,
-        error: `cairn: ${unseen.join(', ')} has never been reached, so it is not known whether ${ref} belongs to it ` +
+        error: `croft: ${unseen.join(', ')} has never been reached, so it is not known whether ${ref} belongs to it ` +
           `rather than to the default (${unclassified.instance}); retry with an explicit --instance once it answers, ` +
           `e.g. --instance ${unseen[0]}`,
       }
@@ -525,11 +525,11 @@ const undecidedMessage = ({ key, repo }, instances, session) => {
   const here = repo ? 'this repository' : 'this directory'
   const waiting = parkedSessions().filter((p) => p.cwd && routeKey(p.cwd).key === key).length
   return [
-    `cairn: this machine uses several Cairn instances (${Object.keys(instances).join(', ')}) and nothing says ` +
+    `croft: this machine uses several Croft instances (${Object.keys(instances).join(', ')}) and nothing says ` +
       `which one ${tilde(key)} is for. Ask the user which one, save the answer, then re-run the command:`,
-    `  cairn route add <instance>             ${here}`,
-    ...(key !== HOME && key !== '/' ? [`  cairn route add <instance> --folder    ${tilde(key)} and everything under it`] : []),
-    ...(session ? ['  cairn route add <instance> --session   this session only'] : []),
+    `  croft route add <instance>             ${here}`,
+    ...(key !== HOME && key !== '/' ? [`  croft route add <instance> --folder    ${tilde(key)} and everything under it`] : []),
+    ...(session ? ['  croft route add <instance> --session   this session only'] : []),
     '  (--instance <name> on a command uses that instance for it alone)',
     ...(waiting ? [`${waiting} earlier session(s) here are waiting for the answer and are sent when it is saved.`] : []),
   ].join('\n')
@@ -537,7 +537,7 @@ const undecidedMessage = ({ key, repo }, instances, session) => {
 
 const writeInstancesConfig = (config) => {
   wroteLocally = true
-  mkdirSync(CAIRN_DIR, { recursive: true })
+  mkdirSync(CROFT_DIR, { recursive: true })
   const temp = `${INSTANCES_PATH}.tmp`
   writeFileSync(temp, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 })
   renameSync(temp, INSTANCES_PATH)
@@ -600,7 +600,7 @@ const askPolicy = async (instances) => {
   const names = Object.keys(instances)
   const rl = createInterface({ input: process.stdin, output: process.stderr })
   try {
-    process.stderr.write('cairn: when a directory has no route, which instance should commands use?\n')
+    process.stderr.write('croft: when a directory has no route, which instance should commands use?\n')
     names.forEach((n, i) => process.stderr.write(`  ${i + 1}. always ${n}\n`))
     process.stderr.write(`  ${names.length + 1}. none — ask me whenever it is unclear\n`)
     const n = await choose(rl, `choice [${names.length + 1}]: `, names.length + 1, names.length + 1)
@@ -617,7 +617,7 @@ const askInTerminal = async (config, undecided, session) => {
   const names = Object.keys(config.instances)
   const rl = createInterface({ input: process.stdin, output: process.stderr })
   try {
-    process.stderr.write(`cairn: which Cairn instance is ${tilde(undecided.key)} for?\n`)
+    process.stderr.write(`croft: which Croft instance is ${tilde(undecided.key)} for?\n`)
     names.forEach((n, i) => process.stderr.write(`  ${i + 1}. ${n}  ${config.instances[n].url}\n`))
     const n = await choose(rl, 'instance number: ', names.length)
     if (n === null) return null
@@ -635,7 +635,7 @@ const askInTerminal = async (config, undecided, session) => {
     if (scope[1]) {
       const problem = saveRoute(config, { instance: picked, ...scope[1] })
       if (problem) {
-        process.stderr.write(`cairn: ${problem}\n`)
+        process.stderr.write(`croft: ${problem}\n`)
         return null
       }
     }
@@ -666,8 +666,8 @@ const selectInstance = async () => {
   if (error) return { error }
   if (!INSTANCES) {
     return requested
-      ? { error: `--instance ${requested}: this machine has no ~/.cairn/instances.json, so it has one instance` }
-      : { name: null, dir: CAIRN_DIR }
+      ? { error: `--instance ${requested}: this machine has no ~/.croft/instances.json, so it has one instance` }
+      : { name: null, dir: CROFT_DIR }
   }
   if (INSTANCES.error) return { error: INSTANCES.error }
   const { instances } = INSTANCES
@@ -675,10 +675,10 @@ const selectInstance = async () => {
   if (requested) {
     return instances[requested]
       ? at(requested, 'asked for')
-      : { error: `no instance named "${requested}" in ~/.cairn/instances.json (it has: ${Object.keys(instances).join(', ')})` }
+      : { error: `no instance named "${requested}" in ~/.croft/instances.json (it has: ${Object.keys(instances).join(', ')})` }
   }
   // Help reads nothing and sends nothing; it should not wait on git to say so.
-  if (JUST_HELP) return { undecided: 'cairn: no instance chosen' }
+  if (JUST_HELP) return { undecided: 'croft: no instance chosen' }
   const refWord = EARLY_COMMAND === 'task' && earlyPositional[1] === 'delete'
     ? earlyPositional[2]
     : earlyPositional[1]
@@ -697,9 +697,9 @@ const selectInstance = async () => {
 const INSTANCE = await selectInstance()
 
 /** Where this instance's files live, for messages: never a path with a username in it. */
-const STATE_LABEL = INSTANCE.name ? `~/.cairn/instances/${INSTANCE.name}` : '~/.cairn'
+const STATE_LABEL = INSTANCE.name ? `~/.croft/instances/${INSTANCE.name}` : '~/.croft'
 const ENV_LABEL = `${STATE_LABEL}/env`
-const STATE_DIR = INSTANCE.dir ?? CAIRN_DIR
+const STATE_DIR = INSTANCE.dir ?? CROFT_DIR
 
 const FILE_ENV = fileEnv(INSTANCE.dir && join(INSTANCE.dir, 'env'))
 /**
@@ -713,27 +713,27 @@ const FILE_ENV = fileEnv(INSTANCE.dir && join(INSTANCE.dir, 'env'))
  *
  * Claude Code puts the session id in the environment of every command it runs,
  * and it is the same id as the transcript's, so this costs nothing to obtain.
- * CAIRN_SESSION_ID is the override for a runtime that knows better, and no
+ * CROFT_SESSION_ID is the override for a runtime that knows better, and no
  * session at all is a perfectly normal answer -- the server treats an absent
  * session exactly as it behaved before any of this existed.
  */
 const SESSION = (() => {
-  const raw = (process.env.CAIRN_SESSION_ID || process.env.CLAUDE_CODE_SESSION_ID || '').trim()
+  const raw = (process.env.CROFT_SESSION_ID || process.env.CLAUDE_CODE_SESSION_ID || '').trim()
   return raw && raw.length <= 100 && /^[A-Za-z0-9._:-]+$/.test(raw) ? raw : null
 })()
 
 /**
- * A read that is part of a sweep, not a recall (CAIRN-289).
+ * A read that is part of a sweep, not a recall (CROFT-289).
  *
  * 1,169 of 1,243 knowledge reads were audit loops fetching 10-141 slugs a
  * minute, and every one marked its entry as recalled — so `know --unused`
  * could not find the facts nobody uses. The server also tags bursts by rate;
  * this is the explicit form, for a script that knows it is sweeping:
- * `CAIRN_SWEEP=1 cairn know <slug>` or `--sweep`.
+ * `CROFT_SWEEP=1 croft know <slug>` or `--sweep`.
  */
 // Read through `flags` when a request is made, so the flag counts as used by
 // whichever verb it was passed to rather than being reported as ignored.
-const sweeping = () => process.env.CAIRN_SWEEP === '1' || Boolean(flags.sweep)
+const sweeping = () => process.env.CROFT_SWEEP === '1' || Boolean(flags.sweep)
 
 /**
  * Which machine is speaking.
@@ -741,13 +741,13 @@ const sweeping = () => process.env.CAIRN_SWEEP === '1' || Boolean(flags.sweep)
  * A key names a runtime and a human, and the same key names go onto every
  * machine that human uses — so `claude-code · cal@…` on a laptop and on a
  * server are one actor string, and a misattributed note cannot be traced back
- * to the box that wrote it (CAIRN-290). The actor string is deliberately left
+ * to the box that wrote it (CROFT-290). The actor string is deliberately left
  * alone: it is the join key for the whole history. The host travels beside it
  * and the server records it where a row already has room for it. An older
  * server ignores the header.
  */
 const HOST = (() => {
-  let raw = process.env.CAIRN_HOST
+  let raw = process.env.CROFT_HOST
   if (raw === undefined) {
     try { raw = hostname() } catch { raw = '' }
   }
@@ -758,16 +758,16 @@ const HOST = (() => {
 /** Every request carries it, so no endpoint needs a parameter for it. */
 const authHeaders = (extra = {}) => ({
   Authorization: `Bearer ${KEY}`,
-  ...(SESSION ? { 'X-Cairn-Session': SESSION } : {}),
-  ...(sweeping() ? { 'X-Cairn-Read': 'sweep' } : {}),
-  ...(HOST ? { 'X-Cairn-Host': HOST } : {}),
+  ...(SESSION ? { 'X-Croft-Session': SESSION } : {}),
+  ...(sweeping() ? { 'X-Croft-Read': 'sweep' } : {}),
+  ...(HOST ? { 'X-Croft-Host': HOST } : {}),
   ...extra,
 })
 
 const trimUrl = (url) => (url ?? '').replace(/\/+$/, '')
 
 const BASE = INSTANCE.url ??
-  (INSTANCES ? '' : trimUrl(process.env.CAIRN_BASE_URL || FILE_ENV.CAIRN_BASE_URL || 'http://localhost:3000'))
+  (INSTANCES ? '' : trimUrl(process.env.CROFT_BASE_URL || FILE_ENV.CROFT_BASE_URL || 'http://localhost:3000'))
 
 /**
  * With several instances, a URL or key from anywhere but the chosen instance
@@ -777,21 +777,21 @@ const BASE = INSTANCE.url ??
  * environment does not say which instance it was issued by.
  */
 const INSTANCE_REFUSAL = (() => {
-  if (INSTANCE.error) return { message: `cairn: ${INSTANCE.error}`, code: 2 }
+  if (INSTANCE.error) return { message: `croft: ${INSTANCE.error}`, code: 2 }
   if (INSTANCE.undecided) return { message: INSTANCE.undecided, code: UNDECIDED_EXIT }
   if (!INSTANCE.name) return null
-  for (const [where, url] of [['CAIRN_BASE_URL', process.env.CAIRN_BASE_URL], [`CAIRN_BASE_URL in ${ENV_LABEL}`, FILE_ENV.CAIRN_BASE_URL]]) {
+  for (const [where, url] of [['CROFT_BASE_URL', process.env.CROFT_BASE_URL], [`CROFT_BASE_URL in ${ENV_LABEL}`, FILE_ENV.CROFT_BASE_URL]]) {
     if (url && trimUrl(url) !== BASE) {
       return {
-        message: `cairn: ${where} points at a different server than instance "${INSTANCE.name}" ` +
-          `(~/.cairn/instances.json). Remove it; the instance decides the server.`,
+        message: `croft: ${where} points at a different server than instance "${INSTANCE.name}" ` +
+          `(~/.croft/instances.json). Remove it; the instance decides the server.`,
         code: 2,
       }
     }
   }
-  if (process.env.CAIRN_API_KEY) {
+  if (process.env.CROFT_API_KEY) {
     return {
-      message: `cairn: CAIRN_API_KEY is set in the environment, and on a machine with several instances ` +
+      message: `croft: CROFT_API_KEY is set in the environment, and on a machine with several instances ` +
         `it cannot say which one issued it. Put the key in ${ENV_LABEL} instead.`,
       code: 2,
     }
@@ -841,7 +841,7 @@ const runtimeOfCommand = (command) => {
  * Environment variables are inherited, so they say every runtime this process
  * is nested inside and not which one is innermost: a Codex started from a
  * Claude Code shell carries CLAUDECODE=1 into every command it runs, and all
- * of its writes were filed as claude-code (CAIRN-290). The process tree is
+ * of its writes were filed as claude-code (CROFT-290). The process tree is
  * the one thing that records nesting. Only consulted when the environment is
  * ambiguous, so the ordinary call pays for no `ps` at all.
  */
@@ -868,7 +868,7 @@ const innermostRuntime = () => {
 }
 
 const detectAgent = () => {
-  if (process.env.CAIRN_AGENT) return process.env.CAIRN_AGENT.trim().toLowerCase()
+  if (process.env.CROFT_AGENT) return process.env.CROFT_AGENT.trim().toLowerCase()
   if (process.env.CLAUDECODE === '1' || process.env.CLAUDE_CODE_ENTRYPOINT) {
     // Both sets of markers: nested one way or the other. Ask the process tree,
     // and keep the old answer when it cannot say.
@@ -915,30 +915,30 @@ const AGENT = detectAgent()
  * The session platform for `session end|checkpoint` without `--platform`.
  * A session is one row per (platform, id), so an agent that follows the skill's
  * manual handoff from Codex or OpenClaw and is filed as `claude` writes a
- * second row beside its hook's (CAIRN-321). The hook always says; this only
+ * second row beside its hook's (CROFT-321). The hook always says; this only
  * decides for a caller that did not.
  */
 const SESSION_PLATFORMS = { 'claude-code': 'claude', codex: 'codex', openclaw: 'openclaw' }
 const PLATFORM_SOURCES = new Set(['claude', 'codex', 'openclaw', 'other'])
 const defaultPlatform = () => {
-  // Hermes's hooks set CAIRN_PLATFORM=hermes: a value the server's enum would
+  // Hermes's hooks set CROFT_PLATFORM=hermes: a value the server's enum would
   // refuse, and before this default existed the CLI never read it here.
-  const named = process.env.CAIRN_PLATFORM?.trim()
+  const named = process.env.CROFT_PLATFORM?.trim()
   if (named) return PLATFORM_SOURCES.has(named) ? named : 'other'
   return AGENT ? (SESSION_PLATFORMS[AGENT] ?? 'other') : 'claude'
 }
 
 /**
- * An explicit CAIRN_API_KEY in the environment always wins -- it is how a
+ * An explicit CROFT_API_KEY in the environment always wins -- it is how a
  * one-off command borrows another identity. Otherwise the runtime's own key is
  * preferred, and the plain one is the fallback, so a machine that has not been
  * split yet keeps working exactly as before.
  */
-const keyNameFor = (agent) => `CAIRN_API_KEY_${agent.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`
+const keyNameFor = (agent) => `CROFT_API_KEY_${agent.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`
 
 const OWN_KEY = AGENT ? FILE_ENV[keyNameFor(AGENT)] : undefined
 
-const KEY = process.env.CAIRN_API_KEY || OWN_KEY || FILE_ENV.CAIRN_API_KEY || ''
+const KEY = process.env.CROFT_API_KEY || OWN_KEY || FILE_ENV.CROFT_API_KEY || ''
 
 /**
  * Borrowing another runtime's identity should be a decision, not an accident.
@@ -952,28 +952,28 @@ const KEY = process.env.CAIRN_API_KEY || OWN_KEY || FILE_ENV.CAIRN_API_KEY || ''
  * A warning rather than a refusal, because the fallback is legitimate on a
  * machine that has not been split, and refusing would break it.
  */
-const SPLIT_KEYS = Object.keys(FILE_ENV).filter((name) => name.startsWith('CAIRN_API_KEY_'))
+const SPLIT_KEYS = Object.keys(FILE_ENV).filter((name) => name.startsWith('CROFT_API_KEY_'))
 const BORROWING =
-  !process.env.CAIRN_API_KEY && !OWN_KEY && SPLIT_KEYS.length > 0 && Boolean(FILE_ENV.CAIRN_API_KEY)
+  !process.env.CROFT_API_KEY && !OWN_KEY && SPLIT_KEYS.length > 0 && Boolean(FILE_ENV.CROFT_API_KEY)
 
 /**
  * Identities that must never borrow, because nobody reads their warnings.
  *
  * `maintenance` runs from a schedule, with its output in a log file or thrown
- * away. On a machine with no CAIRN_API_KEY_MAINTENANCE it fell back to the
+ * away. On a machine with no CROFT_API_KEY_MAINTENANCE it fell back to the
  * plain key, which on that machine was Claude Code's, and 27 scheduled repair
- * notes on CAIRN-107 were filed as claude-code; the warning went to
- * `stdio: 'ignore'` (CAIRN-290). An interactive runtime keeps the warning,
+ * notes on CROFT-107 were filed as claude-code; the warning went to
+ * `stdio: 'ignore'` (CROFT-290). An interactive runtime keeps the warning,
  * because refusing would drop a real session's work; a scheduled job loses
  * nothing by failing loudly and being fixed.
  */
 const MUST_NOT_BORROW = new Set(['maintenance'])
 const IDENTITY_REFUSAL =
   BORROWING && MUST_NOT_BORROW.has(AGENT)
-    ? `cairn: CAIRN_AGENT=${AGENT} has no ${keyNameFor(AGENT)} in ${ENV_LABEL}, and this identity ` +
+    ? `croft: CROFT_AGENT=${AGENT} has no ${keyNameFor(AGENT)} in ${ENV_LABEL}, and this identity ` +
       `refuses to fall back to the default key, which belongs to another runtime. ` +
       `Add ${keyNameFor(AGENT)}=<a key named ${AGENT}> to ${ENV_LABEL}, or pair one with ` +
-      '`cairn setup --maintenance` (an administrator approves it).'
+      '`croft setup --maintenance` (an administrator approves it).'
     : null
 
 /** Every path that would send the key goes through this first. */
@@ -988,8 +988,8 @@ const requireKey = () => {
   }
   if (!KEY) {
     process.stderr.write(
-      `CAIRN_API_KEY is not set (${INSTANCE.name ? ENV_LABEL : `env, or ${ENV_LABEL}`}). ` +
-        '`cairn setup --url <instance>` pairs one for each runtime on this machine.\n',
+      `CROFT_API_KEY is not set (${INSTANCE.name ? ENV_LABEL : `env, or ${ENV_LABEL}`}). ` +
+        '`croft setup --url <instance>` pairs one for each runtime on this machine.\n',
     )
     process.exit(1)
   }
@@ -997,9 +997,9 @@ const requireKey = () => {
 
 if (BORROWING && !IDENTITY_REFUSAL) {
   process.stderr.write(
-    `cairn: could not tell which runtime this is${AGENT ? ` (${AGENT} has no ${keyNameFor(AGENT)})` : ''}, ` +
+    `croft: could not tell which runtime this is${AGENT ? ` (${AGENT} has no ${keyNameFor(AGENT)})` : ''}, ` +
       `so this write will be filed under the default key. ` +
-      `Set CAIRN_AGENT, or add ${AGENT ? keyNameFor(AGENT) : 'CAIRN_API_KEY_<AGENT>'} to ${ENV_LABEL}.\n`,
+      `Set CROFT_AGENT, or add ${AGENT ? keyNameFor(AGENT) : 'CROFT_API_KEY_<AGENT>'} to ${ENV_LABEL}.\n`,
   )
 }
 
@@ -1019,10 +1019,10 @@ const positional = []
  *
  * KNOWN_FLAGS below catches a flag NOTHING in this file reads. It cannot catch
  * a flag one verb reads and another does not, because it is one list for every
- * verb — and that is a real failure, not a theoretical one: `cairn relearn
+ * verb — and that is a real failure, not a theoretical one: `croft relearn
  * <slug> --global` parsed, printed the updated entry, exited 0, and left the
  * scope exactly as it was, three lines below the comment explaining why a
- * silently dropped flag is unacceptable (CAIRN-262).
+ * silently dropped flag is unacceptable (CROFT-262).
  *
  * The obvious fix is a table of which flags each verb takes. This is not that,
  * because the argument against a table is right — it rots the first time a
@@ -1052,7 +1052,7 @@ const flags = new Proxy(typedFlags, {
 /**
  * Every flag this CLI reads, anywhere.
  *
- * The parser used to accept whatever it was given, so `cairn know --banana
+ * The parser used to accept whatever it was given, so `croft know --banana
  * split` returned results and exited 0, and `--offset 3` — which nothing
  * implements — returned page one forever with no way to discover it. An agent
  * paginating that way cannot tell success from silence, and this CLI's entire
@@ -1066,14 +1066,14 @@ const flags = new Proxy(typedFlags, {
  * knowing, but a smaller problem than a silent wrong answer" is what this
  * comment used to say next, and it was wrong. `relearn --global` was exactly
  * that case, and it WAS a silent wrong answer: the scope did not change and
- * the command printed the entry and exited 0 (CAIRN-262). The per-verb half
+ * the command printed the entry and exited 0 (CROFT-262). The per-verb half
  * is handled above, by the proxy on `flags` — not by a table, because the
  * objection to a table still stands.
  *
  * BUILT BY HAND AND GUARDED BY A TEST, because the first version was built by
  * grepping `flags.X` and missed every flag read dynamically — `flags[k]` over
  * ['type','status','priority'], and the [flag, field] pairs in `run` and
- * `session end`. That shipped, and `cairn add --priority high` — documented in
+ * `session end`. That shipped, and `croft add --priority high` — documented in
  * this file's own help — started failing. A whitelist is only as good as its
  * enumeration, so cli-flags.test.ts now asserts that every `--flag` named in
  * the help text is in this set. Add to both, or the test says so.
@@ -1128,7 +1128,7 @@ if (INSTANCES) void flags.cwd
  * server's header are the same string for the same file.
  *
  * This is the only identifier a copied CLI can compute about itself. There is
- * no repository behind ~/.local/bin/cairn and no commit recorded in it; there
+ * no repository behind ~/.local/bin/croft and no commit recorded in it; there
  * is a file, and a file can be read. Computed at most once per process and
  * only when a server has offered something to compare against — measured at
  * 0.049 ms for the 100KB this file weighs, which is well under the cost of
@@ -1154,9 +1154,9 @@ const fingerprint = () => {
  * Every API response says which release served it and which CLI it shipped.
  * Compare once, so a stale copy says so on the ordinary path.
  *
- * `cairn --version` has always been able to answer this, but it is the one
+ * `croft --version` has always been able to answer this, but it is the one
  * command an agent has no reason to run: a drifted CLI goes on working, just
- * not the way the docs say. The Mac's copy was found only because `cairn
+ * not the way the docs say. The Mac's copy was found only because `croft
  * vitals` happened to come back "unknown command", after a day of writes under
  * the wrong identity.
  *
@@ -1164,7 +1164,7 @@ const fingerprint = () => {
  * by hand and 133 commits fitted inside v0.5.1, so a copy months of work
  * behind still agrees on the number — which is exactly the state the Mac was
  * in when this was written, both sides saying 0.5.1 while `--allow-dangling`
- * and the vitals memory block were missing (CAIRN-261). The version is still
+ * and the vitals memory block were missing (CROFT-261). The version is still
  * the better thing to say when the two belong to different releases, because
  * it is what a human reads and what the docs are written against; the hash
  * catches everything finer, which is nearly everything.
@@ -1182,10 +1182,10 @@ const fingerprint = () => {
  * The warning used to tell everybody to run the sync, and on the server the
  * sync is what had put the newer file there: it pulls `main` on its own clock,
  * so for a few minutes after a merge the CLI is AHEAD of the deploy, and the
- * advice was to fetch the file that was already installed (CAIRN-290).
+ * advice was to fetch the file that was already installed (CROFT-290).
  *
  * Two orderings are available. Releases compare as numbers. Within a release
- * the server may say when it was built (`x-cairn-built-at`), and this file's
+ * the server may say when it was built (`x-croft-built-at`), and this file's
  * mtime is when it was installed: a CLI written before the image it disagrees
  * with was built is the older side, and one written after it is almost always
  * a merge the deploy has not caught up with. Neither -> say so neutrally.
@@ -1214,29 +1214,29 @@ const installedAt = () => {
  */
 const updateCommand = () => {
   const home = homedir()
-  const agent = join(home, 'Library/LaunchAgents/com.cairn.agent-files.plist')
+  const agent = join(home, 'Library/LaunchAgents/com.croft.agent-files.plist')
   if (process.platform === 'darwin' && existsSync(agent)) {
-    return `launchctl kickstart gui/${process.getuid()}/com.cairn.agent-files`
+    return `launchctl kickstart gui/${process.getuid()}/com.croft.agent-files`
   }
-  const own = join(home, '.cairn/maintenance/install-cron.mjs')
+  const own = join(home, '.croft/maintenance/install-cron.mjs')
   if (existsSync(own)) return `node ${own} --run agent-files`
   // The server's job lives in root's crontab, which is the one --run reads.
-  const shared = '/opt/cairn-maintenance/install-cron.mjs'
+  const shared = '/opt/croft-maintenance/install-cron.mjs'
   if (existsSync(shared)) {
     return `${process.getuid?.() === 0 ? '' : 'sudo '}node ${shared} --run agent-files`
   }
-  const sync = join(home, '.cairn/maintenance/sync-agent-files.mjs')
+  const sync = join(home, '.croft/maintenance/sync-agent-files.mjs')
   if (existsSync(sync)) {
-    return `node ${sync} --source https://raw.githubusercontent.com/montytorr/cairn/main`
+    return `node ${sync} --source https://raw.githubusercontent.com/montytorr/croft/main`
   }
-  return `copy cli/cairn.mjs from the deployed commit over ${process.argv[1] ?? 'this file'}`
+  return `copy cli/croft.mjs from the deployed commit over ${process.argv[1] ?? 'this file'}`
 }
 
 /** One line, or null when the two agree or the server offers nothing to compare. */
 const driftLine = (headers) => {
-  const version = headers?.get?.('x-cairn-version')
-  const servedHash = headers?.get?.('x-cairn-cli')
-  const builtAt = Date.parse(headers?.get?.('x-cairn-built-at') ?? '')
+  const version = headers?.get?.('x-croft-version')
+  const servedHash = headers?.get?.('x-croft-cli')
+  const builtAt = Date.parse(headers?.get?.('x-croft-built-at') ?? '')
 
   let detail = null
   let order = null
@@ -1254,14 +1254,14 @@ const driftLine = (headers) => {
   }
   if (!detail) return null
 
-  if (order === -1) return `cairn: this CLI is older than the server (${detail}) — update: ${updateCommand()}`
+  if (order === -1) return `croft: this CLI is older than the server (${detail}) — update: ${updateCommand()}`
   if (order === 1) {
     return (
-      `cairn: this CLI is newer than the server (${detail}) — probably a merge not deployed yet; ` +
+      `croft: this CLI is newer than the server (${detail}) — probably a merge not deployed yet; ` +
       `nothing to do unless it persists`
     )
   }
-  return `cairn: CLI and server differ (${detail}) — if the server is newer, update: ${updateCommand()}`
+  return `croft: CLI and server differ (${detail}) — if the server is newer, update: ${updateCommand()}`
 }
 
 let warnedStale = false
@@ -1274,7 +1274,7 @@ const warnIfStale = (res) => {
 }
 
 /**
- * A rename, said out loud (CAIRN-264).
+ * A rename, said out loud (CROFT-264).
  *
  * AC was renamed HOL. Every old ref and `--project AC` went on resolving, and
  * nothing said why the answer came back as HOL — so an agent whose notes said
@@ -1331,12 +1331,12 @@ const RETRIES = 3
  * How long a write may spend being retried before it is put aside instead.
  *
  * Writes normally return in about half a second. During a deploy the container
- * is down and they block for minutes — several `cairn add` calls ran past 120s
+ * is down and they block for minutes — several `croft add` calls ran past 120s
  * and 300s, every one of them while a container was restarting. Retrying is
- * right; making an agent mid-task wait for a restart is not. Cairn is supposed
+ * right; making an agent mid-task wait for a restart is not. Croft is supposed
  * to be the thing an agent can always write to.
  */
-const DEADLINE_MS = Number(process.env.CAIRN_DEADLINE_MS ?? 15_000)
+const DEADLINE_MS = Number(process.env.CROFT_DEADLINE_MS ?? 15_000)
 
 /** Guards against a replay triggering its own replay. */
 let FLUSHING = false
@@ -1357,11 +1357,11 @@ const OUTBOX_REPLAY_LOCK_PATH = `${OUTBOX_PATH}.replay.lock`
 const OUTBOX_PREFIX = 'outbox.jsonl.'
 const QUEUEABLE = /\/(notes|comments|beat|checkpoint)$/
 const KEY_ID = KEY ? createHash('sha256').update(KEY).digest('hex').slice(0, 24) : ''
-const TEST_CRASH_AFTER_SEND = process.env.CAIRN_TEST_CRASH_AFTER_SEND === '1'
-const TEST_FAIL_PERSIST_AFTER_SEND = process.env.CAIRN_TEST_FAIL_PERSIST_AFTER_SEND === '1'
-const TEST_CRASH_AFTER_RENAME_BEFORE_STATE = process.env.CAIRN_TEST_CRASH_AFTER_RENAME_BEFORE_STATE === '1'
-const TEST_FAIL_REJECT_PERSIST = process.env.CAIRN_TEST_FAIL_REJECT_PERSIST === '1'
-const TEST_ENQUEUE_DURING_REPLAY = process.env.CAIRN_TEST_ENQUEUE_DURING_REPLAY ?? ''
+const TEST_CRASH_AFTER_SEND = process.env.CROFT_TEST_CRASH_AFTER_SEND === '1'
+const TEST_FAIL_PERSIST_AFTER_SEND = process.env.CROFT_TEST_FAIL_PERSIST_AFTER_SEND === '1'
+const TEST_CRASH_AFTER_RENAME_BEFORE_STATE = process.env.CROFT_TEST_CRASH_AFTER_RENAME_BEFORE_STATE === '1'
+const TEST_FAIL_REJECT_PERSIST = process.env.CROFT_TEST_FAIL_REJECT_PERSIST === '1'
+const TEST_ENQUEUE_DURING_REPLAY = process.env.CROFT_TEST_ENQUEUE_DURING_REPLAY ?? ''
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -1413,15 +1413,15 @@ const processStartIdentity = (pid) => {
 }
 
 /** Legacy pid-token leases have no start identity. Reclaim only when the live
- * PID is demonstrably not a Cairn CLI process; an unreadable command is unknown. */
-const isUnrelatedToCairn = (pid) => {
+ * PID is demonstrably not a Croft CLI process; an unreadable command is unknown. */
+const isUnrelatedToCroft = (pid) => {
   try {
     const command = process.platform === 'linux'
       ? readFileSync(`/proc/${pid}/cmdline`, 'utf8').replaceAll('\0', ' ')
       : process.platform === 'darwin'
         ? execFileSync('ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8' })
         : ''
-    return Boolean(command.trim()) && !/(?:^|[\s/])cairn(?:\.mjs)?(?:\s|$)/.test(command)
+    return Boolean(command.trim()) && !/(?:^|[\s/])croft(?:\.mjs)?(?:\s|$)/.test(command)
   } catch { return false }
 }
 
@@ -1456,7 +1456,7 @@ const withReplayLock = async (run) => {
               const actualStart = processStartIdentity(pid)
               dead = lease.start
                 ? Boolean(actualStart && lease.start !== actualStart)
-                : isUnrelatedToCairn(pid)
+                : isUnrelatedToCroft(pid)
             } catch (checkError) { dead = checkError?.code === 'ESRCH' }
           } else {
             // A crash between exclusive creation and writing the owner leaves
@@ -1712,7 +1712,7 @@ const flushOutbox = async () => withReplayLock(async () => {
         headers: authHeaders({
           'Content-Type': 'application/json',
           'Idempotency-Key': item.id,
-          'X-Cairn-Queued-At': item.t,
+          'X-Croft-Queued-At': item.t,
         }),
         body: item.body === undefined ? undefined : JSON.stringify(item.body),
       })
@@ -1908,7 +1908,7 @@ const request = async (method, path, body, { soft = false } = {}) => {
   }
 
   if (!payload.success) {
-    // `soft` callers are probing, not asserting. `cairn know <word>` tries the
+    // `soft` callers are probing, not asserting. `croft know <word>` tries the
     // word as a slug first and falls back to searching, and dying on the miss
     // made the fallback unreachable.
     if (soft) return null
@@ -1938,7 +1938,7 @@ const request = async (method, path, body, { soft = false } = {}) => {
             .map((i) => `  ${(i.path ?? []).join('.') || '(body)'}: ${i.message}`)
             .join('\n')}`
         : ''
-    // The server names the rule and the line, never the value (CAIRN-285).
+    // The server names the rule and the line, never the value (CROFT-285).
     // What to do instead is the part worth adding.
     const hint = payload.code === 'secret_detected'
       ? '\n  write where it lives instead: `$ENV_VAR`, `process.env.X`, a vault path, or `<password>`.' +
@@ -1946,12 +1946,12 @@ const request = async (method, path, body, { soft = false } = {}) => {
       : ''
     // Some 409s get their own exit code so a caller can branch on them:
     // "someone else has it", and "that session is already closed" (the
-    // session hook stops checkpointing it, CAIRN-319).
+    // session hook stops checkpointing it, CROFT-319).
     die(`${payload.error}${extra}${hint}`, EXIT_CODES[payload.code] ?? 1)
   }
 
   // Any response reached through a retired key says so here, once, rather than
-  // each verb remembering to — the gap CAIRN-264 was, verb by verb.
+  // each verb remembering to — the gap CROFT-264 was, verb by verb.
   const told = payload.data
   if (told && typeof told === 'object' && !Array.isArray(told) && told.renamed_from) {
     tellRename(told.requested_ref, told.renamed_from, refOfTask(told))
@@ -2069,11 +2069,11 @@ const emit = (data, opts = {}) => {
 
 /** Comma or repeated-flag list, e.g. --label a,b --label c. */
 /**
- * Which Cairn project a directory belongs to.
+ * Which Croft project a directory belongs to.
  *
  * The server can guess from sessions already recorded against a cwd, but only
  * after the first one. This is the explicit answer, kept next to the
- * credentials: a longest-prefix map in ~/.cairn/projects.json, so a monorepo
+ * credentials: a longest-prefix map in ~/.croft/projects.json, so a monorepo
  * subdirectory can override its parent.
  */
 const PROJECT_MAP_PATH = join(STATE_DIR, 'projects.json')
@@ -2157,7 +2157,7 @@ const updateRememberedOwnership = (path, data) => {
  * A breadcrumb per successful write, so a session does not have to be guessed at.
  *
  * The session-end hook used to recover task refs with a regex over the
- * transcript, preferring refs on a line that also contained a `cairn` command.
+ * transcript, preferring refs on a line that also contained a `croft` command.
  * A good heuristic, and still a guess: a dry run returned CAI-42 and
  * LEGACY-1164 — refs out of documentation examples — instead of the tasks the
  * session actually worked. Those links feed search, and a session linked to
@@ -2177,7 +2177,7 @@ const updateRememberedOwnership = (path, data) => {
  * filters on it exactly. A runtime that cannot name itself writes no session
  * and keeps the old behaviour; nothing is lost that was previously correct.
  */
-const ACTED_PATH = join(CAIRN_DIR, 'acted.jsonl')
+const ACTED_PATH = join(CROFT_DIR, 'acted.jsonl')
 const ACTED_MAX_BYTES = 256 * 1024
 const ACTED_KEEP_LINES = 2000
 
@@ -2247,8 +2247,8 @@ const refOfTask = (data) => {
  * They keep working — the server resolves a retired key — but every briefing
  * and `next` from that directory then goes through the old name, and an agent
  * reading "[AC]" files new work under a key that no longer exists as far as
- * anyone else can see (CAIRN-264). One soft call, so an older server or a
- * network failure leaves `cairn map` exactly as it was.
+ * anyone else can see (CROFT-264). One soft call, so an older server or a
+ * network failure leaves `croft map` exactly as it was.
  */
 const warnRetiredMappings = async (map) => {
   const keys = new Set(Object.values(map))
@@ -2262,7 +2262,7 @@ const warnRetiredMappings = async (map) => {
     if (!now) continue
     process.stderr.write(
       `warning: ${path} is mapped to ${k}, which was renamed ${now.to} on ${renameDay(now.at)}. ` +
-        `It still resolves; run \`cairn map ${now.to}\` there to update it.\n`,
+        `It still resolves; run \`croft map ${now.to}\` there to update it.\n`,
     )
   }
 }
@@ -2340,7 +2340,7 @@ const renderContext = (d, { fileOnly = false } = {}) => {
   if (fileOnly) {
     const f = d.file
     if (!f || (!f.tasks.length && !f.knowledge.length)) return ''
-    out.push(`## Cairn knows about ${f.path}`)
+    out.push(`## Croft knows about ${f.path}`)
     for (const t of f.tasks) {
       out.push(`  ${t.ref}  ${t.status}${t.resolved ? ' (answered)' : ''}  ${truncate(t.title, 54)}`)
     }
@@ -2352,7 +2352,7 @@ const renderContext = (d, { fileOnly = false } = {}) => {
   }
 
   const where = d.project ? `[${d.project}]` : '[unfiled]'
-  out.push(`## Cairn ${where}`)
+  out.push(`## Croft ${where}`)
 
   // This checkout is mapped to a key the project no longer has. The briefing
   // is for the live project either way; saying so is what stops the next agent
@@ -2361,7 +2361,7 @@ const renderContext = (d, { fileOnly = false } = {}) => {
     const r = d.projectRenamed
     out.push(
       `  ${r.key} was renamed ${r.to} on ${renameDay(r.at)} -- ${r.key}-n refs still resolve; ` +
-        `write ${r.to}-n, and run \`cairn map ${r.to}\` here to update this checkout.`,
+        `write ${r.to}-n, and run \`croft map ${r.to}\` here to update this checkout.`,
     )
   }
 
@@ -2383,7 +2383,7 @@ const renderContext = (d, { fileOnly = false } = {}) => {
     const live = d.inFlight.filter((t) => !t.stalled)
     const stalled = d.inFlight.filter((t) => t.stalled)
     // Named only when it is somebody else's: an agent should not pick up
-    // Julien's dropped work thinking it is its own human's (CAIRN-310).
+    // Julien's dropped work thinking it is its own human's (CROFT-310).
     const whose = (t) => (t.assignee ? ` · ${t.assignee}'s` : '')
 
     if (live.length) {
@@ -2414,7 +2414,7 @@ const renderContext = (d, { fileOnly = false } = {}) => {
     if (d.unattended.more > 0) {
       // `next` rather than `list`: list includes closed work, and the question
       // this answers is which of them to pick up.
-      out.push(`  +${d.unattended.more} more -- cairn next --assignee me`)
+      out.push(`  +${d.unattended.more} more -- croft next --assignee me`)
     }
   }
 
@@ -2430,7 +2430,7 @@ const renderContext = (d, { fileOnly = false } = {}) => {
   }
 
   if (d.knowledge?.length) {
-    out.push('', 'Known here (cairn know <slug>):')
+    out.push('', 'Known here (croft know <slug>):')
     for (const k of d.knowledge) {
       out.push(`  ${k.slug}${factMark(k) ? `  [${factMark(k)}]` : ''}  -- ${truncate(k.title, 58)}`)
     }
@@ -2458,11 +2458,11 @@ const renderContext = (d, { fileOnly = false } = {}) => {
 /**
  * The one text every Claude Code and Codex session is shown unasked, and for
  * months it carried a single rule. The habits the scorecard found missing
- * (CAIRN-294) are each one line here; kept under 300 bytes so the briefing
+ * (CROFT-294) are each one line here; kept under 300 bytes so the briefing
  * stays a briefing.
  */
 const BRIEFING_RULES = [
-  'Start with: cairn check "<subject>". Claim what you work (agents\' add claims it); one task per sweep.',
+  'Start with: croft check "<subject>". Claim what you work (agents\' add claims it); one task per sweep.',
   'Dead end: note --kind attempt. Before yielding: checkpoint. Not landed: update --status in-review.',
   'Close: done --kind fixed|verified|answered. Bodies: markdown. For someone else: add --assignee.',
 ]
@@ -2483,7 +2483,7 @@ const named = (task) => {
 /**
  * How far to trust a fact, in one word. `stale` is evidence: sessions reworked
  * the files it names. `unverified Nd` is only age, for a fact that names no
- * file (CAIRN-289), and is worded apart so it never reads as the first.
+ * file (CROFT-289), and is worded apart so it never reads as the first.
  */
 const factMark = (k) =>
   k.stale ? 'stale' : k.unverified_days ? `unverified ${k.unverified_days}d` : ''
@@ -2491,160 +2491,160 @@ const factMark = (k) =>
 // ---------------------------------------------------------------------------
 // commands
 // ---------------------------------------------------------------------------
-const HELP = `cairn — agent-first task tracker and shared memory
+const HELP = `croft — agent-first task tracker and shared memory
 
   ALWAYS START HERE
-    cairn check "<subject>"        what has already been done or debugged
+    croft check "<subject>"        what has already been done or debugged
                                    searches tasks, work-log notes, knowledge and
                                    sessions; --kinds task,note,knowledge,session;
                                    --assignee me|<who>: only that person's tasks
 
   read
-    cairn next [--project K] [--assignee me|<who>]
+    croft next [--project K] [--assignee me|<who>]
                                    what to pick up, and why — ranked, never blocked;
                                    your human's work first, anyone else's says whose
-    cairn list [--project K] [--status S] [--type T] [--label L] [--mine] [--assignee me|<who>]
+    croft list [--project K] [--status S] [--type T] [--label L] [--mine] [--assignee me|<who>]
                                    --mine: what this agent holds now; --assignee: whose it is
-    cairn show <ref> [--full]      e.g. CAI-42; a digest unless --full
-    cairn log <ref> [--kind K]     the work log
-    cairn projects
-    cairn people                   who work can be assigned to
+    croft show <ref> [--full]      e.g. CAI-42; a digest unless --full
+    croft log <ref> [--kind K]     the work log
+    croft projects
+    croft people                   who work can be assigned to
 
   write
-    cairn add "<title>" --project K [--type bug] [--priority high] [--body -] [--assignee <who>]
+    croft add "<title>" --project K [--type bug] [--priority high] [--body -] [--assignee <who>]
                                    assigned to your human (this key's owner) unless --assignee
                                    names another: email, name or id. The assignee owns the
                                    work; the claim (held) is which agent is doing it right now
-    cairn add ... --start          file it and claim it, when you are starting now
+    croft add ... --start          file it and claim it, when you are starting now
                                    (the default for an agent runtime, unless it
                                    already holds work here or similar open work
                                    exists; --no-start to only file it)
-    cairn update <ref> [--title T] [--status S] [--type T] [--priority P] [--assignee <who>] [--body -]
-    cairn update <ref> --also-project HM,AT      work that spans several projects
-    cairn update <ref> --project OTHER      moves it; the ref changes
-    cairn note <ref> "<text>" [--kind note|finding|decision|attempt|handoff]
-    cairn commit <ref> <sha> [--repo PATH] [--branch NAME] [--message TEXT] [--url URL]
-    cairn push <ref> <sha> [--repo PATH] [--branch NAME] [--remote NAME] [--url URL]
-    cairn run <ref> "<command>" --status passed|failed|skipped [--exit-code N]
+    croft update <ref> [--title T] [--status S] [--type T] [--priority P] [--assignee <who>] [--body -]
+    croft update <ref> --also-project HM,AT      work that spans several projects
+    croft update <ref> --project OTHER      moves it; the ref changes
+    croft note <ref> "<text>" [--kind note|finding|decision|attempt|handoff]
+    croft commit <ref> <sha> [--repo PATH] [--branch NAME] [--message TEXT] [--url URL]
+    croft push <ref> <sha> [--repo PATH] [--branch NAME] [--remote NAME] [--url URL]
+    croft run <ref> "<command>" --status passed|failed|skipped [--exit-code N]
                                    these three RECORD what you already did;
                                    none of them runs anything. Recording the
                                    same commit twice is one line, not two.
-    cairn comment <ref> "<text>"
-    cairn done <ref> --resolution "<what was actually done>" [--kind fixed|verified|answered|…]
-    cairn cancel <ref> --resolution "<why it is being dropped>" [--kind wont-fix]
-    cairn done <ref> --duplicate-of CAI-31 --resolution "…"   points at the original
-    cairn attach <ref> <file>      |   cairn files <ref>
+    croft comment <ref> "<text>"
+    croft done <ref> --resolution "<what was actually done>" [--kind fixed|verified|answered|…]
+    croft cancel <ref> --resolution "<why it is being dropped>" [--kind wont-fix]
+    croft done <ref> --duplicate-of CAI-31 --resolution "…"   points at the original
+    croft attach <ref> <file>      |   croft files <ref>
 
   sub-tasks
-    cairn add "<title>" --project K --parent CAI-42   file it under an existing task
-    cairn children <ref>                    the direct split
-    cairn update <ref> --parent CAI-42 | --no-parent
+    croft add "<title>" --project K --parent CAI-42   file it under an existing task
+    croft children <ref>                    the direct split
+    croft update <ref> --parent CAI-42 | --no-parent
 
   history
-    cairn history <ref>                     what changed, when, and who changed it
+    croft history <ref>                     what changed, when, and who changed it
 
   dependencies
-    cairn deps <ref>                        what blocks this, and what it blocks
-    cairn blockedby <ref> <other>           mark <ref> as blocked by <other>
-    cairn unblockedby <ref> <other>         remove that link
+    croft deps <ref>                        what blocks this, and what it blocks
+    croft blockedby <ref> <other>           mark <ref> as blocked by <other>
+    croft unblockedby <ref> <other>         remove that link
 
   labels
-    cairn labels                            every label in use, busiest first
-    cairn labels rename <from> <to>         renaming onto an existing label merges them
-    cairn labels remove <label>
+    croft labels                            every label in use, busiest first
+    croft labels rename <from> <to>         renaming onto an existing label merges them
+    croft labels remove <label>
 
   projects
-    cairn map [<KEY>|none]                       which project this directory is
-    cairn instance [list]                        which Cairn instance a command uses, and all of them
-    cairn instance policy ask | default <name>   in a directory with no route: ask, or use that one
-    cairn instance add <name> --url <url> [--default] [--adopt]
+    croft map [<KEY>|none]                       which project this directory is
+    croft instance [list]                        which Croft instance a command uses, and all of them
+    croft instance policy ask | default <name>   in a directory with no route: ask, or use that one
+    croft instance add <name> --url <url> [--default] [--adopt]
                                                  configure one more; --adopt moves this machine's
                                                  existing env, map, ownership and queue into it
-    cairn <command> --instance <name>            use that instance (or CAIRN_INSTANCE=<name>)
-    cairn route                                  which instance this directory uses, and why
-    cairn route add <instance> [--folder|--session] [--dir D] [--force]
+    croft <command> --instance <name>            use that instance (or CROFT_INSTANCE=<name>)
+    croft route                                  which instance this directory uses, and why
+    croft route add <instance> [--folder|--session] [--dir D] [--force]
                                                  save the answer: this repository (or directory),
                                                  everything under it, or this session only
-    cairn route list | pending | remove [--folder] [--dir D]
-    cairn --version                              this CLI, the server, and whether they match
-    cairn projects [--archived]                  --archived includes retired ones;
+    croft route list | pending | remove [--folder] [--dir D]
+    croft --version                              this CLI, the server, and whether they match
+    croft projects [--archived]                  --archived includes retired ones;
                                                  \`was\` lists keys a project used to have
-    cairn project create <KEY> "<title>" [--body -]   KEY is 2-10 uppercase
-    cairn project rename <KEY> "<title>"
-    cairn project rekey <KEY> <NEW>              change the key; old refs keep resolving
-    cairn project rename <KEY> --key <NEW>       the same, as entities spells it
-    cairn project archive <KEY>                  hides it; the tasks stay searchable
-    cairn project restore <KEY>
-    cairn project delete <KEY> --confirm <KEY>   deletes every task in it
-    cairn task delete <ref> --confirm <ref>       junk only; refuses a task with history
+    croft project create <KEY> "<title>" [--body -]   KEY is 2-10 uppercase
+    croft project rename <KEY> "<title>"
+    croft project rekey <KEY> <NEW>              change the key; old refs keep resolving
+    croft project rename <KEY> --key <NEW>       the same, as entities spells it
+    croft project archive <KEY>                  hides it; the tasks stay searchable
+    croft project restore <KEY>
+    croft project delete <KEY> --confirm <KEY>   deletes every task in it
+    croft task delete <ref> --confirm <ref>       junk only; refuses a task with history
 
   memory
-    cairn context [--scope project|all] [--project K]
+    croft context [--scope project|all] [--project K]
                                    what you hold, what is in flight, your human's work
                                    nobody is on, where the last session here stopped,
                                    what is known;
                                    project scope filters tasks and sessions (default: all)
-    cairn learn "<title>" --body - record what we now know
+    croft learn "<title>" --body - record what we now know
                                    --allow-dangling  keep a [[ref]] the store cannot resolve
                                    --files a,b  files it is about, beyond those its body names
                                    --project K  true of that project
-                                   --entity E   true of that grouping (cairn entities)
+                                   --entity E   true of that grouping (croft entities)
                                    --global     true everywhere — say so on purpose
                                    none of them: inferred from this directory's
                                    project, and it refuses if there is none
-    cairn entities                 groupings a fact can be true of, and their projects
-    cairn entities assign|unassign <key> --project A,B
-    cairn entities rename <key> --key <new> --title "T"
-    cairn recall <ref>             decisions and knowledge that bear on this task, and why
-    cairn know [<slug>|<query>]    read it back, or list what applies here
-    cairn know --gaps              where the memory has holes
-    cairn know --orphans           entries nothing links to, that link to nothing
-    cairn know --dangling          references pointing at entries nobody wrote
-    cairn know <slug> --history    every version, who changed it and why  [--full]
-    cairn know --unused [--days 30]  facts no search or read has returned lately
-    cairn know <slug> --sweep      a scripted read, kept out of recall counts (or CAIRN_SWEEP=1)
-    cairn verify <slug>            it is still true — clears the stale mark
-    cairn replay                   send writes put aside while the server was down
-    cairn relearn <slug> --body -  correct it  [--reason "why"] [--allow-dangling]
+    croft entities                 groupings a fact can be true of, and their projects
+    croft entities assign|unassign <key> --project A,B
+    croft entities rename <key> --key <new> --title "T"
+    croft recall <ref>             decisions and knowledge that bear on this task, and why
+    croft know [<slug>|<query>]    read it back, or list what applies here
+    croft know --gaps              where the memory has holes
+    croft know --orphans           entries nothing links to, that link to nothing
+    croft know --dangling          references pointing at entries nobody wrote
+    croft know <slug> --history    every version, who changed it and why  [--full]
+    croft know --unused [--days 30]  facts no search or read has returned lately
+    croft know <slug> --sweep      a scripted read, kept out of recall counts (or CROFT_SWEEP=1)
+    croft verify <slug>            it is still true — clears the stale mark
+    croft replay                   send writes put aside while the server was down
+    croft relearn <slug> --body -  correct it  [--reason "why"] [--allow-dangling]
                                    --project K | --entity E | --global  re-scope it
                                    (none clears one side: --entity E --project none moves it)
                                    --files a,b  the files it is about (replaces those named before)
-    cairn unlearn <slug> [--superseded-by <slug> [--reason "why"]]
-    cairn session list             recent sessions
-    cairn session checkpoint --id <id>  upsert ongoing session, do not checkpoint held tasks
-    cairn session end --id <id>    write the episodic record, checkpoint what is held
-    cairn reconcile                release your own claims that went quiet (2h)
-                                   as CAIRN_AGENT=maintenance: every quiet claim
-    cairn vitals [--hours 24] [--all]   is the memory still being written
-    cairn vitals --notify <ref>         post findings as a note, silent if none
-    cairn reconcile|vitals --all-instances   once per instance on a machine with several;
+    croft unlearn <slug> [--superseded-by <slug> [--reason "why"]]
+    croft session list             recent sessions
+    croft session checkpoint --id <id>  upsert ongoing session, do not checkpoint held tasks
+    croft session end --id <id>    write the episodic record, checkpoint what is held
+    croft reconcile                release your own claims that went quiet (2h)
+                                   as CROFT_AGENT=maintenance: every quiet claim
+    croft vitals [--hours 24] [--all]   is the memory still being written
+    croft vitals --notify <ref>         post findings as a note, silent if none
+    croft reconcile|vitals --all-instances   once per instance on a machine with several;
                                         vitals --notify <instance>:<ref>[,…] says where each reports
 
   coordinate
-    cairn claim <ref>              exits 9 if another agent holds it
-    cairn beat <ref>               keep a claim alive
-    cairn checkpoint <ref> --summary "<where things stand>"
-    cairn release <ref> [--force]   --force only to drop another session's claim
-    cairn block <ref> --reason "<why>"   |   cairn unblock <ref>
+    croft claim <ref>              exits 9 if another agent holds it
+    croft beat <ref>               keep a claim alive
+    croft checkpoint <ref> --summary "<where things stand>"
+    croft release <ref> [--force]   --force only to drop another session's claim
+    croft block <ref> --reason "<why>"   |   croft unblock <ref>
 
   connect a machine
-    cairn setup --url <instance>   one command: pair keys in the browser, install
+    croft setup --url <instance>   one command: pair keys in the browser, install
                                    the CLI, skill, hooks and the agent-files job.
                                    Safe to re-run — it is the upgrade path
-    cairn setup --name <instance>  this machine has (or will have) more than
+    croft setup --name <instance>  this machine has (or will have) more than
                                    one instance; names the new one
-    cairn setup --runtimes claude-code,codex,openclaw   default: detected
-    cairn setup --no-skill | --no-hooks | --no-jobs     skip one step
-    cairn setup --maintenance      also install reconcile + vitals; their key
+    croft setup --runtimes claude-code,codex,openclaw   default: detected
+    croft setup --no-skill | --no-hooks | --no-jobs     skip one step
+    croft setup --maintenance      also install reconcile + vitals; their key
                                    is paired on its own and needs an admin
-    cairn setup --dry-run          print the plan, change nothing
+    croft setup --dry-run          print the plan, change nothing
 
   output
     --json | --pretty              default is TSV: count line, header, rows
     --body -  /  --resolution -    read the value from stdin
     bodies are markdown: ## headings, - lists, code in backticks (a wall of text is refused)
 
-  env: CAIRN_BASE_URL, CAIRN_API_KEY
+  env: CROFT_BASE_URL, CROFT_API_KEY
 `
 
 const need = (v, msg) => (v === undefined || v === true ? die(msg) : v)
@@ -2654,7 +2654,7 @@ const DEAD_END = /\b(tried|no change|didn['’]?t work|did not work|no effect|ma
 /** Shared by `done` and `cancel`: both close, and both must say how. */
 const closeTask = async (status, defaultKind) => {
   const verb = status === 'done' ? 'done' : 'cancel'
-  const ref = need(positional[0], `usage: cairn ${verb} <ref> --resolution "<why>"`)
+  const ref = need(positional[0], `usage: croft ${verb} <ref> --resolution "<why>"`)
   const resolution = await resolveValue(
     need(flags.resolution, 'a --resolution is required: say what was actually done, and why'),
   )
@@ -2669,7 +2669,7 @@ const closeTask = async (status, defaultKind) => {
   if (FORMAT !== 'tsv' || status !== 'done') return
 
   // `fixed` is a claim of authorship, and it was being recorded for audits
-  // and answers alike because it is what an omitted --kind means (CAIRN-148).
+  // and answers alike because it is what an omitted --kind means (CROFT-148).
   if (!flags.kind && !body.duplicateOf) {
     process.stderr.write(
       `recorded as fixed — use --kind verified|answered|not-reproducible|superseded if that is not what happened\n`,
@@ -2692,12 +2692,12 @@ const closeTask = async (status, defaultKind) => {
   if (!seen) {
     process.stderr.write(
       `${refOfTask(closed) ?? ref} was closed without ever being claimed — nobody could see it being worked. ` +
-        `Next time claim first (\`cairn add\` now claims for agents).\n`,
+        `Next time claim first (\`croft add\` now claims for agents).\n`,
     )
   }
 
   // The close is when the agent knows most about what the work taught, and
-  // the last moment anyone will ask (CAIRN-323). Not for a duplicate, and not
+  // the last moment anyone will ask (CROFT-323). Not for a duplicate, and not
   // when something was already learned on this task.
   if (body.resolutionKind === 'duplicate') return
   const closedRef = refOfTask(closed) ?? ref
@@ -2706,7 +2706,7 @@ const closeTask = async (status, defaultKind) => {
   if (learnedHere) return
   process.stderr.write(
     `Did ${closedRef} establish anything the next agent should know — a constraint, a trap, a decision and its reason? ` +
-      `cairn learn "<title>" --project ${closedRef.split('-')[0]} --task ${closedRef} --body -\n`,
+      `croft learn "<title>" --project ${closedRef.split('-')[0]} --task ${closedRef} --body -\n`,
   )
 }
 
@@ -2724,7 +2724,7 @@ const summariseEvent = (data) => {
 }
 
 /**
- * The write half of `cairn instance add`, factored out so `cairn setup` can
+ * The write half of `croft instance add`, factored out so `croft setup` can
  * register an instance without shelling out to itself. Throws a plain Error
  * with a message meant for a person; callers decide how to report it (`die`
  * for the command, setup's own summary lines for the other).
@@ -2733,47 +2733,47 @@ const summariseEvent = (data) => {
  * asked at a terminal) — this function never prompts.
  */
 const addInstance = async ({ name, url, makeDefault = false, adopt = false, unclassified, pairing = false }) => {
-  // Read now, not at startup: `cairn setup` adds two in one run (the one it
+  // Read now, not at startup: `croft setup` adds two in one run (the one it
   // adopts, then the new one), and the second must not overwrite the first.
   const current = readInstances()
-  if (current?.error) throw new Error(`cairn: ${current.error} — fix it before adding to it`)
+  if (current?.error) throw new Error(`croft: ${current.error} — fix it before adding to it`)
   const config = current
     ? { ...current.raw, version: 1, instances: { ...current.instances } }
     : { version: 1, instances: {} }
   const existing = config.instances[name]
   if (existing && trimUrl(existing.url) !== url) {
-    throw new Error(`instance "${name}" already points at ${existing.url}; edit ~/.cairn/instances.json to change it on purpose`)
+    throw new Error(`instance "${name}" already points at ${existing.url}; edit ~/.croft/instances.json to change it on purpose`)
   }
   config.instances[name] = { url }
   if (makeDefault) config.unclassified = { mode: 'default', instance: name }
   else if (unclassified) config.unclassified = unclassified
 
   const dir = instanceDir(name)
-  const legacy = ['env', 'projects.json', 'ownership'].filter((f) => existsSync(join(CAIRN_DIR, f)))
-  const queued = existsSync(CAIRN_DIR) && readdirSync(CAIRN_DIR).some((f) =>
+  const legacy = ['env', 'projects.json', 'ownership'].filter((f) => existsSync(join(CROFT_DIR, f)))
+  const queued = existsSync(CROFT_DIR) && readdirSync(CROFT_DIR).some((f) =>
     (f === 'outbox.jsonl' || f.startsWith(OUTBOX_PREFIX)) &&
     f !== basename(OUTBOX_LOCK_PATH) && f !== basename(OUTBOX_REPLAY_LOCK_PATH))
   const moved = []
   if (adopt && (legacy.length || queued)) {
-    // The files at the top of ~/.cairn belong to the server they were used
-    // with, found the way it always was: the environment, then ~/.cairn/env,
+    // The files at the top of ~/.croft belong to the server they were used
+    // with, found the way it always was: the environment, then ~/.croft/env,
     // then localhost. Moving them under a different one would hand one
     // instance's keys, map and queued writes to another.
     const legacyUrl = trimUrl(
-      process.env.CAIRN_BASE_URL || fileEnv(join(CAIRN_DIR, 'env')).CAIRN_BASE_URL || 'http://localhost:3000',
+      process.env.CROFT_BASE_URL || fileEnv(join(CROFT_DIR, 'env')).CROFT_BASE_URL || 'http://localhost:3000',
     )
     if (legacyUrl !== url) {
       throw new Error(`this machine's existing setup points at ${legacyUrl}, not ${url}: ` +
         '--adopt would move its keys to the wrong instance')
     }
     for (const file of legacy) {
-      if (existsSync(join(dir, file))) throw new Error(`~/.cairn/instances/${name}/${file} already exists; not overwriting it`)
+      if (existsSync(join(dir, file))) throw new Error(`~/.croft/instances/${name}/${file} already exists; not overwriting it`)
     }
   }
   mkdirSync(dir, { recursive: true, mode: 0o700 })
   if (adopt) {
     for (const file of legacy) {
-      renameSync(join(CAIRN_DIR, file), join(dir, file))
+      renameSync(join(CROFT_DIR, file), join(dir, file))
       moved.push(file)
     }
     // Under the queue's own lock, so a write being queued right now lands
@@ -2782,10 +2782,10 @@ const addInstance = async ({ name, url, makeDefault = false, adopt = false, uncl
     // interrupted halfway is finished by running it again, and a rename
     // would replace the queued writes it had already moved.
     await withOutboxLock(() => {
-      for (const file of readdirSync(CAIRN_DIR)) {
+      for (const file of readdirSync(CROFT_DIR)) {
         if (file !== 'outbox.jsonl' && !file.startsWith(OUTBOX_PREFIX)) continue
         if (file === basename(OUTBOX_LOCK_PATH) || file === basename(OUTBOX_REPLAY_LOCK_PATH)) continue
-        const from = join(CAIRN_DIR, file)
+        const from = join(CROFT_DIR, file)
         const to = join(dir, file)
         if (existsSync(to)) {
           appendFileSync(to, readFileSync(from), { mode: 0o600 })
@@ -2798,36 +2798,36 @@ const addInstance = async ({ name, url, makeDefault = false, adopt = false, uncl
   writeInstancesConfig(config)
 
   const notes = []
-  if (moved.length) notes.push(`moved ${moved.join(', ')} into ~/.cairn/instances/${name}/`)
+  if (moved.length) notes.push(`moved ${moved.join(', ')} into ~/.croft/instances/${name}/`)
   else if (legacy.includes('env') && !current && !adopt) {
-    notes.push('~/.cairn/env is no longer read now that instances are configured; ' +
+    notes.push('~/.croft/env is no longer read now that instances are configured; ' +
       'its keys belong in the instance they were issued by (or re-run with --adopt)')
   }
-  // Setup pairs them next, so the hint is only for `cairn instance add`.
+  // Setup pairs them next, so the hint is only for `croft instance add`.
   if (!pairing && !existsSync(join(dir, 'env'))) {
-    notes.push(`pair this instance's keys with \`cairn setup --url ${url}\`, or put them in ` +
-      `~/.cairn/instances/${name}/env (CAIRN_API_KEY_<RUNTIME>=..., mode 600)`)
+    notes.push(`pair this instance's keys with \`croft setup --url ${url}\`, or put them in ` +
+      `~/.croft/instances/${name}/env (CROFT_API_KEY_<RUNTIME>=..., mode 600)`)
   }
   if ((config.unclassified?.mode ?? 'ask') === 'ask') {
     notes.push('in a directory with no route, commands stop and ask (exit 10); ' +
-      '`cairn instance policy default <name>` uses one instead')
+      '`croft instance policy default <name>` uses one instead')
   }
   return { config, dir, notes, moved }
 }
 
 // ---------------------------------------------------------------------------
-// `cairn setup` — connect this machine to an instance and install everything.
+// `croft setup` — connect this machine to an instance and install everything.
 // ---------------------------------------------------------------------------
 
 /**
  * The name a new instance gets when nobody said `--name`.
  *
- * The hostname's first label is usually generic — `cairn`, `app`, the product
+ * The hostname's first label is usually generic — `croft`, `app`, the product
  * itself — so those are skipped in favour of the next one, which is usually
- * the thing that actually distinguishes this Cairn from another:
- * `cairn.app.dispofi.fr` names the instance `dispofi`, not `cairn`.
+ * the thing that actually distinguishes this Croft from another:
+ * `croft.app.dispofi.fr` names the instance `dispofi`, not `croft`.
  */
-const GENERIC_HOST_LABELS = new Set(['cairn', 'app', 'www'])
+const GENERIC_HOST_LABELS = new Set(['croft', 'app', 'www'])
 const deriveInstanceName = (url) => {
   let host = ''
   try { host = new URL(url).hostname.toLowerCase() } catch { /* validated by the caller */ }
@@ -2879,18 +2879,18 @@ const openclawRunsGateway = () => {
  * with a sessions directory there is unambiguous, and `main` is the answer
  * for the common single-agent gateway even where others exist but have not
  * written a session yet. Several agents with sessions and no `main`, or none
- * at all, is a real "cairn setup cannot know this" — inventing an answer
+ * at all, is a real "croft setup cannot know this" — inventing an answer
  * would point the sweep at the wrong agent's transcripts, or at nothing, and
  * say nothing about it, so this reports why instead and leaves it to whoever
- * runs setup to set CAIRN_OPENCLAW_SESSIONS by hand.
+ * runs setup to set CROFT_OPENCLAW_SESSIONS by hand.
  *
  * The directory this returns ends up in a cron line and a launchd plist
  * (scripts/install-cron.mjs), quoted for a shell there but never for cron's
  * own `%` handling on the plain-cron backend. An agent name is not typed by a
  * person — it is whatever a directory under `agents/` happens to be named —
  * so it is checked against a plain allowlist before it is allowed anywhere
- * near either backend, the same discipline CAIRN_OPENCLAW_SESSIONS itself
- * gets when it comes from the environment instead (see `cairn setup`, step 9).
+ * near either backend, the same discipline CROFT_OPENCLAW_SESSIONS itself
+ * gets when it comes from the environment instead (see `croft setup`, step 9).
  */
 const SAFE_AGENT_NAME = /^[A-Za-z0-9._-]+$/
 
@@ -2961,7 +2961,7 @@ const openBrowser = (url) => {
 }
 
 /**
- * The pairing flow against SERVER CONTRACT in CAIRN-314: connect, print the
+ * The pairing flow against SERVER CONTRACT in CROFT-314: connect, print the
  * link, poll until a person approves it (or denies, or lets it expire), and
  * hand back the keys it issued. A server predating pairing answers 404 on
  * `/connect`, which is not a failure — it is a machine setup still has to
@@ -3036,7 +3036,7 @@ const keyIsValid = async (baseUrl, key) => {
 
 const commands = {
   async check() {
-    const q = need(positional[0], 'usage: cairn check "<subject>"')
+    const q = need(positional[0], 'usage: croft check "<subject>"')
     const params = new URLSearchParams({ q })
     if (flags.project) params.set('project', flags.project)
     if (flags.type) params.set('type', flags.type)
@@ -3088,13 +3088,13 @@ const commands = {
   },
 
   async list() {
-    const project = need(flags.project ?? positional[0], 'usage: cairn list --project <KEY>')
+    const project = need(flags.project ?? positional[0], 'usage: croft list --project <KEY>')
     const params = new URLSearchParams()
     for (const k of ['status', 'type', 'label', 'limit', 'offset']) {
       if (flags[k]) params.set(k, flags[k])
     }
     // The server resolves who "mine" is. This used to send
-    // `claimed_by=$CAIRN_AGENT`, which guessed the caller from an environment
+    // `claimed_by=$CROFT_AGENT`, which guessed the caller from an environment
     // variable and, when it was unset, asked for tasks held by the empty
     // string -- an answer that looked like an answer.
     if (flags.mine) params.set('mine', 'true')
@@ -3119,7 +3119,7 @@ const commands = {
   },
 
   async show() {
-    const ref = need(positional[0], 'usage: cairn show <ref>')
+    const ref = need(positional[0], 'usage: croft show <ref>')
     // A digest by default: the answer in full, findings and decisions, a
     // clipped body, and a note of what was withheld. `--full` for everything.
     const suffix = flags.full ? '' : '?view=digest'
@@ -3130,7 +3130,7 @@ const commands = {
       if (descriptionBytes || attemptsAndNotes) {
         process.stderr.write(
           `withheld: ${descriptionBytes}B of body, ${attemptsAndNotes} attempt/note(s)` +
-            ` — cairn show ${ref} --full is ~${tokensToFetchFull} tokens\n`,
+            ` — croft show ${ref} --full is ~${tokensToFetchFull} tokens\n`,
         )
       }
     }
@@ -3161,7 +3161,7 @@ const commands = {
   },
 
   async add() {
-    const title = need(positional[0], 'usage: cairn add "<title>" --project <KEY>')
+    const title = need(positional[0], 'usage: croft add "<title>" --project <KEY>')
     const project = need(flags.project, 'a --project is required')
 
     /**
@@ -3186,7 +3186,7 @@ const commands = {
       if ((described ?? '').trim().length < 40) {
         die(
           `a ${flags.type} needs a body: what happens, what you expected, and how to see it.\n` +
-            '  cairn add "<title>" --project K --type ' + flags.type + ' --body -   # markdown on stdin\n' +
+            '  croft add "<title>" --project K --type ' + flags.type + ' --body -   # markdown on stdin\n' +
             '  ...--body "one line is fine when that is genuinely all there is"\n' +
             'If the title really is the whole story, pass --force-empty.',
         )
@@ -3210,7 +3210,7 @@ const commands = {
      *
      * `--start` existed and was used on 37% of Claude Code's adds against 86%
      * for Codex, and 35% of Claude Code's closes had never been claimed
-     * (CAIRN-294). A flag the caller has to remember is the discipline that
+     * (CROFT-294). A flag the caller has to remember is the discipline that
      * already failed, so for a runtime the default flips; a person filing
      * from a terminal is unchanged, as claim.ts already treats them.
      *
@@ -3254,7 +3254,7 @@ const commands = {
 
     const body = { title }
     if (described !== undefined) body.description = described
-    // The server holds the same rule now (CAIRN-291), so the escape hatch has
+    // The server holds the same rule now (CROFT-291), so the escape hatch has
     // to travel with the request. An older server strips the unknown key.
     if (flags['force-empty']) body.forceEmpty = true
 
@@ -3278,12 +3278,12 @@ const commands = {
       if (similarOpen) {
         process.stderr.write(
           `NOT CLAIMED: ${similarOpen.ref} [${similarOpen.status}] looks like the same work. ` +
-            `Work that one, or \`cairn claim ${created.ref}\` if this really is new.\n`,
+            `Work that one, or \`croft claim ${created.ref}\` if this really is new.\n`,
         )
       } else if (holding) {
         process.stderr.write(
           `not claimed: you already hold ${holding.project?.key ?? project}-${holding.number} here — ` +
-            `\`cairn claim ${created.ref}\` if you are switching to this now\n`,
+            `\`croft claim ${created.ref}\` if you are switching to this now\n`,
         )
       } else {
         // Soft: the task exists now, and a refused claim must not read as a
@@ -3293,14 +3293,14 @@ const commands = {
           process.stderr.write(`claimed ${created.ref} (agents' adds start the work; --no-start to only file it)\n`)
           return emit({ ...created, status: held.status, claimed_by: held.claimed_by })
         }
-        process.stderr.write(`filed ${created.ref} but could not claim it — \`cairn claim ${created.ref}\`\n`)
+        process.stderr.write(`filed ${created.ref} but could not claim it — \`croft claim ${created.ref}\`\n`)
       }
     }
     emit(created)
   },
 
   async update() {
-    const ref = need(positional[0], 'usage: cairn update <ref> --status <s>')
+    const ref = need(positional[0], 'usage: croft update <ref> --status <s>')
     const body = {}
     if (flags.title) body.title = flags.title
     if (flags.body) body.description = await resolveValue(flags.body)
@@ -3338,7 +3338,7 @@ const commands = {
   },
 
   async commit() {
-    const ref = need(positional[0], 'usage: cairn commit <ref> <sha> [--repo PATH]')
+    const ref = need(positional[0], 'usage: croft commit <ref> <sha> [--repo PATH]')
     const sha = need(positional[1], 'a commit SHA is required')
     const payload = { event: 'git_commit', sha }
     if (flags.repo) payload.repo = flags.repo
@@ -3349,7 +3349,7 @@ const commands = {
   },
 
   async push() {
-    const ref = need(positional[0], 'usage: cairn push <ref> <sha> [--repo PATH]')
+    const ref = need(positional[0], 'usage: croft push <ref> <sha> [--repo PATH]')
     const sha = need(positional[1], 'the pushed commit SHA is required')
     const payload = { event: 'git_push', sha }
     if (flags.repo) payload.repo = flags.repo
@@ -3360,7 +3360,7 @@ const commands = {
   },
 
   async run() {
-    const ref = need(positional[0], 'usage: cairn run <ref> "<command>" --status passed|failed|skipped')
+    const ref = need(positional[0], 'usage: croft run <ref> "<command>" --status passed|failed|skipped')
     const command = await resolveValue(need(positional[1], 'the command is required'))
     const status = need(flags.status, '--status is required')
     if (!['passed', 'failed', 'skipped'].includes(status)) {
@@ -3376,7 +3376,7 @@ const commands = {
   },
 
   async note() {
-    const ref = need(positional[0], 'usage: cairn note <ref> "<text>"')
+    const ref = need(positional[0], 'usage: croft note <ref> "<text>"')
     const note = await resolveValue(need(positional[1], 'a note body is required'))
     const result = await request('POST', `/api/v1/tasks/${ref}/notes`, {
       note,
@@ -3385,11 +3385,11 @@ const commands = {
     emit(result)
 
     // A hint, not a reclassification: the words are a guess, and only the
-    // writer knows. 19 of 1,469 Claude Code notes were `attempt` (CAIRN-294),
+    // writer knows. 19 of 1,469 Claude Code notes were `attempt` (CROFT-294),
     // while "tried X, no change" is exactly what the next agent needs flagged.
     if (!flags.kind && FORMAT === 'tsv' && DEAD_END.test(note)) {
       process.stderr.write(
-        `reads like a dead end — \`cairn note ${ref} "…" --kind attempt\` marks it so the next agent does not retry it\n`,
+        `reads like a dead end — \`croft note ${ref} "…" --kind attempt\` marks it so the next agent does not retry it\n`,
       )
     }
 
@@ -3399,13 +3399,13 @@ const commands = {
     // the only party that knows which of the two this was.
     if (result?.unclaimed && FORMAT === 'tsv') {
       process.stderr.write(
-        `${ref} is open and unclaimed — \`cairn claim ${ref}\` if you are working it\n`,
+        `${ref} is open and unclaimed — \`croft claim ${ref}\` if you are working it\n`,
       )
     }
   },
 
   async log() {
-    const ref = need(positional[0], 'usage: cairn log <ref>')
+    const ref = need(positional[0], 'usage: croft log <ref>')
     const suffix = flags.kind ? `?kind=${flags.kind}` : ''
     const data = await request('GET', `/api/v1/tasks/${ref}/notes${suffix}`)
     emit(data, {
@@ -3421,13 +3421,13 @@ const commands = {
   },
 
   async comment() {
-    const ref = need(positional[0], 'usage: cairn comment <ref> "<text>"')
+    const ref = need(positional[0], 'usage: croft comment <ref> "<text>"')
     const content = await resolveValue(need(positional[1], 'a comment body is required'))
     emit(await request('POST', `/api/v1/tasks/${ref}/comments`, { content }))
   },
 
   async attach() {
-    const ref = need(positional[0], 'usage: cairn attach <ref> <file>')
+    const ref = need(positional[0], 'usage: croft attach <ref> <file>')
     const file = need(positional[1], 'a file path is required')
     const size = statSync(file).size
     process.stderr.write(`uploading ${basename(file)} (${size} bytes, ${mimeOf(file)})\n`)
@@ -3435,7 +3435,7 @@ const commands = {
   },
 
   async files() {
-    const ref = need(positional[0], 'usage: cairn files <ref>')
+    const ref = need(positional[0], 'usage: croft files <ref>')
     const data = await request('GET', `/api/v1/tasks/${ref}/attachments`)
     emit(data, {
       rows: (d) =>
@@ -3451,7 +3451,7 @@ const commands = {
   },
 
   async children() {
-    const ref = need(positional[0], 'usage: cairn children <ref>')
+    const ref = need(positional[0], 'usage: croft children <ref>')
     const data = await request('GET', `/api/v1/tasks/${ref}/children`)
     emit(data.children, {
       rows: (d) => d.map((t) => ({ ref: t.ref, status: t.status, title: truncate(t.title, 62) })),
@@ -3465,7 +3465,7 @@ const commands = {
   },
 
   async history() {
-    const ref = need(positional[0], 'usage: cairn history <ref>')
+    const ref = need(positional[0], 'usage: croft history <ref>')
     const data = await request('GET', `/api/v1/tasks/${ref}/activity`)
     emit(data, {
       rows: (d) =>
@@ -3481,7 +3481,7 @@ const commands = {
   },
 
   async deps() {
-    const ref = need(positional[0], 'usage: cairn deps <ref>')
+    const ref = need(positional[0], 'usage: croft deps <ref>')
     const data = await request('GET', `/api/v1/tasks/${ref}/dependencies`)
     emit(data, {
       rows: (d) =>
@@ -3499,7 +3499,7 @@ const commands = {
   },
 
   async blockedby() {
-    const ref = need(positional[0], 'usage: cairn blockedby <ref> <other-ref>')
+    const ref = need(positional[0], 'usage: croft blockedby <ref> <other-ref>')
     const other = need(positional[1], 'the blocking task ref is required')
     emit(await request('POST', `/api/v1/tasks/${ref}/dependencies`, {
       ref: other,
@@ -3508,7 +3508,7 @@ const commands = {
   },
 
   async unblockedby() {
-    const ref = need(positional[0], 'usage: cairn unblockedby <ref> <other-ref>')
+    const ref = need(positional[0], 'usage: croft unblockedby <ref> <other-ref>')
     const other = need(positional[1], 'the blocking task ref is required')
     const q = new URLSearchParams({ ref: other, direction: 'blocked-by' })
     emit(await request('DELETE', `/api/v1/tasks/${ref}/dependencies?${q}`))
@@ -3517,13 +3517,13 @@ const commands = {
   async labels() {
     const sub = positional[0]
     if (sub === 'rename' || sub === 'merge') {
-      const from = need(positional[1], 'usage: cairn labels rename <from> <to>')
+      const from = need(positional[1], 'usage: croft labels rename <from> <to>')
       const to = need(positional[2], 'a new label name is required')
       emit(await request('PATCH', '/api/v1/labels', { from, to }))
       return
     }
     if (sub === 'remove' || sub === 'delete') {
-      const from = need(positional[1], 'usage: cairn labels remove <label>')
+      const from = need(positional[1], 'usage: croft labels remove <label>')
       emit(await request('PATCH', '/api/v1/labels', { from, to: null }))
       return
     }
@@ -3544,7 +3544,7 @@ const commands = {
    * with children, notes, comments or dependants, and demands the ref back.
    */
   async task() {
-    const sub = need(positional[0], 'usage: cairn task delete <ref> --confirm <ref>')
+    const sub = need(positional[0], 'usage: croft task delete <ref> --confirm <ref>')
     if (sub !== 'delete') die(`unknown subcommand "${sub}" — expected delete`)
     const ref = need(positional[1], 'a task ref is required, e.g. CAI-42')
 
@@ -3557,7 +3557,7 @@ const commands = {
     if (flags.confirm !== canonical) {
       die(
         `This permanently deletes ${canonical} — "${task.title}" — and cannot be undone.\n` +
-          `Cancelling keeps the record: cairn cancel ${canonical} --resolution "..."\n` +
+          `Cancelling keeps the record: croft cancel ${canonical} --resolution "..."\n` +
           `Re-run with --confirm ${canonical} if deletion is really what you want.`,
       )
     }
@@ -3573,7 +3573,7 @@ const commands = {
   async project() {
     const sub = need(
       positional[0],
-      'usage: cairn project <create|rename|rekey|archive|restore|delete> <KEY> [...]',
+      'usage: croft project <create|rename|rekey|archive|restore|delete> <KEY> [...]',
     )
     const key = need(positional[1], 'a project key is required')
 
@@ -3587,11 +3587,11 @@ const commands = {
      * asymmetry is what this closes — the capability was already there.
      */
     if (sub === 'create') {
-      const title = need(positional[2], 'usage: cairn project create <KEY> "<title>"')
+      const title = need(positional[2], 'usage: croft project create <KEY> "<title>"')
       // Checked here as well as on the server, so the error names the rule
       // rather than coming back as a validation failure from a POST.
       if (!/^[A-Z][A-Z0-9]{1,9}$/.test(key)) {
-        die(`"${key}" is not a project key — 2 to 10 uppercase letters or digits, e.g. CAIRN`)
+        die(`"${key}" is not a project key — 2 to 10 uppercase letters or digits, e.g. CROFT`)
       }
       const description = flags.body === undefined ? undefined : await resolveValue(flags.body)
       emit(
@@ -3607,12 +3607,12 @@ const commands = {
     /**
      * Changing the KEY, which the API has always allowed and this CLI never
      * offered — so the one rename that rewrites every ref was the one only
-     * reachable by a hand-written PATCH (CAIRN-264). `rekey` says what it does;
+     * reachable by a hand-written PATCH (CROFT-264). `rekey` says what it does;
      * `rename --key` is the same thing in the spelling `entities rename` uses.
      */
     const rekey = async (newKey, title) => {
       if (!/^[A-Z][A-Z0-9]{1,9}$/.test(newKey)) {
-        die(`"${newKey}" is not a project key — 2 to 10 uppercase letters or digits, e.g. CAIRN`)
+        die(`"${newKey}" is not a project key — 2 to 10 uppercase letters or digits, e.g. CROFT`)
       }
       const data = await request('PATCH', `/api/v1/projects/${key}`, {
         key: newKey,
@@ -3629,22 +3629,22 @@ const commands = {
         `renamed ${was} -> ${data.key}: every ${was}-n ref now reads ${data.key}-n.\n` +
           `${was}-n refs keep resolving, so commits and notes that say ${was}-42 still find ` +
           `${data.key}-42, and ${was} cannot be given to another project.\n` +
-          `checkouts mapped to ${was} keep working; run "cairn map ${data.key}" in each to update the map.\n`,
+          `checkouts mapped to ${was} keep working; run "croft map ${data.key}" in each to update the map.\n`,
       )
     }
 
     if (sub === 'rekey') {
-      await rekey(need(positional[2], 'usage: cairn project rekey <KEY> <NEW_KEY>'))
+      await rekey(need(positional[2], 'usage: croft project rekey <KEY> <NEW_KEY>'))
       return
     }
 
     if (sub === 'rename') {
       if (flags.key !== undefined) {
-        const newKey = need(flags.key, 'usage: cairn project rename <KEY> --key <NEW_KEY> ["<new title>"]')
+        const newKey = need(flags.key, 'usage: croft project rename <KEY> --key <NEW_KEY> ["<new title>"]')
         await rekey(newKey, positional[2])
         return
       }
-      const title = need(positional[2], 'usage: cairn project rename <KEY> "<new title>"  (or --key <NEW_KEY>)')
+      const title = need(positional[2], 'usage: croft project rename <KEY> "<new title>"  (or --key <NEW_KEY>)')
       emit(await request('PATCH', `/api/v1/projects/${key}`, { title }))
       return
     }
@@ -3672,10 +3672,10 @@ const commands = {
   },
 
   async claim() {
-    const ref = need(positional[0], 'usage: cairn claim <ref>')
+    const ref = need(positional[0], 'usage: croft claim <ref>')
     emit(named(await request('POST', `/api/v1/tasks/${ref}/claim`, {})))
 
-    // What already bears on it, at the moment it is picked up (CAIRN-268). A
+    // What already bears on it, at the moment it is picked up (CROFT-268). A
     // recall nobody remembers to run is one that does not happen, and the case
     // it exists for — a closure elsewhere saying "do not read this as
     // permission for <this task>" — is exactly the one the claimer does not
@@ -3685,7 +3685,7 @@ const commands = {
     const decisions = Array.isArray(r?.decisions) ? r.decisions : []
     const facts = Array.isArray(r?.knowledge) ? r.knowledge : []
     if (decisions.length === 0 && facts.length === 0) return
-    const lines = [`bears on this — cairn recall ${ref}:`]
+    const lines = [`bears on this — croft recall ${ref}:`]
     for (const d of decisions) {
       lines.push(`  ${d.ref} ${d.kind} (${d.why.join(', ')}): ${truncate(d.text, 140)}`)
     }
@@ -3693,7 +3693,7 @@ const commands = {
     process.stderr.write(`${lines.join('\n')}\n`)
   },
   async beat() {
-    emit(named(await request('POST', `/api/v1/tasks/${need(positional[0], 'usage: cairn beat <ref>')}/beat`, {})))
+    emit(named(await request('POST', `/api/v1/tasks/${need(positional[0], 'usage: croft beat <ref>')}/beat`, {})))
   },
   /**
    * `--force` releases a claim another session holds. The server refuses that
@@ -3701,35 +3701,35 @@ const commands = {
    * indistinguishable from releasing your own.
    */
   async release() {
-    const ref = need(positional[0], 'usage: cairn release <ref> [--force]')
+    const ref = need(positional[0], 'usage: croft release <ref> [--force]')
     emit(named(await request('POST', `/api/v1/tasks/${ref}/release`, { force: Boolean(flags.force) })))
   },
   async checkpoint() {
-    const ref = need(positional[0], 'usage: cairn checkpoint <ref> --summary "<state>"')
+    const ref = need(positional[0], 'usage: croft checkpoint <ref> --summary "<state>"')
     const summary = await resolveValue(need(flags.summary, 'a --summary is required'))
     emit(named(await request('POST', `/api/v1/tasks/${ref}/checkpoint`, { summary })))
   },
   async block() {
-    const ref = need(positional[0], 'usage: cairn block <ref> --reason "<why>"')
+    const ref = need(positional[0], 'usage: croft block <ref> --reason "<why>"')
     const reason = await resolveValue(need(flags.reason, 'a --reason is required'))
     emit(named(await request('POST', `/api/v1/tasks/${ref}/block`, { reason })))
   },
   async unblock() {
-    const ref = need(positional[0], 'usage: cairn unblock <ref>')
+    const ref = need(positional[0], 'usage: croft unblock <ref>')
     emit(named(await request('POST', `/api/v1/tasks/${ref}/block`, { reason: null })))
   },
 
   // --- knowledge ---------------------------------------------------------
 
   async learn() {
-    const title = need(positional[0], 'usage: cairn learn "<title>" --body -')
+    const title = need(positional[0], 'usage: croft learn "<title>" --body -')
     const body = await resolveValue(flags.body ?? '')
     // A bare title reads in every list exactly like a fact with an
-    // explanation behind it. The server refuses it too (CAIRN-289); saying so
+    // explanation behind it. The server refuses it too (CROFT-289); saying so
     // here saves the round trip and names the flag.
     if (!String(body).trim()) {
       die('a fact needs a body: what it means and how it was found.\n' +
-        '  cairn learn "<title>" --body -   # markdown on stdin')
+        '  croft learn "<title>" --body -   # markdown on stdin')
     }
     /**
      * Scope is decided before the write, not regretted after it.
@@ -3742,7 +3742,7 @@ const commands = {
      * front of every project, permanently.
      *
      * So: an explicit scope wins, a mapped directory supplies one when none
-     * is given, and global has to be asked for. `cairn add` has always
+     * is given, and global has to be asked for. `croft add` has always
      * refused to file a task without a project; this is the same rule for the
      * half that travels further.
      */
@@ -3751,11 +3751,11 @@ const commands = {
 
     // Only when nothing was chosen, so the common path costs nothing extra.
     // The local map answers most of the time; the git remote answers where it
-    // cannot — a second clone, a worktree, a directory nobody ran `cairn map`
+    // cannot — a second clone, a worktree, a directory nobody ran `croft map`
     // in — and only the server can turn a remote into a project, so it is
-    // asked. This is the same resolution `cairn context` performs, and the
+    // asked. This is the same resolution `croft context` performs, and the
     // same principle as resolving a task's project from the repository rather
-    // than the path (CAIRN-123).
+    // than the path (CROFT-123).
     let here = null
     if (!chosen.length && !entities.length && !flags.global) {
       const cwd = process.cwd()
@@ -3774,7 +3774,7 @@ const commands = {
       die(
         'scope this fact before filing it:\n' +
           '  --project <KEY>   true of one codebase\n' +
-          '  --entity <key>    true of a business or a stack (cairn entities)\n' +
+          '  --entity <key>    true of a business or a stack (croft entities)\n' +
           '  --global          true everywhere — say so on purpose\n' +
           'This directory maps to no project, so there is nothing to infer from.',
       )
@@ -3791,7 +3791,7 @@ const commands = {
     if (entities.length) payload.entities = entities
     if (flags.slug) payload.slug = flags.slug
     if (flags.task) payload.sourceTaskRef = flags.task
-    // Files it is about beyond the paths its body names (CAIRN-269).
+    // Files it is about beyond the paths its body names (CROFT-269).
     if (flags.files) payload.files = splitList(flags.files)
     if (flags.verified) payload.verified = true
     // The write refuses a [[reference]] whose fact the store already holds
@@ -3808,17 +3808,17 @@ const commands = {
     // the same as unremarkable, so it is said — on stderr, where a warning
     // belongs, rather than in the row a caller parses.
     for (const warning of result?.warnings ?? []) {
-      process.stderr.write(`cairn: ${warning}\n`)
+      process.stderr.write(`croft: ${warning}\n`)
     }
 
     // Same-topic entries already in the store. A new fact that contradicts
     // an old one leaves both reading as true unless somebody links them.
     if (result?.similar?.length) {
-      process.stderr.write('cairn: existing entries on the same subject:\n')
+      process.stderr.write('croft: existing entries on the same subject:\n')
       for (const k of result.similar) process.stderr.write(`  ${k.slug}  (${k.scope})  ${truncate(k.title, 70)}\n`)
       process.stderr.write(
-        `  if one is now wrong: cairn unlearn <slug> --superseded-by ${result.slug}` +
-          ' — or cairn relearn it; if they agree, link them with [[slug]]\n',
+        `  if one is now wrong: croft unlearn <slug> --superseded-by ${result.slug}` +
+          ' — or croft relearn it; if they agree, link them with [[slug]]\n',
       )
     }
     if (FORMAT === 'tsv' && result?.source_task_id && !flags.task) {
@@ -3898,8 +3898,8 @@ const commands = {
         `${stats.entries} entries, ${stats.resolved} resolving references\n` +
           `${stats.islands} island${stats.islands === 1 ? '' : 's'}` +
           (gaps.islands.length ? `, largest holds ${gaps.islands[0]}` : '') +
-          `\n${stats.isolated} joined to nothing  (cairn know --orphans)\n` +
-          `${gaps.missing.length} referenced but never written  (cairn know --dangling)\n`,
+          `\n${stats.isolated} joined to nothing  (croft know --orphans)\n` +
+          `${gaps.missing.length} referenced but never written  (croft know --dangling)\n`,
       )
       return
     }
@@ -3915,7 +3915,7 @@ const commands = {
     // The server normalises the spelling on lookup; this only has to stop
     // ruling the reference out before asking.
     /**
-     * Facts nobody was given in a month (CAIRN-270): dead, or titled so that
+     * Facts nobody was given in a month (CROFT-270): dead, or titled so that
      * no search finds them. Either way worth a look — link it, retitle it,
      * verify it, or unlearn it. The count leaves out the session briefing,
      * which records nothing, and the output says so.
@@ -3939,18 +3939,18 @@ const commands = {
         process.stderr.write(`not recalled in ${data.days} days — ${data.counted}\n`)
         // An empty list because the store is younger than the window is "not
         // yet", and printing only the zero reads as "everything is used".
-        if (data.note) process.stderr.write(`cairn: ${data.note}\n`)
+        if (data.note) process.stderr.write(`croft: ${data.note}\n`)
       }
       return
     }
 
     /**
-     * What it used to say (CAIRN-266). One row per version, newest first, each
+     * What it used to say (CROFT-266). One row per version, newest first, each
      * saying how it came to be: written, or which edit produced it, by whom and
      * why. `--full` prints the bodies, which is the part worth comparing.
      */
     if (flags.history) {
-      const slug = need(subject, 'usage: cairn know <slug> --history [--full]')
+      const slug = need(subject, 'usage: croft know <slug> --history [--full]')
       const h = await request('GET', `/api/v1/knowledge/${slug}/history`)
       if (FORMAT === 'json') return emit(h)
 
@@ -3983,7 +3983,7 @@ const commands = {
           if (v.reason) process.stdout.write(`reason: ${v.reason}\n`)
           process.stdout.write(`# ${v.title}\n\n`)
           if (i > 0) process.stdout.write(`${bodies[i].body}\n\n`)
-          else process.stdout.write('(the live body — cairn know ' + h.slug + ')\n\n')
+          else process.stdout.write('(the live body — croft know ' + h.slug + ')\n\n')
         }
         return
       }
@@ -4053,7 +4053,7 @@ const commands = {
     const params = new URLSearchParams()
     // Set before the search branch returns, not after it. Living below that
     // early return, --project was accepted and silently dropped on every
-    // `cairn know "<query>" --project K` — the CAIRN-145 failure exactly,
+    // `croft know "<query>" --project K` — the CROFT-145 failure exactly,
     // relocated from the SQL into the CLI, on the verb agents use most. The
     // server honours the parameter; only this dropped it.
     if (flags.project) params.set('project', flags.project)
@@ -4088,7 +4088,7 @@ const commands = {
             ? r.entities.join(',')
             : 'global',
         verified: r.verified ? 'yes' : '',
-        // Searches that returned it and direct reads, last 30 days (CAIRN-270).
+        // Searches that returned it and direct reads, last 30 days (CROFT-270).
         recalled: String(r.recalled ?? ''),
         tokens: `~${r.tokens}`,
         title: truncate(r.title, 70),
@@ -4100,7 +4100,7 @@ const commands = {
   },
 
   async unlearn() {
-    const slug = need(positional[0], 'usage: cairn unlearn <slug> [--superseded-by <slug>]')
+    const slug = need(positional[0], 'usage: croft unlearn <slug> [--superseded-by <slug>]')
     if (flags['superseded-by']) {
       return emit(await request('PATCH', `/api/v1/knowledge/${slug}`, {
         supersededBy: flags['superseded-by'],
@@ -4119,7 +4119,7 @@ const commands = {
    * confidence signal becomes noise everyone learns to scroll past.
    */
   async verify() {
-    const slug = need(positional[0], 'usage: cairn verify <slug>')
+    const slug = need(positional[0], 'usage: croft verify <slug>')
     emit(await request('PATCH', `/api/v1/knowledge/${slug}`, { verified: true }))
   },
 
@@ -4143,16 +4143,16 @@ const commands = {
   },
 
   async relearn() {
-    const slug = need(positional[0], 'usage: cairn relearn <slug> [--body -] [--title T]')
+    const slug = need(positional[0], 'usage: croft relearn <slug> [--body -] [--title T]')
     const patch = {}
     if (flags.body !== undefined) patch.body = await resolveValue(flags.body)
     if (flags.title) patch.title = flags.title
     if (flags.label) patch.labels = splitList(flags.label)
     // A PATCH only touches the side it is given, so `--entity X` adds an entity
     // and leaves the project in place — and moving a fact from a project to an
-    // entity needed a way to clear one side. `none` is that way, as for `cairn
+    // entity needed a way to clear one side. `none` is that way, as for `croft
     // map none`. An empty value used to be read as "not given" and silently
-    // dropped, the CAIRN-262 failure again; it is refused instead (CAIRN-295).
+    // dropped, the CROFT-262 failure again; it is refused instead (CROFT-295).
     const scopeList = (name) => {
       const raw = flags[name]
       if (raw === undefined) return undefined
@@ -4172,8 +4172,8 @@ const commands = {
     // leave `relearn --global` producing a state `learn --global` cannot.
     //
     // It was missing entirely and, because KNOWN_FLAGS is one list for every
-    // verb, `cairn relearn <slug> --global` parsed, printed the entry with its
-    // old scope still on it, and exited 0 (CAIRN-262).
+    // verb, `croft relearn <slug> --global` parsed, printed the entry with its
+    // old scope still on it, and exited 0 (CROFT-262).
     if (flags.global) {
       if (projects !== undefined || entities !== undefined) {
         die('--global means no project and no entity; do not pass it with --project or --entity')
@@ -4188,15 +4188,15 @@ const commands = {
     // refuses to do: an answer that looks like it took your argument and did
     // not.
     if (flags['allow-dangling']) patch.allowUnresolvedRefs = true
-    // Why it changed, kept on the version this replaces (CAIRN-266).
+    // Why it changed, kept on the version this replaces (CROFT-266).
     if (typeof flags.reason === 'string') patch.reason = flags.reason
-    // Replaces the explicitly named files; `--files ''` clears them (CAIRN-269).
+    // Replaces the explicitly named files; `--files ''` clears them (CROFT-269).
     if (flags.files !== undefined) patch.files = flags.files === true ? [] : splitList(flags.files)
 
     const result = await request('PATCH', `/api/v1/knowledge/${slug}`, patch)
     emit(result)
     for (const warning of result?.warnings ?? []) {
-      process.stderr.write(`cairn: ${warning}\n`)
+      process.stderr.write(`croft: ${warning}\n`)
     }
   },
 
@@ -4204,7 +4204,7 @@ const commands = {
     const verb = positional.shift()
 
     if (verb === 'add') {
-      const key = need(positional[0], 'usage: cairn entities add <key> "<title>" [--project A,B]')
+      const key = need(positional[0], 'usage: croft entities add <key> "<title>" [--project A,B]')
       return emit(
         await request('POST', '/api/v1/entities', {
           key,
@@ -4216,7 +4216,7 @@ const commands = {
     }
 
     if (verb === 'rename') {
-      const key = need(positional[0], 'usage: cairn entities rename <key> [--key <new>] [--title "T"]')
+      const key = need(positional[0], 'usage: croft entities rename <key> [--key <new>] [--title "T"]')
       const patch = { key }
       if (flags.key) patch.newKey = flags.key
       if (flags.title) patch.title = flags.title
@@ -4225,7 +4225,7 @@ const commands = {
     }
 
     if (verb === 'assign' || verb === 'unassign') {
-      const key = need(positional[0], `usage: cairn entities ${verb} <key> --project A,B`)
+      const key = need(positional[0], `usage: croft entities ${verb} <key> --project A,B`)
       const projects = splitList(flags.project ?? positional[1])
       if (projects.length === 0) die('--project is required')
       return emit(
@@ -4281,7 +4281,7 @@ const commands = {
     const line = (t) => `${t.ref}  ${t.title}${t.assignee ? `  · ${t.assignee}` : ''}`
     process.stdout.write(
       `${line(data.pick)}\n  ${data.pick.reason}\n  ${data.pick.priority} · ${data.pick.status}` +
-        `\n\n  cairn claim ${data.pick.ref}\n` +
+        `\n\n  croft claim ${data.pick.ref}\n` +
         (data.then?.length
           ? `\nthen:\n${data.then.map((t) => `  ${line(t)}`).join('\n')}\n`
           : ''),
@@ -4291,13 +4291,13 @@ const commands = {
   // --- the briefing ------------------------------------------------------
 
   /**
-   * What already bears on one task (CAIRN-268): decisions on the tasks around
+   * What already bears on one task (CROFT-268): decisions on the tasks around
    * it and the knowledge that applies, each line saying why it was picked. Run
    * it when picking a task up — it is the question `check` answers from a
    * phrase, asked from the task instead.
    */
   async recall() {
-    const ref = need(positional[0], 'usage: cairn recall <ref> [--limit N]')
+    const ref = need(positional[0], 'usage: croft recall <ref> [--limit N]')
     const params = new URLSearchParams()
     if (flags.limit) {
       params.set('decisions', flags.limit)
@@ -4322,7 +4322,7 @@ const commands = {
     const more = []
     if (r.omitted.decisions) more.push(`${r.omitted.decisions} more decision(s)`)
     if (r.omitted.knowledge) more.push(`${r.omitted.knowledge} more fact(s)`)
-    if (more.length) out.push('', `${more.join(', ')} — cairn recall ${ref} --limit 30`)
+    if (more.length) out.push('', `${more.join(', ')} — croft recall ${ref} --limit 30`)
     process.stdout.write(`${out.join('\n')}\n`)
   },
 
@@ -4355,8 +4355,8 @@ const commands = {
    */
   async route() {
     const sub = positional[0] ?? 'show'
-    if (!INSTANCES) die('this machine has one instance (no ~/.cairn/instances.json); there is nothing to route', 2)
-    if (INSTANCES.error) die(`cairn: ${INSTANCES.error}`, 2)
+    if (!INSTANCES) die('this machine has one instance (no ~/.croft/instances.json); there is nothing to route', 2)
+    if (INSTANCES.error) die(`croft: ${INSTANCES.error}`, 2)
     const dir = flags.dir ? realDir(String(flags.dir)) : ROUTE_DIR
     const { key, repo } = routeKey(dir)
 
@@ -4381,11 +4381,11 @@ const commands = {
       writeInstancesConfig({ ...INSTANCES.raw, version: 1, routes })
       return emit({ removed: tilde(key), match })
     }
-    if (sub !== 'add') die('usage: cairn route [show|list|pending|add <instance> [--folder|--session] [--dir D] [--force]|remove [--folder] [--dir D]]')
+    if (sub !== 'add') die('usage: croft route [show|list|pending|add <instance> [--folder|--session] [--dir D] [--force]|remove [--folder] [--dir D]]')
 
-    const instance = need(positional[1], 'usage: cairn route add <instance> [--folder | --session] [--dir <path>] [--force]')
+    const instance = need(positional[1], 'usage: croft route add <instance> [--folder | --session] [--dir <path>] [--force]')
     if (flags.folder && flags.session) die('--folder and --session are different answers; give one')
-    if (flags.session && !ROUTE_SESSION) die('--session needs a session id (CAIRN_SESSION_ID), and this shell has none')
+    if (flags.session && !ROUTE_SESSION) die('--session needs a session id (CROFT_SESSION_ID), and this shell has none')
     const config = { ...INSTANCES.raw, version: 1, instances: INSTANCES.instances, routes: INSTANCES.routes, raw: INSTANCES.raw }
     const problem = saveRoute(config, {
       instance,
@@ -4394,7 +4394,7 @@ const commands = {
       session: flags.session ? ROUTE_SESSION : null,
       force: Boolean(flags.force),
     })
-    if (problem) die(`cairn: ${problem}`, 2)
+    if (problem) die(`croft: ${problem}`, 2)
 
     // Replayed through this same CLI, one process per session, so each goes
     // through the routing just saved exactly as a live command would. Never
@@ -4407,11 +4407,11 @@ const commands = {
       const target = parked.cwd && (await resolveRoute({ config: after, dir: parked.cwd, session: parked.sessionId })).name
       if (!target || !Array.isArray(parked.args)) continue
       const args = parked.args.includes('--no-checkpoint') ? parked.args : [...parked.args, '--no-checkpoint']
-      // The instance decides the server and the key; a CAIRN_API_KEY left in
+      // The instance decides the server and the key; a CROFT_API_KEY left in
       // this shell would only get every replay refused.
-      const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !['CAIRN_API_KEY', 'CAIRN_BASE_URL', 'CAIRN_INSTANCE'].includes(k)))
+      const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !['CROFT_API_KEY', 'CROFT_BASE_URL', 'CROFT_INSTANCE'].includes(k)))
       const result = spawnSync(process.execPath, [process.argv[1], ...args, '--instance', target], {
-        env: { ...env, CAIRN_AGENT: parked.agent ?? '', CAIRN_PLATFORM: parked.platform ?? '' },
+        env: { ...env, CROFT_AGENT: parked.agent ?? '', CROFT_PLATFORM: parked.platform ?? '' },
         stdio: ['ignore', 'ignore', 'pipe'],
         encoding: 'utf8',
         timeout: 30_000,
@@ -4427,7 +4427,7 @@ const commands = {
         `${d.scope} -> ${d.instance}`,
         ...(d.sent ? [`  sent ${d.sent} session(s) that were waiting for this`] : []),
         ...(d.failed.length
-          ? [`  ${d.failed.length} waiting session(s) could not be sent yet (\`cairn route pending\` lists them); first: ${d.failed[0].why}`]
+          ? [`  ${d.failed.length} waiting session(s) could not be sent yet (\`croft route pending\` lists them); first: ${d.failed[0].why}`]
           : []),
       ],
     })
@@ -4441,35 +4441,35 @@ const commands = {
   async instance() {
     const sub = positional[0] ?? 'show'
     if (sub === 'show') {
-      if (INSTANCES?.error) die(`cairn: ${INSTANCES.error}`, 2)
+      if (INSTANCES?.error) die(`croft: ${INSTANCES.error}`, 2)
       const shown = INSTANCE.name
         ? { instance: INSTANCE.name, why: INSTANCE.why, url: BASE, state: STATE_LABEL }
         : INSTANCES
           ? { instance: null, reason: INSTANCE.error ?? 'none chosen for this command' }
-          : { instance: null, reason: 'this machine has one instance (no ~/.cairn/instances.json)', url: BASE, state: STATE_LABEL }
+          : { instance: null, reason: 'this machine has one instance (no ~/.croft/instances.json)', url: BASE, state: STATE_LABEL }
       return emit(shown)
     }
     if (sub === 'list') {
-      if (!INSTANCES) return emit([], { lines: () => ['one instance (no ~/.cairn/instances.json)'] })
-      if (INSTANCES.error) die(`cairn: ${INSTANCES.error}`, 2)
+      if (!INSTANCES) return emit([], { lines: () => ['one instance (no ~/.croft/instances.json)'] })
+      if (INSTANCES.error) die(`croft: ${INSTANCES.error}`, 2)
       return emit(Object.entries(INSTANCES.instances).map(([name, { url }]) => ({
         instance: name,
         url,
         default: INSTANCES.unclassified.mode === 'default' && INSTANCES.unclassified.instance === name ? 'yes' : undefined,
-        keys: existsSync(join(CAIRN_DIR, 'instances', name, 'env'))
-          ? Object.keys(fileEnv(join(CAIRN_DIR, 'instances', name, 'env'))).filter((k) => k.startsWith('CAIRN_API_KEY')).length
+        keys: existsSync(join(CROFT_DIR, 'instances', name, 'env'))
+          ? Object.keys(fileEnv(join(CROFT_DIR, 'instances', name, 'env'))).filter((k) => k.startsWith('CROFT_API_KEY')).length
           : 0,
       })))
     }
     if (sub === 'policy') {
-      if (!INSTANCES) die('this machine has one instance (no ~/.cairn/instances.json); there is nothing to choose between', 2)
-      if (INSTANCES.error) die(`cairn: ${INSTANCES.error}`, 2)
+      if (!INSTANCES) die('this machine has one instance (no ~/.croft/instances.json); there is nothing to choose between', 2)
+      if (INSTANCES.error) die(`croft: ${INSTANCES.error}`, 2)
       const mode = positional[1]
       const instance = positional[2]
       if (mode === 'default' && !INSTANCES.instances[instance]) {
-        die(`usage: cairn instance policy default <${Object.keys(INSTANCES.instances).join('|')}>`)
+        die(`usage: croft instance policy default <${Object.keys(INSTANCES.instances).join('|')}>`)
       }
-      if (mode !== 'ask' && mode !== 'default') die('usage: cairn instance policy ask | default <name>')
+      if (mode !== 'ask' && mode !== 'default') die('usage: croft instance policy ask | default <name>')
       const unclassified = mode === 'ask' ? { mode: 'ask' } : { mode: 'default', instance }
       writeInstancesConfig({ ...INSTANCES.raw, version: 1, unclassified })
       return emit({ unclassified }, {
@@ -4478,17 +4478,17 @@ const commands = {
           : `a directory with no route: commands use ${instance}`],
       })
     }
-    if (sub !== 'add') die('usage: cairn instance [show|list|policy ask|default <name>|add <name> --url <url> [--default] [--adopt]]')
+    if (sub !== 'add') die('usage: croft instance [show|list|policy ask|default <name>|add <name> --url <url> [--default] [--adopt]]')
 
-    const name = need(positional[1], 'usage: cairn instance add <name> --url <url> [--default] [--adopt]')
+    const name = need(positional[1], 'usage: croft instance add <name> --url <url> [--default] [--adopt]')
     if (!INSTANCE_NAME.test(name)) die(`"${name}" is not an instance name: lowercase letters, digits and dashes, up to 32`)
-    const url = trimUrl(need(flags.url, 'cairn instance add needs --url <the server this instance is>'))
+    const url = trimUrl(need(flags.url, 'croft instance add needs --url <the server this instance is>'))
     try {
       if (!['http:', 'https:'].includes(new URL(url).protocol)) throw new Error()
     } catch {
       die(`--url ${url} is not an http(s) URL`)
     }
-    if (INSTANCES?.error) die(`cairn: ${INSTANCES.error} — fix it before adding to it`, 2)
+    if (INSTANCES?.error) die(`croft: ${INSTANCES.error} — fix it before adding to it`, 2)
 
     // The one question setup has to put to a person: with a second instance,
     // what happens in a directory nobody has classified. Asked once, at a
@@ -4514,7 +4514,7 @@ const commands = {
   },
 
   /**
-   * One command that connects this machine to a Cairn instance and installs
+   * One command that connects this machine to a Croft instance and installs
    * everything the four scripts and the README's hand-copying used to do
    * separately: keys, the CLI itself, the skill, the hooks, and the
    * maintenance jobs. Idempotent — re-running it is the upgrade path, keeping
@@ -4538,12 +4538,12 @@ const commands = {
     }
 
     // --- 1. which instance, and where its keys live -------------------------
-    const topEnvPath = join(CAIRN_DIR, 'env')
+    const topEnvPath = join(CROFT_DIR, 'env')
     const hasInstances = existsSync(INSTANCES_PATH)
     const topEnv = fileEnv(topEnvPath)
     const requestedUrl = flags.url ? trimUrl(String(flags.url)) : null
     if (requestedUrl) assertHttpUrl(requestedUrl)
-    const existingTopUrl = topEnv.CAIRN_BASE_URL ? trimUrl(topEnv.CAIRN_BASE_URL) : null
+    const existingTopUrl = topEnv.CROFT_BASE_URL ? trimUrl(topEnv.CROFT_BASE_URL) : null
     const multiInstance = hasInstances || (existingTopUrl != null && requestedUrl != null && existingTopUrl !== requestedUrl)
 
     let instanceName = null
@@ -4552,18 +4552,18 @@ const commands = {
 
     if (!multiInstance) {
       url = requestedUrl || existingTopUrl
-      if (!url) die('cairn setup needs --url <the Cairn instance to connect this machine to>, the first time it runs')
+      if (!url) die('croft setup needs --url <the Croft instance to connect this machine to>, the first time it runs')
       envPath = topEnvPath
       if (existingTopUrl === url) {
         line(`– instance  ${url} (already configured)`)
       } else if (dry) {
-        line(`! instance  would write CAIRN_BASE_URL=${url} to ~/.cairn/env`)
+        line(`! instance  would write CROFT_BASE_URL=${url} to ~/.croft/env`)
       } else {
-        setEnvKeys(topEnvPath, { CAIRN_BASE_URL: url })
-        line(`✓ instance  ${url} -> ~/.cairn/env`)
+        setEnvKeys(topEnvPath, { CROFT_BASE_URL: url })
+        line(`✓ instance  ${url} -> ~/.croft/env`)
       }
     } else {
-      if (hasInstances && INSTANCES?.error) die(`cairn: ${INSTANCES.error}`, 2)
+      if (hasInstances && INSTANCES?.error) die(`croft: ${INSTANCES.error}`, 2)
       const already = requestedUrl && INSTANCES
         ? Object.entries(INSTANCES.instances).find(([, i]) => trimUrl(i.url) === requestedUrl)
         : null
@@ -4573,12 +4573,12 @@ const commands = {
         line(`– instance  ${instanceName} -> ${url} (already registered)`)
       } else {
         url = requestedUrl
-        if (!url) die('cairn setup needs --url <the Cairn instance to connect this machine to> (this machine already has others)')
+        if (!url) die('croft setup needs --url <the Croft instance to connect this machine to> (this machine already has others)')
         if (explicitName && !INSTANCE_NAME.test(explicitName)) {
           die(`"${explicitName}" is not an instance name: lowercase letters, digits and dashes, up to 32`)
         }
         instanceName = explicitName || deriveInstanceName(url)
-        // A machine connected to one instance keeps its keys in ~/.cairn/env,
+        // A machine connected to one instance keeps its keys in ~/.croft/env,
         // which is no longer read once instances are configured. Adopt it as an
         // instance of its own first, still the default, or adding a second one
         // would quietly disconnect the first.
@@ -4586,7 +4586,7 @@ const commands = {
         let adoptedName = adopting ? deriveInstanceName(existingTopUrl) : null
         if (adoptedName === instanceName) adoptedName = `${adoptedName}-1`
         if (dry) {
-          if (adopting) line(`! instance  would adopt ~/.cairn/env as ${adoptedName} -> ${existingTopUrl} (still the default)`)
+          if (adopting) line(`! instance  would adopt ~/.croft/env as ${adoptedName} -> ${existingTopUrl} (still the default)`)
           line(`! instance  would register ${instanceName} -> ${url}`)
         } else {
           if (adopting) {
@@ -4595,7 +4595,7 @@ const commands = {
             } catch (error) {
               die(error.message)
             }
-            line(`✓ instance  ${adoptedName} -> ${existingTopUrl} (adopted from ~/.cairn/env, still the default)`)
+            line(`✓ instance  ${adoptedName} -> ${existingTopUrl} (adopted from ~/.croft/env, still the default)`)
           }
           let result
           try {
@@ -4618,7 +4618,7 @@ const commands = {
       serverInfo = (await res.json())?.data ?? {}
       line(`✓ server    ${url} (${serverInfo.version ?? '?'}${serverInfo.build && serverInfo.build !== 'unknown' ? ` ${serverInfo.build}` : ''})`)
     } catch (error) {
-      die(`cairn setup: cannot reach ${url}/api/v1/health (${error.message})`)
+      die(`croft setup: cannot reach ${url}/api/v1/health (${error.message})`)
     }
 
     // --- 3. runtimes, and which of them already have a working key ----------
@@ -4627,7 +4627,7 @@ const commands = {
       : detectSetupRuntimes()
     if (flags.maintenance && !runtimes.includes('maintenance')) runtimes.push('maintenance')
     if (!runtimes.length) {
-      die('cairn setup found no runtime on this machine (looked for ~/.claude, ~/.codex, openclaw) — pass --runtimes a,b')
+      die('croft setup found no runtime on this machine (looked for ~/.claude, ~/.codex, openclaw) — pass --runtimes a,b')
     }
 
     const existingEnv = fileEnv(envPath)
@@ -4658,7 +4658,7 @@ const commands = {
         try {
           result = await pairDevice({ baseUrl: url, runtimes: group, write: say })
         } catch (error) {
-          die(`cairn setup: ${error.message}`)
+          die(`croft setup: ${error.message}`)
         }
         if (result.fallback) {
           line('! keys      this server predates pairing (404 on /api/v1/connect);')
@@ -4670,8 +4670,8 @@ const commands = {
           line('! keys      maintenance not issued — it takes an administrator\'s approval')
           continue
         }
-        if (result.denied) die('cairn setup: pairing was denied')
-        if (result.expired) die('cairn setup: pairing expired before it was approved; run `cairn setup` again')
+        if (result.denied) die('croft setup: pairing was denied')
+        if (result.expired) die('croft setup: pairing expired before it was approved; run `croft setup` again')
         issuedKeys = [...issuedKeys, ...(result.keys ?? [])]
       }
     }
@@ -4683,26 +4683,26 @@ const commands = {
     }
 
     // --- 5. release files ------------------------------------------------------
-    const localSource = process.env.CAIRN_SETUP_SOURCE
-    const releaseDir = localSource || join(CAIRN_DIR, 'releases', VERSION)
+    const localSource = process.env.CROFT_SETUP_SOURCE
+    const releaseDir = localSource || join(CROFT_DIR, 'releases', VERSION)
     const releaseParts = ['scripts', 'hooks', 'skills', 'cli']
     const haveRelease = releaseParts.every((p) => existsSync(join(releaseDir, p)))
     if (localSource) {
-      if (!haveRelease) die(`CAIRN_SETUP_SOURCE=${localSource} is missing one of ${releaseParts.join(', ')}`)
-      line(`– source    ${localSource} (CAIRN_SETUP_SOURCE)`)
+      if (!haveRelease) die(`CROFT_SETUP_SOURCE=${localSource} is missing one of ${releaseParts.join(', ')}`)
+      line(`– source    ${localSource} (CROFT_SETUP_SOURCE)`)
     } else if (haveRelease) {
-      line(`– release   v${VERSION} already downloaded (~/.cairn/releases/${VERSION})`)
+      line(`– release   v${VERSION} already downloaded (~/.croft/releases/${VERSION})`)
     } else if (dry) {
       line(`! release   would download v${VERSION} from GitHub`)
     } else {
-      const tarUrl = `https://codeload.github.com/montytorr/cairn/tar.gz/refs/tags/v${VERSION}`
+      const tarUrl = `https://codeload.github.com/montytorr/croft/tar.gz/refs/tags/v${VERSION}`
       let res
       try {
         res = await fetch(tarUrl)
       } catch (error) {
-        die(`cairn setup: could not download ${tarUrl} (${error.message})`)
+        die(`croft setup: could not download ${tarUrl} (${error.message})`)
       }
-      if (!res.ok) die(`cairn setup: could not download ${tarUrl} (${res.status}) — is v${VERSION} released yet?`)
+      if (!res.ok) die(`croft setup: could not download ${tarUrl} (${res.status}) — is v${VERSION} released yet?`)
       mkdirSync(releaseDir, { recursive: true })
       const buf = Buffer.from(await res.arrayBuffer())
       const members = releaseParts.flatMap((p) => [`*/${p}`])
@@ -4714,25 +4714,25 @@ const commands = {
         extract = spawnSync('tar', ['-xzf', '-', '--strip-components=1', '-C', releaseDir], { input: buf, stdio: ['pipe', 'pipe', 'pipe'] })
       }
       if (extract.status !== 0) {
-        die(`cairn setup: tar could not extract the release (${extract.stderr?.toString().trim() || extract.status})`)
+        die(`croft setup: tar could not extract the release (${extract.stderr?.toString().trim() || extract.status})`)
       }
       if (!releaseParts.every((p) => existsSync(join(releaseDir, p)))) {
-        die(`cairn setup: v${VERSION}'s release archive is missing one of ${releaseParts.join(', ')}`)
+        die(`croft setup: v${VERSION}'s release archive is missing one of ${releaseParts.join(', ')}`)
       }
-      line(`✓ release   v${VERSION} -> ~/.cairn/releases/${VERSION}`)
+      line(`✓ release   v${VERSION} -> ~/.croft/releases/${VERSION}`)
     }
 
     // A dry run that has never downloaded a release yet has nothing on disk to
     // read the rest of the plan from — say so once, plainly, rather than a
     // false "unchanged" for files that were never compared.
-    const releaseReady = existsSync(join(releaseDir, 'cli', 'cairn.mjs'))
+    const releaseReady = existsSync(join(releaseDir, 'cli', 'croft.mjs'))
     if (!releaseReady) {
       line('! plan      cli, skill, hooks, jobs skipped — no release on disk yet to plan from;')
-      line('   run once without --dry-run, or set CAIRN_SETUP_SOURCE to a checkout')
+      line('   run once without --dry-run, or set CROFT_SETUP_SOURCE to a checkout')
     } else {
       // --- 6. the CLI itself -----------------------------------------------------
-      const cliTarget = join(HOME, '.local', 'bin', 'cairn')
-      const releaseCli = readFileSync(join(releaseDir, 'cli', 'cairn.mjs'))
+      const cliTarget = join(HOME, '.local', 'bin', 'croft')
+      const releaseCli = readFileSync(join(releaseDir, 'cli', 'croft.mjs'))
       const cliChanged = !existsSync(cliTarget) || !readFileSync(cliTarget).equals(releaseCli)
       if (!cliChanged) {
         line(`– cli       ${tilde(cliTarget)} (${VERSION}) — unchanged`)
@@ -4743,7 +4743,7 @@ const commands = {
         writeFileSync(cliTarget, releaseCli, { mode: 0o755 })
         line(`✓ cli       ${tilde(cliTarget)} (${VERSION})`)
       }
-      if (!onSetupPath('cairn')) {
+      if (!onSetupPath('croft')) {
         line('! path      ~/.local/bin is not on PATH — add: export PATH="$HOME/.local/bin:$PATH"')
       }
 
@@ -4751,15 +4751,15 @@ const commands = {
       if (flags['no-skill']) {
         line('– skill     skipped (--no-skill)')
       } else {
-        const skillSource = join(releaseDir, 'skills', 'cairn', 'SKILL.md')
+        const skillSource = join(releaseDir, 'skills', 'croft', 'SKILL.md')
         const skillSourceBuf = existsSync(skillSource) ? readFileSync(skillSource) : null
         const skillTargets = []
-        if (runtimes.includes('claude-code')) skillTargets.push(join(HOME, '.claude', 'skills', 'cairn', 'SKILL.md'))
-        if (runtimes.includes('codex')) skillTargets.push(join(HOME, '.codex', 'skills', 'cairn', 'SKILL.md'))
+        if (runtimes.includes('claude-code')) skillTargets.push(join(HOME, '.claude', 'skills', 'croft', 'SKILL.md'))
+        if (runtimes.includes('codex')) skillTargets.push(join(HOME, '.codex', 'skills', 'croft', 'SKILL.md'))
         if (runtimes.includes('openclaw')) {
           const clawdHome = process.env.CLAWD_HOME?.trim()
-          if (clawdHome) skillTargets.push(join(clawdHome, 'skills', 'cairn', 'SKILL.md'))
-          else line('! skill     openclaw: $CLAWD_HOME is not set — copy skills/cairn to its skills directory by hand')
+          if (clawdHome) skillTargets.push(join(clawdHome, 'skills', 'croft', 'SKILL.md'))
+          else line('! skill     openclaw: $CLAWD_HOME is not set — copy skills/croft to its skills directory by hand')
         }
         if (!skillSourceBuf && skillTargets.length) {
           line(`! skill     ${skillSource} not found in the release — skipped`)
@@ -4797,23 +4797,23 @@ const commands = {
         // OpenClaw has no session-end event (docs/openclaw.md): the sweep is
         // the only thing that ever records its transcripts, so setting it up
         // is not optional the way the rest of scheduled maintenance is.
-        // CAIRN_OPENCLAW_SESSIONS already in the environment wins outright —
+        // CROFT_OPENCLAW_SESSIONS already in the environment wins outright —
         // it says the operator already knows better than a directory guess.
         let jobEnv
         if (runtimes.includes('openclaw')) {
-          const already = process.env.CAIRN_OPENCLAW_SESSIONS?.trim()
+          const already = process.env.CROFT_OPENCLAW_SESSIONS?.trim()
           const resolved = already ? { dir: already } : openclawSessionsDir()
           if (resolved.dir) {
             jobs.push('openclaw-sessions')
-            jobEnv = { ...process.env, CAIRN_OPENCLAW_SESSIONS: resolved.dir }
+            jobEnv = { ...process.env, CROFT_OPENCLAW_SESSIONS: resolved.dir }
             // Said here, not left to the installer's own output: on a first run
             // the cron backend skips jobs whose scripts the hooks step has not
             // put in place yet, so its plan alone would never name the directory.
             line(`${dry ? '!' : '✓'} jobs      openclaw-sessions will sweep ${resolved.dir}`)
           } else {
             line(`! jobs      openclaw-sessions skipped — ${resolved.error}`)
-            line('            set CAIRN_OPENCLAW_SESSIONS=<dir> and re-run, e.g.:')
-            line(`            CAIRN_OPENCLAW_SESSIONS=/root/.openclaw/agents/main/agent/codex-home/sessions cairn setup --url ${url}`)
+            line('            set CROFT_OPENCLAW_SESSIONS=<dir> and re-run, e.g.:')
+            line(`            CROFT_OPENCLAW_SESSIONS=/root/.openclaw/agents/main/agent/codex-home/sessions croft setup --url ${url}`)
           }
         }
         const result = spawnSync(
@@ -4829,7 +4829,7 @@ const commands = {
     // --- 10. verify ------------------------------------------------------------------
     const match = !serverInfo?.version || serverInfo.version === VERSION
     line(
-      `${match ? '✓' : '!'} cairn ${VERSION} ${match ? '↔' : '≠'} server ${serverInfo?.version ?? '?'}` +
+      `${match ? '✓' : '!'} croft ${VERSION} ${match ? '↔' : '≠'} server ${serverInfo?.version ?? '?'}` +
         ' — restart your agent sessions to load the hooks',
     )
   },
@@ -4959,7 +4959,7 @@ const commands = {
     }
 
     /**
-     * What migration 065 can see and cairn_vitals cannot: claims nobody is on,
+     * What migration 065 can see and croft_vitals cannot: claims nobody is on,
      * the reaper, sessions and the summariser per runtime and host, knowledge
      * verification. Absent on an older server, and then nothing is printed —
      * `0 quiet` from a server that cannot count them would be a wrong answer.
@@ -5000,7 +5000,7 @@ const commands = {
         return
       }
       const note =
-        `Cairn vitals, last ${data.windowHours}h:\n` +
+        `Croft vitals, last ${data.windowHours}h:\n` +
         findings.map((f) => `  [${f.severity}] ${f.message}`).join('\n') +
         `\n\nSessions ${data.sessions.recent} (${data.sessions.recentWithFiles} naming files, ` +
         `${data.sessions.recentSummarised ?? '?'} summarised), ` +
@@ -5068,7 +5068,7 @@ const commands = {
 
     if (verb === 'end' || verb === 'checkpoint') {
       const payload = {
-        externalId: need(flags.id, `usage: cairn session ${verb} --id <session-id>`),
+        externalId: need(flags.id, `usage: croft session ${verb} --id <session-id>`),
         platformSource: flags.platform ?? defaultPlatform(),
         cwd: flags.cwd ?? process.cwd(),
         files: splitList(flags.files),
@@ -5081,10 +5081,10 @@ const commands = {
       ]) {
         if (flags[flag] !== undefined) payload[field] = await resolveValue(flags[flag])
       }
-      // The same order as `cairn context`: the map, then the remote (which the
+      // The same order as `croft context`: the map, then the remote (which the
       // server matches against project_repos), then the cwd on the server's
       // side. Nothing here used to look, and nothing else sent a project, so
-      // every live session landed unattributed (CAIRN-286).
+      // every live session landed unattributed (CROFT-286).
       if (payload.project === undefined) {
         const mapped = projectForDir(payload.cwd)
         if (mapped) payload.project = mapped
@@ -5147,7 +5147,7 @@ if (flags.version || command === 'version') {
     // Offline, or not pointed at a server yet. The local version still answers.
   }
   const mine = fingerprint()
-  process.stdout.write(`cairn ${VERSION}${mine ? ` ${mine}` : ''}\n`)
+  process.stdout.write(`croft ${VERSION}${mine ? ` ${mine}` : ''}\n`)
   if (server) {
     process.stdout.write(`server ${server.version ?? '?'} (${server.build ?? '?'}) ${BASE}${INSTANCE.name ? ` [instance ${INSTANCE.name}]` : ''}\n`)
     warnIfStale(res)
@@ -5173,7 +5173,7 @@ if (!commands[command]) {
  */
 const FANS_OUT = new Set(['reconcile', 'vitals'])
 /**
- * The task one instance reports to, out of `--notify personal:CAIRN-107,work:OPS-3`.
+ * The task one instance reports to, out of `--notify personal:CROFT-107,work:OPS-3`.
  * Only vitals reports, so only vitals looks: reading the flag for reconcile
  * would mark it used and silence the warning that it does nothing there.
  */
@@ -5200,7 +5200,7 @@ if (flags['all-instances']) {
   if (flags.instance) die('--all-instances and --instance contradict each other; give one')
   if (INSTANCES && !INSTANCES.error) {
     const names = Object.keys(INSTANCES.instances)
-    const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !['CAIRN_API_KEY', 'CAIRN_BASE_URL', 'CAIRN_INSTANCE'].includes(k)))
+    const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !['CROFT_API_KEY', 'CROFT_BASE_URL', 'CROFT_INSTANCE'].includes(k)))
     const plan = names.map((name) => ({ name, notify: notifyFor(name, names.length > 1, false) }))
     const passthrough = []
     const argv = process.argv.slice(2)
@@ -5229,7 +5229,7 @@ if (flags['all-instances']) {
       }
       if (result.status !== 0) {
         failed += 1
-        process.stderr.write(`cairn: ${command} on instance ${name} failed (exit ${result.status ?? result.signal})\n`)
+        process.stderr.write(`croft: ${command} on instance ${name} failed (exit ${result.status ?? result.signal})\n`)
       }
     }
     if (structured) console.log(JSON.stringify({ instances: results }, null, 2))
@@ -5259,7 +5259,7 @@ const ignored = Object.keys(typedFlags).filter((flag) => !readFlags.has(flag))
 if (ignored.length > 0) {
   const list = ignored.map((flag) => `--${flag}`).join(', ')
   process.stderr.write(
-    `cairn: \`${command}\` does not take ${list} — ` +
+    `croft: \`${command}\` does not take ${list} — ` +
       `it was accepted by the parser and then read by nothing.\n` +
       (mutated || wroteLocally
         ? `The write went through WITHOUT it; re-run with the right flag if that was not what you meant.\n`

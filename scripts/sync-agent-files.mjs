@@ -17,7 +17,7 @@
  * in a directory no runtime reads is worse than no file at all. The built-in
  * targets are this user's own; anything else — another user's home, a runtime
  * with a tree of its own — is named by `--also`, because which copies exist is
- * a fact about a machine rather than about Cairn.
+ * a fact about a machine rather than about Croft.
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -49,23 +49,23 @@ const at = (path, needs) => ({ path, needs: needs ?? dirname(path) })
 const ARTEFACTS = [
   {
     name: 'skill',
-    file: 'skills/cairn/SKILL.md',
+    file: 'skills/croft/SKILL.md',
     mode: 0o644,
     targets: [
-      at(join(home, '.claude/skills/cairn/SKILL.md'), join(home, '.claude')),
-      at(join(home, '.codex/skills/cairn/SKILL.md'), join(home, '.codex')),
+      at(join(home, '.claude/skills/croft/SKILL.md'), join(home, '.claude')),
+      at(join(home, '.codex/skills/croft/SKILL.md'), join(home, '.codex')),
     ],
   },
   {
     name: 'cli',
-    file: 'cli/cairn.mjs',
+    file: 'cli/croft.mjs',
     mode: 0o755,
     // `needs` is the file itself: update a CLI where one is already installed,
     // never put a second one somewhere nobody asked for. /usr/local/bin exists
     // on every machine; that is not consent to install into it.
     targets: [
-      at(join(home, '.local/bin/cairn'), join(home, '.local/bin/cairn')),
-      at('/usr/local/bin/cairn', '/usr/local/bin/cairn'),
+      at(join(home, '.local/bin/croft'), join(home, '.local/bin/croft')),
+      at('/usr/local/bin/croft', '/usr/local/bin/croft'),
     ],
   },
   {
@@ -77,10 +77,10 @@ const ARTEFACTS = [
     file: 'scripts/sync-agent-files.mjs',
     mode: 0o755,
     targets: [
-      at('/opt/cairn-maintenance/sync-agent-files.mjs', '/opt/cairn-maintenance/sync-agent-files.mjs'),
+      at('/opt/croft-maintenance/sync-agent-files.mjs', '/opt/croft-maintenance/sync-agent-files.mjs'),
       at(
-        join(home, '.cairn/maintenance/sync-agent-files.mjs'),
-        join(home, '.cairn/maintenance/sync-agent-files.mjs'),
+        join(home, '.croft/maintenance/sync-agent-files.mjs'),
+        join(home, '.croft/maintenance/sync-agent-files.mjs'),
       ),
     ],
   },
@@ -102,7 +102,7 @@ const ARTEFACTS = [
     name: 'mcp',
     file: 'mcp/server.mjs',
     mode: 0o644,
-    targets: [at('/opt/cairn-mcp/server.mjs', '/opt/cairn-mcp/server.mjs')],
+    targets: [at('/opt/croft-mcp/server.mjs', '/opt/croft-mcp/server.mjs')],
   },
   {
     // And the installer beside it, for the same reason and by the same
@@ -114,35 +114,35 @@ const ARTEFACTS = [
     file: 'scripts/install-cron.mjs',
     mode: 0o755,
     targets: [
-      at('/opt/cairn-maintenance/install-cron.mjs', '/opt/cairn-maintenance/install-cron.mjs'),
+      at('/opt/croft-maintenance/install-cron.mjs', '/opt/croft-maintenance/install-cron.mjs'),
       at(
-        join(home, '.cairn/maintenance/install-cron.mjs'),
-        join(home, '.cairn/maintenance/install-cron.mjs'),
+        join(home, '.croft/maintenance/install-cron.mjs'),
+        join(home, '.croft/maintenance/install-cron.mjs'),
       ),
     ],
   },
   {
     name: 'hook:context',
-    file: 'hooks/cairn-context.mjs',
+    file: 'hooks/croft-context.mjs',
     mode: 0o755,
     targets: [
-      at(join(home, '.cairn/hooks/cairn-context.mjs')),
+      at(join(home, '.croft/hooks/croft-context.mjs')),
     ],
   },
   {
     name: 'hook:session-end',
-    file: 'hooks/cairn-session-end.mjs',
+    file: 'hooks/croft-session-end.mjs',
     mode: 0o755,
     targets: [
-      at(join(home, '.cairn/hooks/cairn-session-end.mjs')),
+      at(join(home, '.croft/hooks/croft-session-end.mjs')),
     ],
   },
   {
     name: 'hook:learn-nudge',
-    file: 'hooks/cairn-learn-nudge.mjs',
+    file: 'hooks/croft-learn-nudge.mjs',
     mode: 0o755,
     targets: [
-      at(join(home, '.cairn/hooks/cairn-learn-nudge.mjs')),
+      at(join(home, '.croft/hooks/croft-learn-nudge.mjs')),
     ],
   },
   /**
@@ -155,15 +155,15 @@ const ARTEFACTS = [
    */
   {
     name: 'hook:openclaw-briefing',
-    file: 'hooks/openclaw/cairn-briefing/handler.ts',
+    file: 'hooks/openclaw/croft-briefing/handler.ts',
     mode: 0o644,
-    targets: [at(join(home, '.cairn/hooks/openclaw/cairn-briefing/handler.ts'))],
+    targets: [at(join(home, '.croft/hooks/openclaw/croft-briefing/handler.ts'))],
   },
   {
     name: 'hook:openclaw-briefing-doc',
-    file: 'hooks/openclaw/cairn-briefing/HOOK.md',
+    file: 'hooks/openclaw/croft-briefing/HOOK.md',
     mode: 0o644,
-    targets: [at(join(home, '.cairn/hooks/openclaw/cairn-briefing/HOOK.md'))],
+    targets: [at(join(home, '.croft/hooks/openclaw/croft-briefing/HOOK.md'))],
   },
 ]
 
@@ -176,7 +176,7 @@ const ARTEFACTS = [
  * ones: another user's home, when the job runs as root and the runtimes do not;
  * and a runtime that keeps its skills in a tree of its own rather than a
  * dotfile directory, which is the usual shape for a gateway-style runtime.
- * `CAIRN_SYNC_ALSO` on `install-cron.mjs` renders these into the scheduled job.
+ * `CROFT_SYNC_ALSO` on `install-cron.mjs` renders these into the scheduled job.
  */
 for (let i = 0; i < process.argv.length; i += 1) {
   if (process.argv[i] !== '--also') continue
@@ -188,27 +188,27 @@ for (let i = 0; i < process.argv.length; i += 1) {
 const CHECK = process.argv.includes('--check')
 const NOTIFY = arg('--notify')
 /**
- * `personal:CAIRN-107` on a machine with several Cairn instances: the task is
+ * `personal:CROFT-107` on a machine with several Croft instances: the task is
  * on one of them, and a scheduled job has no directory to route by.
  */
 const [NOTIFY_INSTANCE, NOTIFY_REF] = NOTIFY?.includes(':')
   ? [NOTIFY.slice(0, NOTIFY.indexOf(':')), NOTIFY.slice(NOTIFY.indexOf(':') + 1)]
   : [null, NOTIFY]
-const SEVERAL_INSTANCES = existsSync(join(home, '.cairn', 'instances.json'))
-const ENV_FILE = NOTIFY_INSTANCE ? join(home, '.cairn', 'instances', NOTIFY_INSTANCE, 'env') : join(home, '.cairn/env')
+const SEVERAL_INSTANCES = existsSync(join(home, '.croft', 'instances.json'))
+const ENV_FILE = NOTIFY_INSTANCE ? join(home, '.croft', 'instances', NOTIFY_INSTANCE, 'env') : join(home, '.croft/env')
 
 /**
  * Said on every run, not only on the run that has something to report: a
  * missing key found only when a repair happens is found once a week, in the
  * one log line nobody is reading that day. Mirrors the CLI's rule — a split
- * ~/.cairn/env with no key for this identity means the report would be filed
+ * ~/.croft/env with no key for this identity means the report would be filed
  * as someone else, so the CLI refuses it.
  */
 const identityProblem = () => {
-  const agent = (process.env.CAIRN_AGENT ?? '').trim().toLowerCase()
-  if (!NOTIFY || agent !== 'maintenance' || process.env.CAIRN_API_KEY) return null
+  const agent = (process.env.CROFT_AGENT ?? '').trim().toLowerCase()
+  if (!NOTIFY || agent !== 'maintenance' || process.env.CROFT_API_KEY) return null
   if (SEVERAL_INSTANCES && !NOTIFY_INSTANCE) {
-    return `WARNING: this machine has several Cairn instances (~/.cairn/instances.json) and --notify ${NOTIFY} ` +
+    return `WARNING: this machine has several Croft instances (~/.croft/instances.json) and --notify ${NOTIFY} ` +
       `does not say which one ${NOTIFY} is on. Write it as <instance>:${NOTIFY}.`
   }
   let names = []
@@ -220,10 +220,10 @@ const identityProblem = () => {
   } catch {
     return null
   }
-  const split = names.some((name) => name.startsWith('CAIRN_API_KEY_'))
-  if (!split || names.includes('CAIRN_API_KEY_MAINTENANCE')) return null
+  const split = names.some((name) => name.startsWith('CROFT_API_KEY_'))
+  if (!split || names.includes('CROFT_API_KEY_MAINTENANCE')) return null
   return (
-    `WARNING: CAIRN_AGENT=maintenance but ${ENV_FILE} has no CAIRN_API_KEY_MAINTENANCE. ` +
+    `WARNING: CROFT_AGENT=maintenance but ${ENV_FILE} has no CROFT_API_KEY_MAINTENANCE. ` +
     `Reports to ${NOTIFY} will be refused rather than filed under another runtime's key.`
   )
 }
@@ -239,11 +239,11 @@ const hash = (buffer) => createHash('sha256').update(buffer).digest('hex').slice
  *
  * launchd runs a missed calendar slot the moment the machine wakes, which is
  * exactly when DNS is not up yet: the Mac's log had 20 ENOTFOUND and 22
- * "fetch failed" runs, each one another hour on a stale CLI (CAIRN-290). So a
+ * "fetch failed" runs, each one another hour on a stale CLI (CROFT-290). So a
  * network error is retried for about a minute and a half before it counts. An
  * HTTP error is an answer, not an outage, and is not retried.
  */
-const RETRY_DELAYS_MS = (process.env.CAIRN_SYNC_RETRY_MS ?? '5000,15000,30000,45000')
+const RETRY_DELAYS_MS = (process.env.CROFT_SYNC_RETRY_MS ?? '5000,15000,30000,45000')
   .split(',')
   .map(Number)
   .filter((n) => Number.isFinite(n) && n >= 0)
@@ -335,16 +335,16 @@ if (NOTIFY && repaired.length > 0) {
     `\n\nEach was being read by a runtime in that state until now.`
   // stderr is kept, not thrown away. It is where the CLI says whose key it is
   // using, and discarding it hid for weeks that a scheduled job with
-  // CAIRN_AGENT=maintenance and no maintenance key was filing its reports as
-  // another runtime (CAIRN-290). The CLI now refuses that outright; this is
+  // CROFT_AGENT=maintenance and no maintenance key was filing its reports as
+  // another runtime (CROFT-290). The CLI now refuses that outright; this is
   // what makes the refusal reach the log, and the exit code the scheduler.
   const said = (text) =>
     String(text ?? '')
       .split('\n')
       .filter((line) => line.trim())
-      .map((line) => `  cairn: ${line.replace(/^cairn: /, '')}`)
+      .map((line) => `  croft: ${line.replace(/^croft: /, '')}`)
   try {
-    const stderr = execFileSync('cairn', ['note', NOTIFY_REF, note, '--kind', 'note', ...(NOTIFY_INSTANCE ? ['--instance', NOTIFY_INSTANCE] : [])], {
+    const stderr = execFileSync('croft', ['note', NOTIFY_REF, note, '--kind', 'note', ...(NOTIFY_INSTANCE ? ['--instance', NOTIFY_INSTANCE] : [])], {
       stdio: ['ignore', 'ignore', 'pipe'],
       encoding: 'utf8',
     })

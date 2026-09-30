@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest'
  * before it. A unit test can check the wording of the finding and the shape of
  * the migration; only this can say what the population actually is.
  *
- * CAIRN-251 classified all ten tasks the old predicate flagged in a 24h
+ * CROFT-251 classified all ten tasks the old predicate flagged in a 24h
  * window: none was the bare created->done shape it was filed for, nine had
  * moved to in-review hours earlier, several carried commits and test runs, and
  * some had been closed by a person, who is documented as never claiming. Each
@@ -24,7 +24,7 @@ const databaseUrl = process.env.DATABASE_URL
 if (!databaseUrl) throw new Error('DATABASE_URL is required for integration tests')
 
 const freshDatabase = async () => {
-  const name = `cairn_closure_${randomUUID().replaceAll('-', '')}`
+  const name = `croft_closure_${randomUUID().replaceAll('-', '')}`
   const admin = new Client({ connectionString: databaseUrl })
   await admin.connect()
   await admin.query(`create database "${name}"`)
@@ -79,7 +79,7 @@ const seed = async (client: Client, shapes: Record<string, Event[]>) => {
   return user
 }
 
-/** The close itself: the terminal move and the resolution, as `cairn done` writes them. */
+/** The close itself: the terminal move and the resolution, as `croft done` writes them. */
 const closedBy = (actorType: string): Event[] => [
   { event: 'created', agoHours: 6 },
   { event: 'status_changed', actorType, data: { from: 'backlog', to: 'done' }, agoHours: 1 },
@@ -87,11 +87,11 @@ const closedBy = (actorType: string): Event[] => [
 ]
 
 const vitals = async (client: Client, user: string) => {
-  const { rows } = await client.query('select cairn_vitals($1, 24) as v', [user])
+  const { rows } = await client.query('select croft_vitals($1, 24) as v', [user])
   return rows[0].v as { tasks: Record<string, number> }
 }
 
-describe('cairn_vitals closure counting', () => {
+describe('croft_vitals closure counting', () => {
   it('counts a task that went from filed to closed with nothing in between', async () => {
     const client = await freshDatabase()
     try {
@@ -108,7 +108,7 @@ describe('cairn_vitals closure counting', () => {
   }, 120_000)
 
   it('does not count a task the board showed in-review for hours', async () => {
-    // Nine of the ten CAIRN-251 classified. "Nothing recorded that anyone was
+    // Nine of the ten CROFT-251 classified. "Nothing recorded that anyone was
     // working them, so the board showed them free" was false of every one.
     const client = await freshDatabase()
     try {

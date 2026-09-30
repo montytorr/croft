@@ -41,7 +41,7 @@ const estimateTokens = (...parts: (string | null | undefined)[]) =>
   Math.ceil(parts.filter(Boolean).join(' ').length / 4)
 
 /**
- * The read half of Cairn-as-memory. An agent asks "has this already been done
+ * The read half of Croft-as-memory. An agent asks "has this already been done
  * or debugged?" before starting, and gets back an INDEX — ids, one-liners, and
  * what each costs to open. Never bodies: returning those in bulk is exactly the
  * waste that makes 61% of large reads never get looked at again.
@@ -145,7 +145,7 @@ const markStaleKnowledge = async (
 // regression 004 measured and 007 restored.
 const taskResult = (row: SearchRow) => ({
   kind: 'task' as const,
-  // ALWAYS the Cairn ref: it is what `cairn show` resolves. Returning the
+  // ALWAYS the Croft ref: it is what `croft show` resolves. Returning the
   // imported identifier here hands the caller something that looks like a ref
   // and 404s, because no project has key "LEGACY".
   ref: `${row.project_key}-${row.number}`,

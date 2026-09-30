@@ -8,7 +8,7 @@ import { REQUESTED_PATH_HEADER } from '@/lib/auth/login-redirect'
  * This exists because the alternative — a client-side `useEffect` that checks
  * the session and redirects — is not access control: by the time it runs, the
  * RSC payload has already been served. a2a-comms ships exactly that pattern
- * and has no middleware at all; Cairn does not repeat it.
+ * and has no middleware at all; Croft does not repeat it.
  *
  * /api/v1/* is excluded: those routes authenticate bearer API keys themselves,
  * and must stay reachable without a browser session.

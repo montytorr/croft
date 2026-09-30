@@ -33,7 +33,7 @@
 --
 -- TRANSFORMED, NOT RE-COPIED, and this migration learned that the hard way.
 -- The first draft of it copied the whole body out of 036 and changed the one
--- CTE. That reverted cairn_vitals to a pre-047 world: the owner predicates
+-- CTE. That reverted croft_vitals to a pre-047 world: the owner predicates
 -- 048 had stripped came back, and the integration suite caught it. 048's own
 -- header says why, and says it about this exact function:
 --
@@ -54,16 +54,16 @@ begin
   select p.oid into fn
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
-   where n.nspname = 'public' and p.proname = 'cairn_vitals';
+   where n.nspname = 'public' and p.proname = 'croft_vitals';
 
   if fn is null then
-    raise exception 'cairn_vitals is not installed';
+    raise exception 'croft_vitals is not installed';
   end if;
 
   definition := pg_get_functiondef(fn);
 
   if definition like '%actorType%' then
-    raise notice 'cairn_vitals already carries actorType; nothing to do';
+    raise notice 'croft_vitals already carries actorType; nothing to do';
     return;
   end if;
 
@@ -88,10 +88,10 @@ begin
   );
 
   if updated = definition then
-    raise exception 'cairn_vitals did not contain the agent_stats shape this migration edits';
+    raise exception 'croft_vitals did not contain the agent_stats shape this migration edits';
   end if;
   if updated not like '%actorType%' or updated not like '%group by e.actor_id, e.actor_type%' then
-    raise exception 'cairn_vitals rewrite did not produce both changes';
+    raise exception 'croft_vitals rewrite did not produce both changes';
   end if;
 
   execute updated;

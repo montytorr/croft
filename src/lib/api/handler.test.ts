@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { isTrustedMutationOrigin } from './handler'
 
 const request = (method: string, headers?: HeadersInit) =>
-  new Request('https://cairn.example.test/api/v1/users', { method, headers })
+  new Request('https://croft.example.test/api/v1/users', { method, headers })
 
 describe('browser mutation origin', () => {
   it('allows safe reads without an origin', () => {
@@ -14,7 +14,7 @@ describe('browser mutation origin', () => {
   })
 
   it('allows same-origin browser mutations', () => {
-    expect(isTrustedMutationOrigin(request('POST', { origin: 'https://cairn.example.test' }))).toBe(true)
+    expect(isTrustedMutationOrigin(request('POST', { origin: 'https://croft.example.test' }))).toBe(true)
   })
 
   it('rejects missing and sibling origins for cookie-authenticated mutations', () => {
@@ -34,12 +34,12 @@ describe('browser mutation origin', () => {
 describe('browser mutation origin, behind a reverse proxy', () => {
   // What the container actually receives once Traefik has terminated TLS.
   const behindProxy = (headers: HeadersInit) =>
-    new Request('http://cairn.example.test/api/v1/users', { method: 'POST', headers })
+    new Request('http://croft.example.test/api/v1/users', { method: 'POST', headers })
 
   it('accepts the browser origin when the proxy says the hop was https', () => {
     expect(
       isTrustedMutationOrigin(
-        behindProxy({ origin: 'https://cairn.example.test', 'x-forwarded-proto': 'https' }),
+        behindProxy({ origin: 'https://croft.example.test', 'x-forwarded-proto': 'https' }),
       ),
     ).toBe(true)
   })
@@ -47,12 +47,12 @@ describe('browser mutation origin, behind a reverse proxy', () => {
   it('accepts a host rewritten by the proxy', () => {
     expect(
       isTrustedMutationOrigin(
-        new Request('http://cairn-interne:3000/api/v1/users', {
+        new Request('http://croft-interne:3000/api/v1/users', {
           method: 'POST',
           headers: {
-            origin: 'https://cairn.example.test',
+            origin: 'https://croft.example.test',
             'x-forwarded-proto': 'https',
-            'x-forwarded-host': 'cairn.example.test',
+            'x-forwarded-host': 'croft.example.test',
           },
         }),
       ),
@@ -73,7 +73,7 @@ describe('browser mutation origin, behind a reverse proxy', () => {
     // X-Forwarded-* is a comma-separated list; the first entry is the client's.
     expect(
       isTrustedMutationOrigin(
-        behindProxy({ origin: 'https://cairn.example.test', 'x-forwarded-proto': 'https, http' }),
+        behindProxy({ origin: 'https://croft.example.test', 'x-forwarded-proto': 'https, http' }),
       ),
     ).toBe(true)
   })
@@ -84,9 +84,9 @@ describe('browser mutation origin, behind a reverse proxy', () => {
     expect(
       isTrustedMutationOrigin(
         behindProxy({
-          origin: 'https://cairn.example.test',
+          origin: 'https://croft.example.test',
           'x-forwarded-proto': 'HTTPS',
-          'x-forwarded-host': 'Cairn.Example.Test:443',
+          'x-forwarded-host': 'Croft.Example.Test:443',
         }),
       ),
     ).toBe(true)
@@ -98,7 +98,7 @@ describe('browser mutation origin, behind a reverse proxy', () => {
     expect(
       isTrustedMutationOrigin(
         behindProxy({
-          origin: 'https://cairn.example.test',
+          origin: 'https://croft.example.test',
           'x-forwarded-proto': 'https',
           'x-forwarded-host': 'not a host',
         }),

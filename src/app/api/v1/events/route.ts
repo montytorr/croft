@@ -19,9 +19,9 @@ export const dynamic = 'force-dynamic'
  */
 const POLL_MS = 4000
 // Ten minutes, unless the platform cuts requests sooner: App Runner ends any
-// request at 120s, so there CAIRN_SSE_MAX_SECONDS=100 closes the stream first
+// request at 120s, so there CROFT_SSE_MAX_SECONDS=100 closes the stream first
 // and the browser's EventSource reconnects cleanly instead of on an error.
-const MAX_LIFETIME_MS = (Number(process.env.CAIRN_SSE_MAX_SECONDS) || 600) * 1000
+const MAX_LIFETIME_MS = (Number(process.env.CROFT_SSE_MAX_SECONDS) || 600) * 1000
 
 export const GET = async (req: Request) => {
   const actor = await authenticate(req)
@@ -45,7 +45,7 @@ export const GET = async (req: Request) => {
    * every few seconds for every open tab.
    */
   const fingerprint = async (): Promise<string> => {
-    const { data, error } = await admin().rpc('cairn_pulse', {
+    const { data, error } = await admin().rpc('croft_pulse', {
       p_owner: actor.userId,
       p_project: projectKey ? projectKey.toUpperCase() : null,
     })

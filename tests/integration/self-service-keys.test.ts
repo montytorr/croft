@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 /**
- * Self-service agent keys (CAIRN-315): a member lists and revokes their own
+ * Self-service agent keys (CROFT-315): a member lists and revokes their own
  * keys without an administrator, and only their own. Against a real database
  * because the promise that matters — a revoked key is refused on its very next
  * request — lives in the join `authenticate` makes, not in any route.
@@ -43,7 +43,7 @@ import { DELETE } from '@/app/api/v1/me/keys/[keyId]/route'
 const databaseUrl = process.env.DATABASE_URL
 if (!databaseUrl) throw new Error('DATABASE_URL is required for integration tests')
 
-const ORIGIN = 'https://cairn.example.test'
+const ORIGIN = 'https://croft.example.test'
 const memberId = randomUUID()
 const otherId = randomUUID()
 
@@ -106,7 +106,7 @@ describe('self-service agent keys', () => {
     expect((body.data as { id: string }[]).map((key) => key.id)).not.toContain(theirs.id)
   })
 
-  it('gives an administrator exactly the shape the owner sees (CAIRN-317)', async () => {
+  it('gives an administrator exactly the shape the owner sees (CROFT-317)', async () => {
     expect(await listUserKeys(memberId)).toEqual(await listOwnKeys(memberId))
   })
 

@@ -23,7 +23,7 @@
 -- Same semantics as knowledge_recall_counts, so the two cannot disagree: a
 -- returned slug matches knowledge.slug exactly; a read slug is normalised the
 -- way getKnowledge normalises it; misses name no entry and do not count.
--- The session briefing and `cairn recall` still record nothing, so they still
+-- The session briefing and `croft recall` still record nothing, so they still
 -- do not count. The timestamp only ever moves forward.
 -- ===========================================================================
 

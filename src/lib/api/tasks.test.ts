@@ -18,7 +18,7 @@ describe('refuseArchived', () => {
     expect(body.error).toContain('AC-42')
     expect(body.error).toContain('archived')
     expect(body.error).toContain('--instance')
-    expect(body.error).toContain('cairn project restore AC')
+    expect(body.error).toContain('croft project restore AC')
     expect(body.project).toBe('AC')
   })
 

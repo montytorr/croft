@@ -1,5 +1,5 @@
 -- ===========================================================================
--- 060: which files a fact is about, stored (CAIRN-269)
+-- 060: which files a fact is about, stored (CROFT-269)
 --
 -- Staleness already works out what files a fact concerns — backticked paths
 -- in its body, and what its source task or session touched — but only at read
@@ -42,7 +42,7 @@ comment on table knowledge_files is
 -- ---------------------------------------------------------------------------
 -- The body rule, as `filesNamedIn` states it: a backticked span that is a path
 -- (a slash, no spaces, optionally rooted at ~ . .. or /) ending in a real
--- extension. `cairn check` and `owner/repo` are not files.
+-- extension. `croft check` and `owner/repo` are not files.
 -- ---------------------------------------------------------------------------
 
 create or replace function knowledge_paths_in(p_body text) returns setof text

@@ -46,7 +46,7 @@ const actor = {
 
 const search = (query: string) =>
   GET(
-    new Request(`https://cairn.example.test/api/v1/search?${query}`),
+    new Request(`https://croft.example.test/api/v1/search?${query}`),
     { params: Promise.resolve({}) },
   )
 
@@ -59,7 +59,7 @@ const unifiedRow = (kind: string, ref: string) => ({
   ref,
   title: ref,
   subtitle: null,
-  project_key: 'CAIRN',
+  project_key: 'CROFT',
   status: null,
   type: null,
   answered: false,
@@ -82,7 +82,7 @@ const taskRow = (number: number) => ({
   claimed_by: null,
   updated_at: '2026-09-21T00:00:00.000Z',
   external_ref: 'LEGACY-373',
-  project_key: 'CAIRN',
+  project_key: 'CROFT',
   rank: 1,
   coverage: 1,
   widened: false,
@@ -100,8 +100,8 @@ describe('search records which entries it returned', () => {
     mocks.searchAll.mockResolvedValue({
       rows: [
         unifiedRow('knowledge', 'supabase-connection-pooling'),
-        unifiedRow('task', 'CAIRN-131'),
-        unifiedRow('note', 'CAIRN-88#3'),
+        unifiedRow('task', 'CROFT-131'),
+        unifiedRow('note', 'CROFT-88#3'),
       ],
       widened: true,
     })
@@ -111,8 +111,8 @@ describe('search records which entries it returned', () => {
     expect(response.status).toBe(200)
     expect(recordedRefs()).toEqual([
       'supabase-connection-pooling',
-      'CAIRN-131',
-      'CAIRN-88#3',
+      'CROFT-131',
+      'CROFT-88#3',
     ])
   })
 
@@ -121,23 +121,23 @@ describe('search records which entries it returned', () => {
 
     await search('q=pool+timeouts&tasksOnly=true')
 
-    // The Cairn ref, never the imported identifier — a stored "LEGACY-373"
+    // The Croft ref, never the imported identifier — a stored "LEGACY-373"
     // looks like a ref and resolves to nothing, so the event could not be
     // replayed against the corpus.
-    expect(recordedRefs()).toEqual(['CAIRN-131', 'CAIRN-88'])
+    expect(recordedRefs()).toEqual(['CROFT-131', 'CROFT-88'])
   })
 
   it('stores an empty list rather than nothing when the search found nothing', async () => {
     mocks.searchAll.mockResolvedValue({ rows: [], widened: true })
 
-    await search('q=a+subject+cairn+has+never+heard+of')
+    await search('q=a+subject+croft+has+never+heard+of')
 
     expect(recordedRefs()).toEqual([])
   })
 
   it('records the same count it reports to the caller', async () => {
     mocks.searchAll.mockResolvedValue({
-      rows: [unifiedRow('task', 'CAIRN-1'), unifiedRow('task', 'CAIRN-2')],
+      rows: [unifiedRow('task', 'CROFT-1'), unifiedRow('task', 'CROFT-2')],
       widened: false,
     })
 
@@ -149,7 +149,7 @@ describe('search records which entries it returned', () => {
   })
 })
 
-describe('search by assignee (CAIRN-310)', () => {
+describe('search by assignee (CROFT-310)', () => {
   beforeEach(() => {
     mocks.authenticate.mockReset().mockResolvedValue(actor)
     mocks.searchAll.mockReset()

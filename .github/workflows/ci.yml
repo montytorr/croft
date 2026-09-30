@@ -30,7 +30,7 @@ jobs:
           # Names that must not appear in a public repository, and therefore
           # cannot be listed in one. Optional: unset, the guard that reads it
           # passes vacuously and the shape checks still run.
-          CAIRN_PRIVATE_TERMS: ${{ secrets.CAIRN_PRIVATE_TERMS }}
+          CROFT_PRIVATE_TERMS: ${{ secrets.CROFT_PRIVATE_TERMS }}
 
       - name: build
         # Nothing to inject: the build reaches no database, and the Supabase
@@ -53,18 +53,18 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: cairn
-          POSTGRES_DB: cairn_test
+          POSTGRES_USER: croft
+          POSTGRES_DB: croft_test
           POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U cairn -d cairn_test"
+          --health-cmd "pg_isready -U croft -d croft_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://cairn@127.0.0.1:5432/cairn_test
+      DATABASE_URL: postgresql://croft@127.0.0.1:5432/croft_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -80,32 +80,32 @@ jobs:
   # The image as it ships, started as a platform would start it. Nothing else
   # in CI builds the Dockerfile, so a start-up that only fails inside the
   # image — a package the standalone output did not carry — reached the VPS
-  # deploy first, which rolled it back (CAIRN-304).
+  # deploy first, which rolled it back (CROFT-304).
   image:
     runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: cairn
-          POSTGRES_DB: cairn_image
+          POSTGRES_USER: croft
+          POSTGRES_DB: croft_image
           POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U cairn -d cairn_image"
+          --health-cmd "pg_isready -U croft -d croft_image"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - name: build the runtime image
-        run: docker build --target runner --build-arg GIT_SHA=${GITHUB_SHA::7} -t cairn:ci .
+        run: docker build --target runner --build-arg GIT_SHA=${GITHUB_SHA::7} -t croft:ci .
       - name: start it the way the compose deployment does
         run: |
           docker run -d --name plain --network host -e PORT=3101 \
-            -e DATABASE_URL=postgresql://cairn@127.0.0.1:5432/cairn_image \
-            --read-only --tmpfs /tmp cairn:ci
+            -e DATABASE_URL=postgresql://croft@127.0.0.1:5432/croft_image \
+            --read-only --tmpfs /tmp croft:ci
           for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:3101/api/v1/health && break; sleep 2; done
           curl -fsS http://127.0.0.1:3101/api/v1/health || { docker logs plain; exit 1; }
           curl -fsS -D - -o /dev/null http://127.0.0.1:3101/api/v1/health | grep -qi '^x-frame-options: DENY' \
@@ -113,12 +113,12 @@ jobs:
       - name: start it the way App Runner does — migrate and bootstrap on start
         run: |
           docker run -d --name managed --network host -e PORT=3102 \
-            -e DATABASE_URL=postgresql://cairn@127.0.0.1:5432/cairn_image \
-            -e CAIRN_MIGRATE_ON_START=1 \
-            -e CAIRN_BOOTSTRAP_ADMIN_EMAIL=ci@example.test \
-            -e CAIRN_BOOTSTRAP_ADMIN_PASSWORD=a-long-ci-password \
-            -e CAIRN_ATTACHMENT_S3_BUCKET=unused-in-ci -e AWS_REGION=eu-west-3 \
-            --read-only --tmpfs /tmp cairn:ci
+            -e DATABASE_URL=postgresql://croft@127.0.0.1:5432/croft_image \
+            -e CROFT_MIGRATE_ON_START=1 \
+            -e CROFT_BOOTSTRAP_ADMIN_EMAIL=ci@example.test \
+            -e CROFT_BOOTSTRAP_ADMIN_PASSWORD=a-long-ci-password \
+            -e CROFT_ATTACHMENT_S3_BUCKET=unused-in-ci -e AWS_REGION=eu-west-3 \
+            --read-only --tmpfs /tmp croft:ci
           for _ in $(seq 1 60); do curl -fsS http://127.0.0.1:3102/api/v1/health && break; sleep 2; done
           docker logs managed
           curl -fsS http://127.0.0.1:3102/api/v1/health
@@ -131,9 +131,9 @@ jobs:
             || { echo '::error::the bootstrapped administrator cannot sign in'; exit 1; }
           # A stale session cookie (password changed, expired, revoked) must
           # land on the login form, not bounce between / and /login for ever.
-          code=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' -H 'cookie: cairn_session=stale' http://127.0.0.1:3102/)
+          code=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' -H 'cookie: croft_session=stale' http://127.0.0.1:3102/)
           echo "/ with a stale cookie: $code"; case "$code" in 307*/login*) ;; *) echo '::error::/ should redirect a stale session to /login'; exit 1;; esac
-          code=$(curl -s -o /dev/null -w '%{http_code}' -H 'cookie: cairn_session=stale' http://127.0.0.1:3102/login)
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H 'cookie: croft_session=stale' http://127.0.0.1:3102/login)
           echo "/login with a stale cookie: $code"; [ "$code" = 200 ] || { echo '::error::/login bounced a stale session instead of showing the form'; exit 1; }
           # Branding: the stock icons are served without a session, and once an
           # administrator names the instance and picks a colour, every surface follows.
@@ -143,10 +143,10 @@ jobs:
           curl -fsS -c /tmp/jar -o /dev/null -X POST $base/api/auth/login -H 'content-type: application/json' \
             -H "origin: $base" -d '{"email":"ci@example.test","password":"a-long-ci-password"}'
           curl -fsS -b /tmp/jar -X PUT $base/api/v1/branding -H 'content-type: application/json' -H "origin: $base" \
-            -d '{"name":"CI Cairn","accent":"#01519b"}' | grep -q '"success":true' \
+            -d '{"name":"CI Croft","accent":"#01519b"}' | grep -q '"success":true' \
             || { echo '::error::an administrator could not set the branding'; exit 1; }
           page=$(curl -fsS $base/login)
-          echo "$page" | grep -q '<title>Sign in · CI Cairn</title>' || { echo '::error::the login page title does not carry the name'; exit 1; }
+          echo "$page" | grep -q '<title>Sign in · CI Croft</title>' || { echo '::error::the login page title does not carry the name'; exit 1; }
           echo "$page" | grep -q 'html:root{--accent:#01519b' || { echo '::error::the accent is not applied'; exit 1; }
           if echo "$page" | grep -q 'single-user'; then echo '::error::the login page still says single-user'; exit 1; fi
           if curl -fsS $base/brand/icon | grep -q '#7b86e8'; then echo '::error::the favicon did not take the accent'; exit 1; fi

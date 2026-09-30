@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * MCP facade over the `cairn` CLI.
+ * MCP facade over the `croft` CLI.
  *
  * It holds ZERO logic. Every tool shells out to the same binary a human or a
  * shell-capable agent would run, so there is exactly one implementation of
@@ -9,8 +9,8 @@
  * The reverse is not a bug but it is a cost, and it was never policed: this
  * exposed no knowledge tools at all for as long as knowledge has existed, so
  * an MCP-only agent could not read or write the memory half of the product
- * and was not told it existed. Worse, `cairn_check` returns knowledge rows
- * and described itself as an index of tasks, sending agents to `cairn_show`
+ * and was not told it existed. Worse, `croft_check` returns knowledge rows
+ * and described itself as an index of tasks, sending agents to `croft_show`
  * with a slug it cannot open. When a verb is deliberately left out, say so
  * here rather than leaving its absence to be discovered.
  *
@@ -18,8 +18,8 @@
  * timeouts and approval modes, Claude Code enforces the tool schemas so the
  * model cannot invent flags, and OpenClaw can reach it through mcporter.
  *
- * Requires `cairn` on PATH, plus CAIRN_BASE_URL and CAIRN_API_KEY (or
- * ~/.cairn/env, which the CLI reads itself).
+ * Requires `croft` on PATH, plus CROFT_BASE_URL and CROFT_API_KEY (or
+ * ~/.croft/env, which the CLI reads itself).
  */
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -32,18 +32,18 @@ import {
 
 const run = promisify(execFile)
 
-const CAIRN_BIN = process.env.CAIRN_BIN || 'cairn'
+const CROFT_BIN = process.env.CROFT_BIN || 'croft'
 
 /** Never interpolate into a shell — execFile takes an argv array. */
-const cairn = async (args) => {
+const croft = async (args) => {
   try {
-    const { stdout, stderr } = await run(CAIRN_BIN, args, {
+    const { stdout, stderr } = await run(CROFT_BIN, args, {
       env: process.env,
       maxBuffer: 8 * 1024 * 1024,
     })
     // stderr as well, ahead of stdout. It carries what the CLI says ABOUT an
     // answer rather than the answer — "AC-113 is now HOL-113, project AC was
-    // renamed HOL" (CAIRN-264), "nothing found", what a digest withheld — and
+    // renamed HOL" (CROFT-264), "nothing found", what a digest withheld — and
     // returning stdout alone meant an MCP caller asked for AC-113, got HOL-113
     // and was never told why. The shell caller always saw both.
     const text = [stderr.trim(), stdout.trim()].filter(Boolean).join('\n')
@@ -61,13 +61,13 @@ const cairn = async (args) => {
 
 const TOOLS = [
   {
-    name: 'cairn_check',
+    name: 'croft_check',
     description:
       'ALWAYS CALL THIS FIRST, before starting work on any subject. Returns an index ' +
       'of prior TASKS, work-log NOTES, KNOWLEDGE and SESSIONS — showing whether each ' +
       'carries a recorded answer and roughly what it costs to open. Do not re-debug ' +
-      'something already answered. Open a task row with cairn_show; open a knowledge ' +
-      'row with cairn_know, whose ref is a slug rather than a KEY-123.',
+      'something already answered. Open a task row with croft_show; open a knowledge ' +
+      'row with croft_know, whose ref is a slug rather than a KEY-123.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -87,10 +87,10 @@ const TOOLS = [
     ],
   },
   {
-    name: 'cairn_show',
+    name: 'croft_show',
     description:
       'Full detail of one task, including its resolution if it has one. Takes a task ' +
-      'ref like CAI-42 — for a knowledge slug from cairn_check, use cairn_know.',
+      'ref like CAI-42 — for a knowledge slug from croft_check, use croft_know.',
     inputSchema: {
       type: 'object',
       properties: { ref: { type: 'string', description: 'e.g. CAI-42' } },
@@ -99,7 +99,7 @@ const TOOLS = [
     run: (a) => ['show', a.ref],
   },
   {
-    name: 'cairn_recall',
+    name: 'croft_recall',
     description:
       'What already bears on one task: resolutions, decision and finding notes on the tasks ' +
       'around it (ones that name it, ones it names, parent, sub-tasks, blockers, similar ' +
@@ -117,12 +117,12 @@ const TOOLS = [
     run: (a) => ['recall', a.ref, ...(a.limit !== undefined ? ['--limit', String(a.limit)] : [])],
   },
   {
-    name: 'cairn_know',
+    name: 'croft_know',
     description:
       'Read what is known. With a slug, returns that entry; with a phrase, searches ' +
       'knowledge; with nothing, lists what applies to this project. Knowledge is what ' +
       'outlives the task it was learned on, so this answers "what do we already know ' +
-      'about this" where cairn_check answers "has this been worked on".',
+      'about this" where croft_check answers "has this been worked on".',
     inputSchema: {
       type: 'object',
       properties: {
@@ -156,7 +156,7 @@ const TOOLS = [
           ],
   },
   {
-    name: 'cairn_gaps',
+    name: 'croft_gaps',
     description:
       'Where the memory has holes: entries joined to nothing, references pointing at ' +
       'entries nobody ever wrote, and how many separate islands the corpus has fallen ' +
@@ -180,7 +180,7 @@ const TOOLS = [
     ],
   },
   {
-    name: 'cairn_learn',
+    name: 'croft_learn',
     description:
       'Record something that will still be true next month — infra, a convention, a ' +
       'gotcha. Scope it: project for one codebase, entity for a business or a stack, ' +
@@ -193,7 +193,7 @@ const TOOLS = [
         title: { type: 'string', description: 'The claim itself, as a sentence.' },
         body: { type: 'string', description: 'Markdown: what it means and how it was found.' },
         project: { type: 'string', description: 'True of this project only.' },
-        entity: { type: 'string', description: 'True of this grouping — see cairn_entities.' },
+        entity: { type: 'string', description: 'True of this grouping — see croft_entities.' },
         global: { type: 'boolean', description: 'True everywhere. Say so on purpose.' },
         label: { type: 'string', description: 'Comma-separated labels.' },
         task: { type: 'string', description: 'The task it was learned on, e.g. CAI-42.' },
@@ -226,7 +226,7 @@ const TOOLS = [
     ],
   },
   {
-    name: 'cairn_relearn',
+    name: 'croft_relearn',
     description:
       'Correct a fact that has changed, in place. Prefer this to filing a second ' +
       'entry: the failure mode of every memory store is accumulation without ' +
@@ -238,7 +238,7 @@ const TOOLS = [
         body: { type: 'string', description: 'The corrected body.' },
         title: { type: 'string', description: 'A corrected title, if the claim itself changed.' },
         project: { type: 'string', description: 'Re-scope it to this project only.' },
-        entity: { type: 'string', description: 'Re-scope it to this grouping — see cairn_entities.' },
+        entity: { type: 'string', description: 'Re-scope it to this grouping — see croft_entities.' },
         global: {
           type: 'boolean',
           description:
@@ -277,7 +277,7 @@ const TOOLS = [
     ],
   },
   {
-    name: 'cairn_unlearn',
+    name: 'croft_unlearn',
     description:
       'Mark a fact as superseded — it was wrong, or something replaced it. It stays ' +
       'findable and marked, and ranks below its replacement, so a correction beats ' +
@@ -298,7 +298,7 @@ const TOOLS = [
     ],
   },
   {
-    name: 'cairn_verify',
+    name: 'croft_verify',
     description:
       'Confirm a fact is still true, having actually checked. Clears the stale mark ' +
       'a fact gets when the files it names have been reworked since it was last ' +
@@ -311,15 +311,15 @@ const TOOLS = [
     run: (a) => ['verify', a.slug],
   },
   {
-    name: 'cairn_entities',
+    name: 'croft_entities',
     description:
       'The groupings a fact can be true of — a business, a stack, a subsystem — and ' +
-      'the projects in each. Use before cairn_learn --entity, to find the right key.',
+      'the projects in each. Use before croft_learn --entity, to find the right key.',
     inputSchema: { type: 'object', properties: {} },
     run: () => ['entities'],
   },
   {
-    name: 'cairn_list',
+    name: 'croft_list',
     description: 'List tasks in a project, optionally filtered.',
     inputSchema: {
       type: 'object',
@@ -342,7 +342,7 @@ const TOOLS = [
     ],
   },
   {
-    name: 'cairn_add',
+    name: 'croft_add',
     description:
       'File a new task. Warns if similar work already exists — read that warning ' +
       'before continuing rather than filing a duplicate.',
@@ -378,7 +378,7 @@ const TOOLS = [
     ],
   },
   {
-    name: 'cairn_note',
+    name: 'croft_note',
     description:
       'Append to a task\'s work log: what you tried, found, or decided. Record dead ' +
       'ends too — "tried X, no difference" saves the next agent an hour and is as ' +
@@ -395,7 +395,7 @@ const TOOLS = [
     run: (a) => ['note', a.ref, a.note, ...(a.kind ? ['--kind', a.kind] : [])],
   },
   {
-    name: 'cairn_log',
+    name: 'croft_log',
     description: 'Read a task\'s work log — what has already been tried.',
     inputSchema: {
       type: 'object',
@@ -405,7 +405,7 @@ const TOOLS = [
     run: (a) => ['log', a.ref],
   },
   {
-    name: 'cairn_claim',
+    name: 'croft_claim',
     description:
       'Claim a task before working it, so agents do not collide. If this reports the ' +
       'task is already held, PICK DIFFERENT WORK rather than forcing it.',
@@ -417,7 +417,7 @@ const TOOLS = [
     run: (a) => ['claim', a.ref],
   },
   {
-    name: 'cairn_checkpoint',
+    name: 'croft_checkpoint',
     description:
       'Record where work stopped, so another agent can resume without reading your ' +
       'transcript. Leave one before you stop.',
@@ -429,7 +429,7 @@ const TOOLS = [
     run: (a) => ['checkpoint', a.ref, '--summary', a.summary],
   },
   {
-    name: 'cairn_release',
+    name: 'croft_release',
     description: 'Drop a claim without closing the task.',
     inputSchema: {
       type: 'object',
@@ -439,7 +439,7 @@ const TOOLS = [
     run: (a) => ['release', a.ref],
   },
   {
-    name: 'cairn_done',
+    name: 'croft_done',
     description:
       'Close a task. A resolution is REQUIRED: say what was actually done and why. ' +
       'A closed task with no recorded answer is invisible to everyone who comes later.',
@@ -458,7 +458,7 @@ const TOOLS = [
     run: (a) => ['done', a.ref, '--resolution', a.resolution, ...(a.kind ? ['--kind', a.kind] : [])],
   },
   {
-    name: 'cairn_deps',
+    name: 'croft_deps',
     description:
       'What blocks this task, and what it blocks. Check before claiming — a task ' +
       'with open blockers is not ready to start whatever its status says.',
@@ -470,7 +470,7 @@ const TOOLS = [
     run: (a) => ['deps', a.ref],
   },
   {
-    name: 'cairn_link',
+    name: 'croft_link',
     description:
       'Record that one task must finish before another. Prefer this over writing ' +
       '"waiting on CAI-40" in a note: a link is visible from both tasks.',
@@ -486,7 +486,7 @@ const TOOLS = [
     run: (a) => [a.remove ? 'unblockedby' : 'blockedby', a.ref, a.blockedBy],
   },
   {
-    name: 'cairn_comment',
+    name: 'croft_comment',
     description: 'Leave a comment for the human. Findings for other agents go in the work log.',
     inputSchema: {
       type: 'object',
@@ -498,7 +498,7 @@ const TOOLS = [
 ]
 
 const server = new Server(
-  { name: 'cairn', version: '0.1.0' },
+  { name: 'croft', version: '0.1.0' },
   { capabilities: { tools: {} } },
 )
 
@@ -515,7 +515,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   }
 
-  const { text, isError } = await cairn(tool.run(request.params.arguments ?? {}))
+  const { text, isError } = await croft(tool.run(request.params.arguments ?? {}))
   return { content: [{ type: 'text', text }], isError }
 })
 

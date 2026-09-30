@@ -9,7 +9,7 @@ import { HOLDER, LIVENESS_CASES } from '../../src/lib/liveness-fixtures'
 /**
  * What migration 065 counts, proved against the database.
  *
- * Every number CAIRN-282 checked matched its SQL; the failures were in what
+ * Every number CROFT-282 checked matched its SQL; the failures were in what
  * the SQL could not see. So these cases are the audit's own shapes: a claim
  * kept looking alive by session-end checkpoints (judged by the reaper's own
  * rule, on the cases src/lib/liveness-fixtures.ts shares with it), a reaper that released nothing, the summariser recording itself as a
@@ -20,7 +20,7 @@ const databaseUrl = process.env.DATABASE_URL
 if (!databaseUrl) throw new Error('DATABASE_URL is required for integration tests')
 
 const freshDatabase = async () => {
-  const name = `cairn_signals_${randomUUID().replaceAll('-', '')}`
+  const name = `croft_signals_${randomUUID().replaceAll('-', '')}`
   const admin = new Client({ connectionString: databaseUrl })
   await admin.connect()
   await admin.query(`create database "${name}"`)
@@ -67,7 +67,7 @@ const MAC_CWD = cwd('/Users', 'dev', 'code')
 const SERVER_CWD = cwd('/home', 'dev', 'work')
 const ROOT_CWD = cwd('/root', 'workspace')
 
-describe('cairn_vitals_signals', () => {
+describe('croft_vitals_signals', () => {
   let client: Client
   let user: string
   let project: string
@@ -116,7 +116,7 @@ describe('cairn_vitals_signals', () => {
    */
   const setUpdated = async (taskId: string, hoursAgo: number) => {
     await client.query('begin')
-    await client.query(`select set_config('cairn.keep_updated_at', 'on', true)`)
+    await client.query(`select set_config('croft.keep_updated_at', 'on', true)`)
     await client.query(
       `update tasks set updated_at = now() - make_interval(hours => $2::int) where id = $1`,
       [taskId, hoursAgo],
@@ -160,7 +160,7 @@ describe('cairn_vitals_signals', () => {
     )
 
   const signals = async (hours = 24) => {
-    const { rows } = await client.query('select cairn_vitals_signals($1, $2) as v', [user, hours])
+    const { rows } = await client.query('select croft_vitals_signals($1, $2) as v', [user, hours])
     return rows[0].v as Signals
   }
 
@@ -273,7 +273,7 @@ describe('cairn_vitals_signals', () => {
       hoursAgo: 1,
       request: 'You are writing one entry in an engineering memory that other agents read months later.',
     })
-    // Another tool's summariser, the same run under another name (CAIRN-321).
+    // Another tool's summariser, the same run under another name (CROFT-321).
     await session({ platform: 'claude', cwd: MAC_CWD, hoursAgo: 1, request: '  You are writing one entry in a sales memory.' })
 
     const v = await signals()

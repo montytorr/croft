@@ -17,7 +17,7 @@ const actor = {
 }
 
 const context = (query: string) => GET(
-  new Request(`https://cairn.example.test/api/v1/context?${query}`),
+  new Request(`https://croft.example.test/api/v1/context?${query}`),
   { params: Promise.resolve({}) },
 )
 

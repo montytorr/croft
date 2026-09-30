@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * Security review F1: when a project moves between Cairn instances, the copy
+ * Security review F1: when a project moves between Croft instances, the copy
  * left behind is archived. Before this, nothing stopped a CLI still routed to
  * that instance by a stale cache from closing, noting or claiming a task in
  * it — reads were refused nowhere, but neither were writes. This is that gap,
@@ -31,7 +31,7 @@ import { POST as createTask, GET as listTasks } from '@/app/api/v1/projects/[id]
 const databaseUrl = process.env.DATABASE_URL
 if (!databaseUrl) throw new Error('DATABASE_URL is required for integration tests')
 
-const ORIGIN = 'https://cairn.example.test'
+const ORIGIN = 'https://croft.example.test'
 const ownerId = randomUUID()
 const projectId = randomUUID()
 const KEY = `AR${String(Date.now()).slice(-6)}`

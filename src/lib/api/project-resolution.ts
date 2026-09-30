@@ -4,8 +4,8 @@ import { normaliseRemote, projectKeyFromEmbed, projectKeyFromRepoRows, type Repo
 /**
  * Which project a working directory belongs to, from what the server holds.
  *
- * The caller knows its filesystem and should say — `cairn context` and
- * `cairn session end` send the local map's answer and the checkout's remote.
+ * The caller knows its filesystem and should say — `croft context` and
+ * `croft session end` send the local map's answer and the checkout's remote.
  * These are the fallbacks for when it does not, shared by the briefing and the
  * session recorder so the two cannot disagree about where a directory lives.
  */
@@ -36,7 +36,7 @@ export const projectForRepo = async (_userId: string, remote: string): Promise<s
  *
  * Only once one of them has a project, though, and for the first months of
  * the session recorder none did: nothing ever sent a project, so this lookup
- * had nothing to find and every live session stayed unattributed (CAIRN-286).
+ * had nothing to find and every live session stayed unattributed (CROFT-286).
  */
 export const projectForCwd = async (_userId: string, cwd: string): Promise<string | null> => {
   const { data, error } = await admin()
@@ -88,7 +88,7 @@ export const projectKeyForCheckoutName = (
 /**
  * The last resort, for a caller that sent neither a project nor a remote: an
  * older CLI, or a recorder whose cwd has no git in reach. A server checkout
- * such as `~/cairn` is a checkout of `github.com/montytorr/cairn`, and nothing else on the
+ * such as `~/croft` is a checkout of `github.com/montytorr/croft`, and nothing else on the
  * server says so.
  *
  * Inference, so it only answers when one project does. Two projects with a

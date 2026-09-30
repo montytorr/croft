@@ -29,7 +29,7 @@ export type Actor = {
    */
   sessionId: string | null
   /**
-   * Which machine the caller says it is on, when it says (CAIRN-290).
+   * Which machine the caller says it is on, when it says (CROFT-290).
    *
    * Key names are per runtime, not per machine, so a laptop and a server
    * write the same `actorId` and a misattributed write cannot be traced to
@@ -58,14 +58,14 @@ export type Actor = {
  * sanitised, since a session id we cannot trust is no better than none.
  */
 const sessionOf = (req: Request): string | null => {
-  const raw = req.headers.get('x-cairn-session')?.trim()
+  const raw = req.headers.get('x-croft-session')?.trim()
   if (!raw || raw.length > 100) return null
   return /^[A-Za-z0-9._:-]+$/.test(raw) ? raw : null
 }
 
 /** Same filter as the session id, for the same reason: it is stored and shown. */
 export const hostOf = (req: Request): string | null => {
-  const raw = req.headers.get('x-cairn-host')?.trim()
+  const raw = req.headers.get('x-croft-host')?.trim()
   if (!raw || raw.length > 100) return null
   return /^[A-Za-z0-9._-]+$/.test(raw) ? raw : null
 }

@@ -21,9 +21,9 @@ const PAGE = 80
 /**
  * Everything that happened, newest first.
  *
- * Every other read in Cairn starts from a thing — a task, a project, a file.
+ * Every other read in Croft starts from a thing — a task, a project, a file.
  * This one starts from the day, which is the question a person has after a
- * stretch of agents working: not "what is the state of CAIRN-64" but "what did
+ * stretch of agents working: not "what is the state of CROFT-64" but "what did
  * they all do".
  */
 const ActivityPage = async ({

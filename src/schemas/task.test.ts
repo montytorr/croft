@@ -25,7 +25,7 @@ describe('createTaskSchema', () => {
   })
 })
 
-describe('createTaskSchema: bug and spike bodies (CAIRN-291)', () => {
+describe('createTaskSchema: bug and spike bodies (CROFT-291)', () => {
   const report = 'Clicking save drops the draft; expected it to persist. Repro: edit, save, reload.'
 
   it.each(['bug', 'spike'])('refuses a %s with no body, on the description field', (type) => {

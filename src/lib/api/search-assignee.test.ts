@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * `cairn check --assignee` (CAIRN-310).
+ * `croft check --assignee` (CROFT-310).
  *
  * `search_tasks` applies its limit inside the ranking, so narrowing its answer
  * afterwards would hand back two of someone's tasks out of twenty hits rather
@@ -46,7 +46,7 @@ const row = (number: number, widened = false) => ({
   claimed_by: null,
   updated_at: '2026-09-21T00:00:00.000Z',
   external_ref: null,
-  project_key: 'CAIRN',
+  project_key: 'CROFT',
   rank: 1,
   coverage: 1,
   widened,

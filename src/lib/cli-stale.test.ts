@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 
 /**
- * A stale CLI used to confess only to `cairn --version`, which is the one
+ * A stale CLI used to confess only to `croft --version`, which is the one
  * command an agent has no reason to run. Every response now carries the
  * version that served it, so an ordinary call says so.
  *
@@ -27,8 +27,8 @@ const serve = (version: string | null, cli?: string | null) =>
   new Promise<string>((resolve) => {
     const server = createServer((_req, res) => {
       const headers: Record<string, string> = { 'content-type': 'application/json' }
-      if (version) headers['x-cairn-version'] = version
-      if (cli) headers['x-cairn-cli'] = cli
+      if (version) headers['x-croft-version'] = version
+      if (cli) headers['x-croft-cli'] = cli
       res.writeHead(200, headers)
       res.end(JSON.stringify({ success: true, data: [] }))
     })
@@ -37,11 +37,11 @@ const serve = (version: string | null, cli?: string | null) =>
   })
 
 const runCli = async (base: string) => {
-  const home = await mkdtemp(join(tmpdir(), 'cairn-stale-'))
+  const home = await mkdtemp(join(tmpdir(), 'croft-stale-'))
   directories.push(home)
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-    const child = spawn('node', ['cli/cairn.mjs', 'projects'], {
-      env: { ...process.env, HOME: home, CAIRN_BASE_URL: base, CAIRN_API_KEY: 'test-key' },
+    const child = spawn('node', ['cli/croft.mjs', 'projects'], {
+      env: { ...process.env, HOME: home, CROFT_BASE_URL: base, CROFT_API_KEY: 'test-key' },
     })
     let stdout = ''
     let stderr = ''
@@ -76,7 +76,7 @@ describe('a stale CLI on the ordinary path', () => {
 })
 
 /**
- * The version check is nearly inert on its own, which is CAIRN-261. Releases
+ * The version check is nearly inert on its own, which is CROFT-261. Releases
  * are cut by hand and 133 commits fitted inside v0.5.1, so the copy this was
  * found on was two features behind while both sides reported the same number
  * and nothing could fire. The fingerprint is the part that catches that.
@@ -86,7 +86,7 @@ describe('a CLI that is the right release and the wrong file', () => {
     JSON.parse(readFileSync('package.json', 'utf8')).version as string
 
   const ownFingerprint = () =>
-    createHash('sha256').update(readFileSync('cli/cairn.mjs')).digest('hex').slice(0, 16)
+    createHash('sha256').update(readFileSync('cli/croft.mjs')).digest('hex').slice(0, 16)
 
   it('says so when the release agrees and the fingerprint does not', async () => {
     const { stdout, stderr } = await runCli(await serve(release(), '0123456789abcdef'))

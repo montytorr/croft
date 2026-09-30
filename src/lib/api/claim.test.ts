@@ -4,7 +4,7 @@ import { isAnotherSessionsClaim, shouldClaimByWorking } from './claim'
 /**
  * Writing to a task's work log is working on it.
  *
- * 36% of recently closed tasks across CAIRN, OD and QRY were never claimed, so
+ * 36% of recently closed tasks across CROFT, OD and QRY were never claimed, so
  * they never showed as In Progress while somebody was on them. The cause is
  * structural: nothing cost anything when it was skipped, so an agent could
  * note, checkpoint and close an unclaimed task and never perceive a

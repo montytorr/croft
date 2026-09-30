@@ -46,8 +46,8 @@ export const normalizeDatabaseValue = (value: unknown): unknown => {
 }
 
 const runtime = globalThis as typeof globalThis & {
-  __cairnPool?: Pool
-  __cairnJsonColumns?: Promise<Set<string>>
+  __croftPool?: Pool
+  __croftJsonColumns?: Promise<Set<string>>
 }
 
 /**
@@ -68,14 +68,14 @@ const runtime = globalThis as typeof globalThis & {
  * to see.
  */
 const jsonColumns = (): Promise<Set<string>> => {
-  runtime.__cairnJsonColumns ??= pool()
+  runtime.__croftJsonColumns ??= pool()
     .query(
       `select table_name, column_name from information_schema.columns
        where table_schema = 'public' and data_type in ('json', 'jsonb')`,
     )
     .then((result) => new Set(result.rows.map((row) => `${row.table_name}.${row.column_name}`)))
     .catch(() => new Set<string>())
-  return runtime.__cairnJsonColumns
+  return runtime.__croftJsonColumns
 }
 
 /** Bind one value, serialising it where the column expects JSON. */
@@ -107,19 +107,19 @@ const pgTypes = {
 }
 
 export const pool = () => {
-  if (!runtime.__cairnPool) {
-    runtime.__cairnPool = new Pool({
+  if (!runtime.__croftPool) {
+    runtime.__croftPool = new Pool({
       connectionString: connectionString(),
       max: Number(process.env.DATABASE_POOL_SIZE || 10),
       connectionTimeoutMillis: 5_000,
       idleTimeoutMillis: 30_000,
       statement_timeout: Number(process.env.DATABASE_STATEMENT_TIMEOUT_MS || 15_000),
-      application_name: 'cairn',
+      application_name: 'croft',
       types: pgTypes,
     })
-    runtime.__cairnPool.on('error', (error) => console.error('[db] idle client error', error))
+    runtime.__croftPool.on('error', (error) => console.error('[db] idle client error', error))
   }
-  return runtime.__cairnPool
+  return runtime.__croftPool
 }
 
 const FILTER_OPERATORS: Record<string, string> = {

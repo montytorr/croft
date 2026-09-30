@@ -26,7 +26,7 @@
  *
  * On this project that wrapper pointed into a checkout under /root on a machine
  * where the runtime registering the server does not run as root. The directory
- * is 0700, so `cairn-mcp` answered MODULE_NOT_FOUND and the registered server
+ * is 0700, so `croft-mcp` answered MODULE_NOT_FOUND and the registered server
  * simply never started — for a runtime whose config named it correctly, from a
  * file that looked right in every listing. The checkout was also a second one
  * nothing kept up to date, so where it did resolve it served older code.
@@ -47,11 +47,11 @@ const SOURCE = join(HERE, '..', 'mcp')
 const env = (name, fallback) => process.env[name] ?? fallback
 
 /** Where the facade and its node_modules live. */
-const DIR = resolve(env('CAIRN_MCP_DIR', '/opt/cairn-mcp'))
+const DIR = resolve(env('CROFT_MCP_DIR', '/opt/croft-mcp'))
 /** The name runtimes are configured with, which must be on PATH. */
-const BIN = resolve(env('CAIRN_MCP_BIN', '/usr/local/bin/cairn-mcp'))
-/** The CLI the facade shells out to, if it is not simply `cairn` on PATH. */
-const CAIRN_BIN = env('CAIRN_BIN', '')
+const BIN = resolve(env('CROFT_MCP_BIN', '/usr/local/bin/croft-mcp'))
+/** The CLI the facade shells out to, if it is not simply `croft` on PATH. */
+const CROFT_BIN = env('CROFT_BIN', '')
 
 const INSTALL = process.argv.includes('--install')
 const REMOVE = process.argv.includes('--remove')
@@ -60,7 +60,7 @@ const MANAGED = '# Managed by scripts/install-mcp.mjs — edits will be overwrit
 
 const wrapper = () => `#!/bin/sh
 ${MANAGED}
-${CAIRN_BIN ? `CAIRN_BIN=${CAIRN_BIN}\nexport CAIRN_BIN\n` : ''}exec node ${join(DIR, 'server.mjs')} "$@"
+${CROFT_BIN ? `CROFT_BIN=${CROFT_BIN}\nexport CROFT_BIN\n` : ''}exec node ${join(DIR, 'server.mjs')} "$@"
 `
 
 /**
@@ -98,7 +98,7 @@ const requireRoot = (action) => {
   } catch {
     console.error(`--${action} writes to ${DIR} and ${BIN}, which need root here.\n`)
     console.error(`  sudo -E node scripts/install-mcp.mjs --${action}\n`)
-    console.error('-E keeps CAIRN_MCP_DIR, CAIRN_MCP_BIN and CAIRN_BIN, which sudo drops.')
+    console.error('-E keeps CROFT_MCP_DIR, CROFT_MCP_BIN and CROFT_BIN, which sudo drops.')
     process.exit(1)
   }
 }
@@ -119,10 +119,10 @@ if (!INSTALL) {
   console.log(`\nwould write ${BIN}:\n`)
   console.log(wrapper())
   console.log('then register it with the runtimes that want native tools:\n')
-  console.log('  claude mcp add cairn -- cairn-mcp          # Claude Code')
+  console.log('  claude mcp add croft -- croft-mcp          # Claude Code')
   console.log('  # Codex, in ~/.codex/config.toml:')
-  console.log('  #   [mcp_servers.cairn]')
-  console.log('  #   command = "cairn-mcp"')
+  console.log('  #   [mcp_servers.croft]')
+  console.log('  #   command = "croft-mcp"')
   console.log('  #   startup_timeout_sec = 10')
   console.log('  #   tool_timeout_sec = 60')
   console.log('\nnothing was changed. --install to do it.')
@@ -168,12 +168,12 @@ if (bad.length > 0) {
   for (const line of bad) console.error(`  ${line}`)
   console.error(
     '\nA runtime running as another user will get MODULE_NOT_FOUND and the\n' +
-      'server will never start. Set CAIRN_MCP_DIR somewhere world-readable,\n' +
+      'server will never start. Set CROFT_MCP_DIR somewhere world-readable,\n' +
       'or open up the path above.',
   )
   process.exit(1)
 }
 
 console.log('\nreachable by other accounts. Register it:')
-console.log('  claude mcp add cairn -- cairn-mcp')
-console.log('  # Codex: [mcp_servers.cairn] command = "cairn-mcp"')
+console.log('  claude mcp add croft -- croft-mcp')
+console.log('  # Codex: [mcp_servers.croft] command = "croft-mcp"')

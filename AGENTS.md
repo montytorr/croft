@@ -1,6 +1,6 @@
-# Cairn — agent guide
+# Croft — agent guide
 
-Cairn is a self-hosted task tracker whose tasks **are** the shared memory for the agents
+Croft is a self-hosted task tracker whose tasks **are** the shared memory for the agents
 working on a codebase. Anything you learn, try, or fix belongs here, because the next
 agent — or the human, six weeks from now — will look here first.
 
@@ -13,21 +13,21 @@ Read this whole file. It is short on purpose.
 **Before beginning work on any subject, run:**
 
 ```bash
-cairn check "supabase pooler connection timeouts"
+croft check "supabase pooler connection timeouts"
 ```
 
 You get back an index of prior work — open *and* closed — with whether each has a
 recorded answer, and roughly what it costs to read. Open the one or two that look
-relevant. **Do not re-debug something that has already been answered.** `cairn add` runs
+relevant. **Do not re-debug something that has already been answered.** `croft add` runs
 the same query and warns before you file a near-duplicate. Write the body as markdown —
 `##` headings, lists, code in backticks: the API refuses an agent's wall of text.
 
 ## 2. The retrieval contract: check → show → act
 
 ```bash
-cairn check "flaky auth redirect"     # 1. index of ids + one-liners. Cheap.
-cairn show ACME-42                     # 2. digest of the ones that matter (--full: all).
-cairn note ACME-42 "..."               # 3. act, and record what you did.
+croft check "flaky auth redirect"     # 1. index of ids + one-liners. Cheap.
+croft show ACME-42                     # 2. digest of the ones that matter (--full: all).
+croft note ACME-42 "..."               # 3. act, and record what you did.
 ```
 
 Never fetch bodies in bulk to browse them: the index exists so you can decide what is
@@ -44,9 +44,9 @@ Three different things, three different places:
 | **resolution** | The task is finished — required on close | Everyone, later |
 
 ```bash
-cairn note ACME-42 --kind attempt  "Bumped pool_size to 30; no change under load."
-cairn note ACME-42 --kind finding  "supavisor caps at default 15 regardless of client."
-cairn note ACME-42 --kind decision "Sticking with supavisor; direct connections break PgBouncer."
+croft note ACME-42 --kind attempt  "Bumped pool_size to 30; no change under load."
+croft note ACME-42 --kind finding  "supavisor caps at default 15 regardless of client."
+croft note ACME-42 --kind decision "Sticking with supavisor; direct connections break PgBouncer."
 ```
 
 **A recorded dead end is as valuable as a fix.** "Tried X, made no difference" saves the
@@ -55,7 +55,7 @@ next agent an hour. Write it down even though it failed — *especially* because
 ## 4. Closing a task requires a resolution
 
 ```bash
-cairn done ACME-42 --resolution "Raised supavisor pool_size to 40; the default 15 was the cap."
+croft done ACME-42 --resolution "Raised supavisor pool_size to 40; the default 15 was the cap."
 ```
 
 The API rejects `done` or `cancelled` with no resolution: a closed task with no record of
@@ -66,13 +66,13 @@ fix was already there and you checked.
 ## 5. Claiming work, so three agents don't collide
 
 ```bash
-cairn claim ACME-42        # exit 9 if another agent holds it
-cairn beat ACME-42         # keep the claim alive during long work
-cairn checkpoint ACME-42 --summary "migration written, tests not yet run"
-cairn release ACME-42      # or: cairn done ACME-42 --resolution "..."
+croft claim ACME-42        # exit 9 if another agent holds it
+croft beat ACME-42         # keep the claim alive during long work
+croft checkpoint ACME-42 --summary "migration written, tests not yet run"
+croft release ACME-42      # or: croft done ACME-42 --resolution "..."
 ```
 
-- **`claim` sets the status to `doing`.** From an agent runtime `cairn add` claims by
+- **`claim` sets the status to `doing`.** From an agent runtime `croft add` claims by
   default (`--no-start` only files); it holds back, and says why, when similar open work
   exists or you already hold a task in that project.
 - **Sweeping a backlog: one claimed task per sweep.** Claim the triage task; `note`,
@@ -80,7 +80,7 @@ cairn release ACME-42      # or: cairn done ACME-42 --resolution "..."
 - **A checkpoint claims an unheld task for you**; a note does not, so annotating a
   backlog stays annotation. It never steals a live claim, never reopens closed work.
 - `in-review` is for written-but-not-landed: unmerged, or merged and undeployed.
-- `cairn commit|push|run` record what you shipped or ran; they execute nothing.
+- `croft commit|push|run` record what you shipped or ran; they execute nothing.
 - A claim is execution state: a task can be `doing` and unclaimed (a human is on it).
 - **A claim is not ownership.** Every task has a human assignee: by default the human
   behind your key; `add|update --assignee <email|name>` gives it to someone else. The
@@ -100,7 +100,7 @@ cairn release ACME-42      # or: cairn done ACME-42 --resolution "..."
 - **priority** — `urgent | high | medium | low`
 - **note kind** — `note | finding | decision | attempt | handoff`
 - **resolution kind** — `fixed | verified | answered | wont-fix | duplicate | not-reproducible | superseded`
-- **assignee** — the human who owns it (`cairn people`); **held** — the agent executing it now
+- **assignee** — the human who owns it (`croft people`); **held** — the agent executing it now
 
 Tasks are referred to as `ACME-42` (project key + number). Use that form in prose; it stays
 resolvable in a transcript long after the fact.
@@ -110,15 +110,15 @@ resolvable in a transcript long after the fact.
 **Knowledge** — what we now know, outliving the task it was learned in.
 
 ```bash
-cairn know                          # what applies here
-cairn know <slug>                   # read it
-cairn learn "<title>" --body -      # scoped to this dir's project by default
-cairn relearn <slug> --body -       # it changed
-cairn unlearn <slug> --superseded-by <new-slug>
+croft know                          # what applies here
+croft know <slug>                   # read it
+croft learn "<title>" --body -      # scoped to this dir's project by default
+croft relearn <slug> --body -       # it changed
+croft unlearn <slug> --superseded-by <new-slug>
 ```
 
 Three scopes, narrowest first: `--project ACME`, `--entity acme` (a business, a stack, a
-subsystem — `cairn entities`), and `--global`. With none, `learn` takes this directory's
+subsystem — `croft entities`), and `--global`. With none, `learn` takes this directory's
 project and refuses where there is none. Correct knowledge (`relearn`, `unlearn`, `verify`)
 rather than adding a second, contradictory claim. Secrets are refused on every write.
 
@@ -126,10 +126,10 @@ rather than adding a second, contradictory claim. Secrets are refused on every w
 the session worked on, but never over a checkpoint you wrote on a claim it cannot prove is
 its own — your own checkpoint is the handoff that counts.
 
-**The briefing** is `cairn context` — what you hold, what is in flight, your human's work
+**The briefing** is `croft context` — what you hold, what is in flight, your human's work
 nobody is on, where the last session here stopped, what is known here. A hook runs it at session
-start. `cairn next` says what to pick up and why — your human's work first; another
-person's says whose. `cairn map <KEY>` tells Cairn which project a checkout is — once per
+start. `croft next` says what to pick up and why — your human's work first; another
+person's says whose. `croft map <KEY>` tells Croft which project a checkout is — once per
 repository; clones and worktrees follow.
 
 ## 8. Before you stop
@@ -148,21 +148,21 @@ The session record is written for you. These are the things nothing can do for y
 - Lists are TSV by default: a count line, one header row, then rows; nulls omitted.
   `--json` to parse, `--pretty` for a human. Errors name the valid values.
 
-## 10. What Cairn is not
+## 10. What Croft is not
 
-Cairn holds **open loops, durable answers, and what was learned getting to them**: what
+Croft holds **open loops, durable answers, and what was learned getting to them**: what
 should happen, who holds it, what was tried, how it ended, and what is now known.
 
 It is not a transcript: it records what a session concluded, never what was said turn by
-turn. "What did we decide and why" is a Cairn question; "what did I type at 11:04" is not.
+turn. "What did we decide and why" is a Croft question; "what did I type at 11:04" is not.
 
 ## Setup
 
 ```bash
-cairn setup --url https://cairn.example.com   # a person, once per machine
+croft setup --url https://croft.example.com   # a person, once per machine
 ```
 
-It pairs a key per runtime — `CAIRN_API_KEY_CODEX`, `CAIRN_API_KEY_CLAUDE_CODE` — because
+It pairs a key per runtime — `CROFT_API_KEY_CODEX`, `CROFT_API_KEY_CLAUDE_CODE` — because
 the key *is* the identity.
 
-Full verb reference: `cairn --help`. Machine-readable API: `GET /api/v1/openapi.json`.
+Full verb reference: `croft --help`. Machine-readable API: `GET /api/v1/openapi.json`.

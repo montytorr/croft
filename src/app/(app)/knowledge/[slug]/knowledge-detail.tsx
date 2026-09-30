@@ -30,7 +30,7 @@ type Row = {
   sourceTask: { ref: string; title: string } | null
 }
 
-/** A version an edit replaced, and the edit that replaced it (CAIRN-266). */
+/** A version an edit replaced, and the edit that replaced it (CROFT-266). */
 type Revision = {
   revision: number
   title: string
@@ -340,7 +340,7 @@ export const KnowledgeDetail = ({
               <time dateTime={current.createdAt} title={fullDateTime(current.createdAt)}>
                 first written {shortDate(current.createdAt)}
               </time>
-              {/* How often it is handed to anyone (CAIRN-270), and what that
+              {/* How often it is handed to anyone (CROFT-270), and what that
                   leaves out — a fact the briefing shows daily would otherwise
                   read as unused. */}
               <span className="tabular-nums" title={`Last ${recall.days} days: ${recall.counted}.`}>

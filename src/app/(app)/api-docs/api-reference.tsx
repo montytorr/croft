@@ -6,7 +6,7 @@ import { useEffect, useRef } from 'react'
  * Mounts the Scalar reference, and — the part that matters — unmounts it.
  *
  * Scalar is a full application, not a widget: it binds its own ⌘K palette to
- * the document. Cairn binds ⌘K too, so leaving this page without tearing
+ * the document. Croft binds ⌘K too, so leaving this page without tearing
  * Scalar down meant the API endpoint search kept opening over every other page
  * in the app. Nothing looked broken on /api-docs itself; the damage was
  * everywhere else, which is the usual shape of a leak in a single-page app.

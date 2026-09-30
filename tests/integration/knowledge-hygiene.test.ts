@@ -6,7 +6,7 @@ import { recallCounts } from '@/lib/api/knowledge-use'
 import type { Actor } from '@/lib/api/auth'
 
 /**
- * 064 (CAIRN-289): provenance, sweep-proof recall and length-fair ranking,
+ * 064 (CROFT-289): provenance, sweep-proof recall and length-fair ranking,
  * against the installed SQL.
  */
 

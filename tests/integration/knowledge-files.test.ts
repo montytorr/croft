@@ -7,7 +7,7 @@ import { filesNamedIn, stalenessFor } from '@/lib/api/staleness'
 import type { Actor } from '@/lib/api/auth'
 
 /**
- * Knowledge-to-file links (CAIRN-269), against the installed trigger.
+ * Knowledge-to-file links (CROFT-269), against the installed trigger.
  *
  * The body rule exists twice — `filesNamedIn` for reading, `knowledge_paths_in`
  * for the trigger that stores links — so the first thing held here is that
@@ -78,8 +78,8 @@ afterAll(async () => {
 
 describe('knowledge_paths_in agrees with filesNamedIn', () => {
   const bodies = [
-    'see `src/lib/api/staleness.ts` and `~/.cairn/projects.json`',
-    'not `cairn check`, not `owner/repo`, not `README`',
+    'see `src/lib/api/staleness.ts` and `~/.croft/projects.json`',
+    'not `croft check`, not `owner/repo`, not `README`',
     '`./scripts/migrate.ts` and `../up/one.md` and `/etc/hosts.conf`',
     '`  padded/path/file.tsx  ` with spaces around it',
     '```sql\nselect 1 from `a/b.sql`\n```',

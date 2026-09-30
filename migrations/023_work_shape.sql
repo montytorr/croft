@@ -1,7 +1,7 @@
 -- Where the work is stuck, rather than who did the most of it.
 --
 -- The tempting version of this is a leaderboard: tasks closed per agent,
--- writes per agent. It would be actively harmful. The agents read Cairn -- it
+-- writes per agent. It would be actively harmful. The agents read Croft -- it
 -- is their working memory, and the skill tells them to close with a resolution
 -- -- so a visible closure score creates an incentive to close things, which is
 -- the one behaviour least worth optimising. A resolution written to move a
@@ -10,7 +10,7 @@
 -- So: no ranking. Per agent, only what is actionable -- what it is holding now
 -- and what it walked away from. The rest is about the work itself.
 
-create or replace function cairn_work_shape(p_owner uuid, p_hours int default 24)
+create or replace function croft_work_shape(p_owner uuid, p_hours int default 24)
 returns jsonb
 language sql
 stable

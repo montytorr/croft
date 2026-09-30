@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 /**
  * `install-cron.mjs --run <job>` is what closes the gap between a push-based
- * deploy and a pull-based hourly sync (CAIRN-257): the deploy asks for the job
+ * deploy and a pull-based hourly sync (CROFT-257): the deploy asks for the job
  * that is already scheduled rather than restating it. So what is worth pinning
  * is exactly that — that the command it runs is the one in the schedule, and
  * that the two documented overrides are the only differences it makes.
@@ -49,9 +49,9 @@ const markers = () => {
 
 /** The shape of a real `--also` list: another account's tree, and a hook. */
 const alsoTargets = (base: string) => [
-  `skill=${base}/another-account/.claude/skills/cairn/SKILL.md`,
-  `skill=${base}/another-runtime/skills/cairn/SKILL.md`,
-  `hook:context=${base}/another-account/.cairn/hooks/cairn-context.mjs`,
+  `skill=${base}/another-account/.claude/skills/croft/SKILL.md`,
+  `skill=${base}/another-runtime/skills/croft/SKILL.md`,
+  `hook:context=${base}/another-account/.croft/hooks/croft-context.mjs`,
 ]
 
 const alsoFlags = (base: string) => alsoTargets(base).flatMap((target) => ['--also', target])
@@ -59,7 +59,7 @@ const alsoFlags = (base: string) => alsoTargets(base).flatMap((target) => ['--al
 const RECORDER = `import { writeFileSync } from 'node:fs'
 writeFileSync(process.env.RECORD, JSON.stringify({
   args: process.argv.slice(2),
-  agent: process.env.CAIRN_AGENT ?? null,
+  agent: process.env.CROFT_AGENT ?? null,
 }))
 `
 
@@ -69,7 +69,7 @@ writeFileSync(process.env.RECORD, JSON.stringify({
  * schedule fields, an environment assignment, the command, and the redirect.
  */
 const setUp = async (syncArgs: (base: string) => string[]) => {
-  const directory = await mkdtemp(join(tmpdir(), 'cairn-run-job-test-'))
+  const directory = await mkdtemp(join(tmpdir(), 'croft-run-job-test-'))
   temporaryDirectories.push(directory)
 
   const bin = join(directory, 'bin')
@@ -91,10 +91,10 @@ if [ "$1" = "-l" ]; then cat "$FAKE_CRONTAB"; else cat > /dev/null; fi
     '17 3 * * * /usr/bin/someone-elses-backup',
     begin,
     '# reconcile: Releases claims an agent stopped working on, and moves the task back to todo.',
-    '*/30 * * * * CAIRN_AGENT=maintenance /usr/local/bin/cairn reconcile >> /var/log/cairn-reconcile.log 2>&1',
+    '*/30 * * * * CROFT_AGENT=maintenance /usr/local/bin/croft reconcile >> /var/log/croft-reconcile.log 2>&1',
     '# agent-files: Repairs the skill, CLI and hooks wherever a runtime reads a stale copy.',
-    `23 * * * * CAIRN_AGENT=maintenance ${process.execPath} ${recorder} ` +
-      `${syncArgs(directory).join(' ')} >> /var/log/cairn-agent-files.log 2>&1`,
+    `23 * * * * CROFT_AGENT=maintenance ${process.execPath} ${recorder} ` +
+      `${syncArgs(directory).join(' ')} >> /var/log/croft-agent-files.log 2>&1`,
     end,
     '',
   ].join('\n'))
@@ -115,7 +115,7 @@ if [ "$1" = "-l" ]; then cat "$FAKE_CRONTAB"; else cat > /dev/null; fi
 const scheduledArgs = (base: string) => [
   '--source', 'https://raw.example/main',
   ...alsoFlags(base),
-  '--notify', 'CAIRN-107',
+  '--notify', 'CROFT-107',
 ]
 
 afterEach(async () => {
@@ -186,7 +186,7 @@ describe('install-cron --run', () => {
     // installer and then parsed by --run, so a change to either half that the
     // other does not follow fails here. That is the whole claim this file makes
     // about a job having one definition.
-    const directory = await mkdtemp(join(tmpdir(), 'cairn-run-plist-test-'))
+    const directory = await mkdtemp(join(tmpdir(), 'croft-run-plist-test-'))
     temporaryDirectories.push(directory)
     const recorded = join(directory, 'recorded.json')
     const recorder = join(directory, 'recorder.mjs')
@@ -196,20 +196,20 @@ describe('install-cron --run', () => {
       ...process.env,
       HOME: directory,
       RECORD: recorded,
-      CAIRN_NODE_PATH: process.execPath,
-      CAIRN_SYNC_SCRIPT: recorder,
-      CAIRN_LOG_DIR: directory,
-      CAIRN_RAW_BASE: 'https://raw.example/main',
-      CAIRN_NOTIFY_FILES: 'CAIRN-107',
-      CAIRN_SYNC_ALSO: alsoTargets(directory).join(','),
+      CROFT_NODE_PATH: process.execPath,
+      CROFT_SYNC_SCRIPT: recorder,
+      CROFT_LOG_DIR: directory,
+      CROFT_RAW_BASE: 'https://raw.example/main',
+      CROFT_NOTIFY_FILES: 'CROFT-107',
+      CROFT_SYNC_ALSO: alsoTargets(directory).join(','),
     }
 
     const printed = await run(['--only', 'agent-files', '--launchd'], environment)
     const plist = printed.stdout.slice(printed.stdout.indexOf('<?xml'), printed.stdout.indexOf('</plist>') + 9)
-    expect(plist).toContain('com.cairn.agent-files')
+    expect(plist).toContain('com.croft.agent-files')
 
     await mkdir(join(directory, 'Library/LaunchAgents'), { recursive: true })
-    await writeFile(join(directory, 'Library/LaunchAgents/com.cairn.agent-files.plist'), plist)
+    await writeFile(join(directory, 'Library/LaunchAgents/com.croft.agent-files.plist'), plist)
 
     const result = await run(
       ['--run', 'agent-files', '--launchd', '--source', directory, '--no-notify'],

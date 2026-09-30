@@ -76,13 +76,13 @@ describe('createConnectRequest', () => {
       host: 'macbook',
       runtimes: ['claude-code'],
       clientAddress: '203.0.113.4',
-      baseUrl: 'https://cairn.example.test',
+      baseUrl: 'https://croft.example.test',
     })
 
     expect(result.expiresIn).toBe(600)
     expect(result.interval).toBe(3)
     expect(result.userCode).toMatch(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/)
-    expect(result.verificationUrl).toBe(`https://cairn.example.test/connect/${result.userCode}`)
+    expect(result.verificationUrl).toBe(`https://croft.example.test/connect/${result.userCode}`)
     // Only its hash is ever persisted.
     const insertCall = mocks.query.mock.calls[1]!
     expect(String(insertCall[0])).toContain('insert into connect_requests')
@@ -100,7 +100,7 @@ describe('createConnectRequest', () => {
       host: 'macbook',
       runtimes: ['claude-code'],
       clientAddress: '203.0.113.4',
-      baseUrl: 'https://cairn.example.test',
+      baseUrl: 'https://croft.example.test',
     })
 
     expect(result.userCode).toMatch(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/)

@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 
 /**
- * `cairn vitals` is how an agent asks whether the memory is being used. The
+ * `croft vitals` is how an agent asks whether the memory is being used. The
  * numbers existed and were rendered only on a web page — the one place the
  * population they measure cannot look. So this asserts what lands in a
  * terminal, and that a missing block does not take the monitor down with it.
@@ -55,13 +55,13 @@ const serve = (body: unknown, posted: Posted[]) =>
   })
 
 const run = async (body: unknown, args: string[]) => {
-  const home = await mkdtemp(join(tmpdir(), 'cairn-vitals-'))
+  const home = await mkdtemp(join(tmpdir(), 'croft-vitals-'))
   directories.push(home)
   const posted: Posted[] = []
   const base = await serve(body, posted)
   return new Promise<{ stdout: string; code: number | null; posted: Posted[] }>((resolve, reject) => {
-    const child = spawn('node', ['cli/cairn.mjs', ...args], {
-      env: { ...process.env, HOME: home, CAIRN_BASE_URL: base, CAIRN_API_KEY: 'test-key' },
+    const child = spawn('node', ['cli/croft.mjs', ...args], {
+      env: { ...process.env, HOME: home, CROFT_BASE_URL: base, CROFT_API_KEY: 'test-key' },
     })
     let stdout = ''
     child.stdout.on('data', (c: Buffer) => { stdout += c.toString() })
@@ -84,7 +84,7 @@ const memory = (extra: Record<string, unknown> = {}) => ({
   ...extra,
 })
 
-describe('cairn vitals', () => {
+describe('croft vitals', () => {
   it('reports whether the memory was consulted, where an agent can read it', async () => {
     const { stdout } = await vitals(report(memory()))
     expect(stdout).toContain('memory 12 searches (3 widened, 2 empty)')
@@ -106,7 +106,7 @@ describe('cairn vitals', () => {
  * numbers were being collected into a drawer. A miss is the interesting one:
  * it is a dangling knowledge reference caught in the act of being followed.
  */
-describe('cairn vitals reports facts looked up by name', () => {
+describe('croft vitals reports facts looked up by name', () => {
   it('counts the direct reads and the ones that named nothing we hold', async () => {
     const { stdout } = await vitals(
       report(memory({ directReads: 9, directReadMisses: 2, recentSlugMisses: [] })),
@@ -161,7 +161,7 @@ describe('cairn vitals reports facts looked up by name', () => {
     ;(body as { findings: unknown[] }).findings = [
       { code: 'nothing-closed', severity: 'warning', message: 'something is off' },
     ]
-    const { posted } = await run(body, ['vitals', '--notify', 'CAIRN-254'])
+    const { posted } = await run(body, ['vitals', '--notify', 'CROFT-254'])
     const note = posted.find((p) => p.path.includes('/notes'))
     expect(note).toBeDefined()
     expect(String(note?.body.note)).toContain('direct reads 4 by name (1 for a slug we do not hold)')
@@ -171,10 +171,10 @@ describe('cairn vitals reports facts looked up by name', () => {
 
 /**
  * Migration 065's signals, in the terminal. The claims nobody is on and the
- * per-runtime split are the numbers CAIRN-282 found invisible everywhere, and
- * `cairn vitals` is where the agents that hold those claims look.
+ * per-runtime split are the numbers CROFT-282 found invisible everywhere, and
+ * `croft vitals` is where the agents that hold those claims look.
  */
-describe('cairn vitals shows the signals cairn_vitals cannot see', () => {
+describe('croft vitals shows the signals croft_vitals cannot see', () => {
   const signals = {
     windowHours: 24,
     sessions: { recent: 3, recentSummarised: 1, baseline: 1, baselineSummarised: 1, summariserRecent: 2, summariserBaseline: 0 },

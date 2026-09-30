@@ -12,7 +12,7 @@ import {
 import { requireHumanActor } from '@/lib/api/connect-route'
 
 /**
- * Browser pairing (CAIRN-314): a machine with no credentials gets some for
+ * Browser pairing (CROFT-314): a machine with no credentials gets some for
  * its own agents, once a signed-in human approves it. End to end against a
  * real database, because the interesting failure modes are all races on the
  * row's `status` column that a mocked pool can't exercise honestly.
@@ -45,12 +45,12 @@ afterAll(async () => {
 })
 
 const start = (host: string, runtimes = ['claude-code']) =>
-  createConnectRequest({ host, runtimes, clientAddress: '203.0.113.9', baseUrl: 'https://cairn.example.test' })
+  createConnectRequest({ host, runtimes, clientAddress: '203.0.113.9', baseUrl: 'https://croft.example.test' })
 
 describe('device pairing', () => {
   it('creates a request with a redeemable device code and a displayable user code', async () => {
     const created = await start('pairing-test-create')
-    expect(created.verificationUrl).toBe(`https://cairn.example.test/connect/${created.userCode}`)
+    expect(created.verificationUrl).toBe(`https://croft.example.test/connect/${created.userCode}`)
     expect(created.expiresIn).toBe(600)
     expect(created.interval).toBe(3)
 

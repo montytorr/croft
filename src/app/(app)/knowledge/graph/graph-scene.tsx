@@ -277,7 +277,7 @@ export const GraphScene = ({ graph, onHover, focused, spotlight }: Props) => {
      * Fitted to the shell, which is the outermost thing there is.
      *
      * This has been wrong twice, both times by guessing. Framed on the cloud
-     * alone the orphans ran off the bottom of the frame (CAIRN-217); framed on
+     * alone the orphans ran off the bottom of the frame (CROFT-217); framed on
      * a hand-picked multiple, the disc of them took over and squeezed the
      * cloud into a corner. Now the entries joined to nothing are on a shell
      * AROUND everything rather than a plane beneath it, the scene is a sphere
@@ -341,7 +341,7 @@ export const GraphScene = ({ graph, onHover, focused, spotlight }: Props) => {
      *
      * Dollying at the centre means reading anything off-axis is a loop of
      * zoom, drag, zoom, drag — the same complaint the flat map had in
-     * CAIRN-214, for the same reason. OrbitControls can do this itself; it
+     * CROFT-214, for the same reason. OrbitControls can do this itself; it
      * moves the orbit target along the way, which is what makes the NEXT drag
      * rotate around what you just moved in to look at rather than around the
      * middle of a scene you have left behind.
@@ -406,7 +406,7 @@ export const GraphScene = ({ graph, onHover, focused, spotlight }: Props) => {
     if (nodes.instanceColor) nodes.instanceColor.needsUpdate = true
 
     /**
-     * The entries joined to nothing, in a mesh of their own (CAIRN-217).
+     * The entries joined to nothing, in a mesh of their own (CROFT-217).
      *
      * Three things made them uncountable on the deployed map, and all three
      * are fixed by taking them out of the cloud's mesh. They were the smallest
@@ -606,7 +606,7 @@ export const GraphScene = ({ graph, onHover, focused, spotlight }: Props) => {
     /**
      * Light travelling the links of whatever is being looked at.
      *
-     * The flat map has had this since CAIRN-208 and the scene did not, which
+     * The flat map has had this since CROFT-208 and the scene did not, which
      * made hovering here feel like less had happened. Only the hovered node's
      * links: a pulse on all 452 is a buffer rewrite every frame, and a map
      * that shimmers everywhere says nothing about anywhere.

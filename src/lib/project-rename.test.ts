@@ -95,7 +95,7 @@ describe('keyChangeProblem', () => {
   const context = {
     projectId: 'hol',
     current: 'HOL',
-    liveKeys: ['CAIRN', 'HOLC'],
+    liveKeys: ['CROFT', 'HOLC'],
     retired: [
       { key: 'AC', project_id: 'hol', current: 'HOL' },
       { key: 'ACC', project_id: 'holc', current: 'HOLC' },
@@ -115,7 +115,7 @@ describe('keyChangeProblem', () => {
 
   it('refuses the current key and a live one', () => {
     expect(keyChangeProblem('HOL', context)).toMatch(/already this project's key/)
-    expect(keyChangeProblem('CAIRN', context)).toMatch(/already the key of another project/)
+    expect(keyChangeProblem('CROFT', context)).toMatch(/already the key of another project/)
   })
 
   it('refuses a key another project retired, and says why', () => {

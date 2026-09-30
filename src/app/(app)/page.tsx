@@ -42,10 +42,10 @@ const Home = async ({ searchParams }: { searchParams: Promise<{ closed?: string 
         <EmptyState
           as="h1"
           title="Nothing here yet"
-          hint="A cairn is built one stone at a time. Create the first project from an agent, or from the CLI."
+          hint="A croft is built one stone at a time. Create the first project from an agent, or from the CLI."
           action={
             <pre className="surface-card max-w-full overflow-x-auto px-3 py-2.5 text-left font-mono text-[0.75rem]">
-              {`cairn add "first task" --project CAI --type feature`}
+              {`croft add "first task" --project CAI --type feature`}
             </pre>
           }
         />

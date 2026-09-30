@@ -10,13 +10,13 @@ describe('filesNamedIn', () => {
   })
 
   it('ignores a command that happens to be in backticks', () => {
-    // `cairn check` is in almost every entry; reading it as a file would make
+    // `croft check` is in almost every entry; reading it as a file would make
     // every fact depend on a path nothing ever touches.
-    expect(filesNamedIn('Start with `cairn check "<subject>"`, then `npm test`.')).toEqual([])
+    expect(filesNamedIn('Start with `croft check "<subject>"`, then `npm test`.')).toEqual([])
   })
 
   it('ignores a repo slug, which looks exactly like a short path', () => {
-    expect(filesNamedIn('The remote is `montytorr/cairn` on GitHub.')).toEqual([])
+    expect(filesNamedIn('The remote is `montytorr/croft` on GitHub.')).toEqual([])
   })
 
   it('does not invent files from prose', () => {
@@ -33,14 +33,14 @@ describe('filesNamedIn', () => {
 
   it('accepts a home-relative path, which is the one real path this store holds', () => {
     // An earlier regex required the first segment to be a word character, so
-    // `~/.cairn/projects.json` was rejected — and it is the only genuine file
-    // path in Cairn's own knowledge. The feature would have been inert while
+    // `~/.croft/projects.json` was rejected — and it is the only genuine file
+    // path in Croft's own knowledge. The feature would have been inert while
     // looking like it worked.
-    expect(filesNamedIn('The map lives at `~/.cairn/projects.json`.')).toEqual([
-      '~/.cairn/projects.json',
+    expect(filesNamedIn('The map lives at `~/.croft/projects.json`.')).toEqual([
+      '~/.croft/projects.json',
     ])
-    expect(filesNamedIn('Installed to `/usr/local/bin/cairn.mjs`.')).toEqual([
-      '/usr/local/bin/cairn.mjs',
+    expect(filesNamedIn('Installed to `/usr/local/bin/croft.mjs`.')).toEqual([
+      '/usr/local/bin/croft.mjs',
     ])
   })
 

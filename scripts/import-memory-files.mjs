@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Imports curated agent memory files into Cairn knowledge.
+ * Imports curated agent memory files into Croft knowledge.
  *
  * Claude Code writes memory as one markdown file per fact under
  * `~/.claude/projects/<dir>/memory/`, with frontmatter carrying a kebab-case
@@ -8,7 +8,7 @@
  * shape is already what `knowledge` holds -- the slug, the title, the body and
  * the links all map across without reinterpretation.
  *
- * These are the good part of the memory that existed before Cairn held any:
+ * These are the good part of the memory that existed before Croft held any:
  * hand-written, corrected over months, and about things that are still true.
  * The machine-generated observation corpus is deliberately NOT imported here.
  *
@@ -37,7 +37,7 @@ const arg = (name) => {
 const ROOT = arg('--root') ?? join(homedir(), '.claude', 'projects')
 
 /**
- * Directory name -> Cairn project key, from `--map`.
+ * Directory name -> Croft project key, from `--map`.
  *
  * A directory mapped to null is imported globally: memory written in a home
  * directory is usually about the machine and the toolchain rather than one
@@ -127,9 +127,9 @@ const titlesFrom = (dir) => {
   return out
 }
 
-const cairn = (args, body) => {
+const croft = (args, body) => {
   if (DRY) return 'dry-run'
-  return execFileSync('cairn', args, { input: body ?? '', encoding: 'utf8' })
+  return execFileSync('croft', args, { input: body ?? '', encoding: 'utf8' })
 }
 
 let imported = 0
@@ -182,7 +182,7 @@ for (const [dir, project] of candidates) {
     const full = front.description ? `${front.description}\n\n${body}` : body
 
     try {
-      cairn(args, full)
+      croft(args, full)
       imported += 1
     } catch (error) {
       const message = String(error.stderr ?? error.message)
@@ -201,7 +201,7 @@ for (const [dir, project] of candidates) {
       let existing = null
       try {
         existing = JSON.parse(
-          execFileSync('cairn', ['know', slug, '--json'], { encoding: 'utf8' }),
+          execFileSync('croft', ['know', slug, '--json'], { encoding: 'utf8' }),
         )
       } catch {
         existing = null
@@ -220,7 +220,7 @@ for (const [dir, project] of candidates) {
 
       const qualified = `${project.toLowerCase()}-${slug}`
       try {
-        cairn([...args.slice(0, 2), '--slug', qualified, ...args.slice(4)], full)
+        croft([...args.slice(0, 2), '--slug', qualified, ...args.slice(4)], full)
         imported += 1
         requalified.push(qualified)
       } catch {

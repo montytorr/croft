@@ -26,7 +26,7 @@ export type ActivityEvent = {
  * The machine an agent's request came from, folded into the event's `data`.
  *
  * `data` is jsonb and already free-form, so this needs no migration and
- * changes no actor string (CAIRN-290). An event that already names a host
+ * changes no actor string (CROFT-290). An event that already names a host
  * keeps its own.
  */
 export const withHost = (events: ActivityEvent[], host?: string | null): ActivityEvent[] =>

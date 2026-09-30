@@ -7,7 +7,7 @@ vi.mock('@/lib/db/client', () => ({ pool: () => ({ query: mocks.query }) }))
 
 import { GET } from './route'
 
-const ORIGIN = 'https://cairn.example.test'
+const ORIGIN = 'https://croft.example.test'
 const get = () => GET(new Request(`${ORIGIN}/api/v1/me/keys`), { params: Promise.resolve({}) })
 
 const actor = (over: object = {}) => ({

@@ -2,7 +2,7 @@
 /**
  * The first administrator, or a reset of one: there is no public sign-up.
  *
- * `npm run operator:create` upserts the account named by CAIRN_OPERATOR_* and
+ * `npm run operator:create` upserts the account named by CROFT_OPERATOR_* and
  * rotates its browser sessions. scripts/start.mjs uses the same function with
  * `onlyIfNoAdmin`, for a platform where nobody can run a command beside the
  * database: it creates the account once, and never resets a password on a
@@ -68,12 +68,12 @@ export const ensureOperator = async ({ url, email, password, displayName = null,
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const email = process.env.CAIRN_OPERATOR_EMAIL?.trim()
+  const email = process.env.CROFT_OPERATOR_EMAIL?.trim()
   ensureOperator({
     url: process.env.DATABASE_URL,
     email,
-    password: process.env.CAIRN_OPERATOR_PASSWORD,
-    displayName: process.env.CAIRN_OPERATOR_NAME?.trim() || null,
+    password: process.env.CROFT_OPERATOR_PASSWORD,
+    displayName: process.env.CROFT_OPERATOR_NAME?.trim() || null,
   })
     .then(() => console.log(`operator ready: ${email}`))
     .catch((error) => {

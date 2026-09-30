@@ -36,7 +36,7 @@ const REWRITES = asPostgresWillSeeIt(RECALL)
 const occurrences = (haystack: string, needle: string) => haystack.split(needle).length - 1
 
 /**
- * The three pieces of cairn_memory_use that 053 rewrites. `replace` in Postgres
+ * The three pieces of croft_memory_use that 053 rewrites. `replace` in Postgres
  * is global, so each of these must appear exactly once in the installed
  * definition or the rewrite would land somewhere nobody intended.
  */
@@ -86,24 +86,24 @@ describe('053 records direct recall by slug', () => {
 
   it('is idempotent in the way the other migrations are', () => {
     expect(occurrences(RECALL, 'if not exists')).toBeGreaterThanOrEqual(5)
-    expect(RECALL).toContain("raise notice 'cairn_memory_use already counts direct reads")
+    expect(RECALL).toContain("raise notice 'croft_memory_use already counts direct reads")
   })
 })
 
-describe('053 transforms cairn_memory_use rather than re-copying it', () => {
+describe('053 transforms croft_memory_use rather than re-copying it', () => {
   it('reads the installed definition instead of pasting an old body', () => {
     expect(RECALL).toContain('pg_get_functiondef')
-    expect(RECALL).not.toContain('create or replace function cairn_memory_use')
+    expect(RECALL).not.toContain('create or replace function croft_memory_use')
   })
 
   it('refuses to run against a database where the function is missing', () => {
-    expect(RECALL).toContain("raise exception 'cairn_memory_use is not installed'")
+    expect(RECALL).toContain("raise exception 'croft_memory_use is not installed'")
   })
 
   it('asserts every rewrite landed, the way 051 does', () => {
-    expect(RECALL).toContain("raise exception 'cairn_memory_use: the final select was not found'")
+    expect(RECALL).toContain("raise exception 'croft_memory_use: the final select was not found'")
     expect(RECALL).toContain(
-      "raise exception 'cairn_memory_use: rewrite did not produce all four changes'",
+      "raise exception 'croft_memory_use: rewrite did not produce all four changes'",
     )
   })
 

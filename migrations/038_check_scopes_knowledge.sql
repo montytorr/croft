@@ -2,7 +2,7 @@
 -- 038: `check --project` scopes knowledge too
 --
 -- search_all applies p_project on three of its four branches. Tasks, notes and
--- sessions filter on it; knowledge never did. So `cairn check "x" --project BB`
+-- sessions filter on it; knowledge never did. So `croft check "x" --project BB`
 -- returned knowledge belonging to HM and TD, and the caller believed the answer
 -- was scoped — which is worse than an unsupported filter, because absence then
 -- reads as "this is new".

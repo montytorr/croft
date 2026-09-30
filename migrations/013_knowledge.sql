@@ -1,7 +1,7 @@
 -- ===========================================================================
 -- 013: knowledge — what we know, as opposed to what we did
 --
--- Every row in Cairn so far hangs off a task, and a task hangs off exactly one
+-- Every row in Croft so far hangs off a task, and a task hangs off exactly one
 -- project. That leaves nowhere to put the thing an agent most often needs:
 -- "one overflow axis set to auto forces the other from visible to auto", or
 -- "this laptop cannot reach that host's public IP, and it is the VPN rather

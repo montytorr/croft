@@ -9,11 +9,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * — so searches, widened searches, zero-result searches and work filed without
  * checking were answerable only by a person who opened the Vitals page. Every
  * writer of knowledge in this system is an agent, and an agent reads
- * `cairn vitals` and GET /api/v1/vitals. Neither carried a byte of it.
+ * `croft vitals` and GET /api/v1/vitals. Neither carried a byte of it.
  *
  * That is the failure knowledge/gaps/route.ts names in its own header, one
  * panel over: "the findings were visible only to a person who happened to
- * click Map". See CAIRN-254.
+ * click Map". See CROFT-254.
  */
 
 const mocks = vi.hoisted(() => ({ rpc: vi.fn() }))
@@ -49,7 +49,7 @@ const memoryPayload = {
 
 const signalsPayload = {
   windowHours: 24,
-  // The summariser's own two runs, taken out of the totals cairn_vitals counted.
+  // The summariser's own two runs, taken out of the totals croft_vitals counted.
   sessions: {
     recent: 4,
     recentSummarised: 4,
@@ -66,9 +66,9 @@ const signalsPayload = {
 }
 
 const payloads: Record<string, unknown> = {
-  cairn_memory_use: memoryPayload,
-  cairn_vitals: vitalsPayload,
-  cairn_vitals_signals: signalsPayload,
+  croft_memory_use: memoryPayload,
+  croft_vitals: vitalsPayload,
+  croft_vitals_signals: signalsPayload,
 }
 
 const answerBoth = () => {
@@ -86,9 +86,9 @@ describe('the vitals an agent is given', () => {
     const report = await readVitals(actor, 24)
 
     expect(mocks.rpc.mock.calls.map((c) => c[0]).sort()).toEqual([
-      'cairn_memory_use',
-      'cairn_vitals',
-      'cairn_vitals_signals',
+      'croft_memory_use',
+      'croft_vitals',
+      'croft_vitals_signals',
     ])
     expect(report.memory).toEqual(memoryPayload)
     // and the counts it already carried are untouched
@@ -113,8 +113,8 @@ describe('the vitals an agent is given', () => {
     // must not stop it answering the other — that is the failure mode the whole
     // panel exists to catch.
     mocks.rpc.mockImplementation(async (fn: string) =>
-      fn === 'cairn_memory_use'
-        ? { data: null, error: { message: 'function cairn_memory_use does not exist' } }
+      fn === 'croft_memory_use'
+        ? { data: null, error: { message: 'function croft_memory_use does not exist' } }
         : { data: payloads[fn], error: null },
     )
 
@@ -129,21 +129,21 @@ describe('the vitals an agent is given', () => {
     answerBoth()
     const report = await readVitals(actor, 24)
     expect(report.sessions).toMatchObject({ recent: 4, recentSummarised: 4, baseline: 38 })
-    // Files come from cairn_vitals untouched: the summariser names none.
+    // Files come from croft_vitals untouched: the summariser names none.
     expect(report.sessions.recentWithFiles).toBe(5)
     expect(report.signals).toEqual(signalsPayload)
   })
 
   it('reports the signals as unavailable, not as healthy, when they cannot be read', async () => {
     mocks.rpc.mockImplementation(async (fn: string) =>
-      fn === 'cairn_vitals_signals'
-        ? { data: null, error: { message: 'function cairn_vitals_signals does not exist' } }
+      fn === 'croft_vitals_signals'
+        ? { data: null, error: { message: 'function croft_vitals_signals does not exist' } }
         : { data: payloads[fn], error: null },
     )
     const report = await readVitals(actor, 24)
     expect(report.signals).toBeNull()
     expect(report.signalsError).toContain('does not exist')
-    // cairn_vitals' own counts stand when there is nothing to replace them with.
+    // croft_vitals' own counts stand when there is nothing to replace them with.
     expect(report.sessions.recent).toBe(6)
     expect(assess(report).map((f) => f.code)).toContain('signals-unavailable')
   })
@@ -152,7 +152,7 @@ describe('the vitals an agent is given', () => {
     // The tolerance above is for the block that was added, not for the one the
     // endpoint has always been about.
     mocks.rpc.mockImplementation(async (fn: string) =>
-      fn === 'cairn_vitals'
+      fn === 'croft_vitals'
         ? { data: null, error: { message: 'boom' } }
         : { data: payloads[fn], error: null },
     )

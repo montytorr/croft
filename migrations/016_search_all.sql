@@ -1,7 +1,7 @@
 -- ===========================================================================
 -- 016: search_all — one verb reaches everything an agent has ever written
 --
--- `cairn check` is the first instruction in the skill, and until now it has
+-- `croft check` is the first instruction in the skill, and until now it has
 -- searched exactly one thing: tasks. Meanwhile the skill's other insistence is
 -- that agents record findings and dead ends as notes, "tried X, no difference
 -- is as valuable as a fix".

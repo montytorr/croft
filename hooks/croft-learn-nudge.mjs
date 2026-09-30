@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * Asks the agent, once per session, whether the work it just finished taught
- * anything the next agent should know (CAIRN-323).
+ * anything the next agent should know (CROFT-323).
  *
- * Agents can already `cairn learn`; mostly nobody asks them to. The close of a
- * task asks (`cairn done` says it), but many sessions close nothing:
+ * Agents can already `croft learn`; mostly nobody asks them to. The close of a
+ * task asks (`croft done` says it), but many sessions close nothing:
  * exploration, design, debugging with no fix yet. This is the other moment
  * the work is done — the agent handing control back — so it runs on Stop, in
  * Claude Code and Codex, the two runtimes whose Stop can be blocked. A block
@@ -15,8 +15,8 @@
  *     Judged from the transcript, without a model — this costs nothing;
  *   - at most once per session;
  *   - never on the continuation a block itself caused (`stop_hook_active`);
- *   - never in a session that already ran `cairn learn`;
- *   - never inside a summariser or with CAIRN_LEARN_NUDGE=0.
+ *   - never in a session that already ran `croft learn`;
+ *   - never inside a summariser or with CROFT_LEARN_NUDGE=0.
  *
  * Silent on every failure: a memory prompt must never be the reason a turn
  * cannot end.
@@ -25,9 +25,9 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, sta
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
-const SUMMARISER_FLAGS = ['CAIRN_SUMMARISER', 'QUARRY_SUMMARISER', 'AGENT_MEMORY_SUMMARISER']
+const SUMMARISER_FLAGS = ['CROFT_SUMMARISER', 'QUARRY_SUMMARISER', 'AGENT_MEMORY_SUMMARISER']
 
-const STATE_PATH = join(homedir(), '.cairn', 'nudged.json')
+const STATE_PATH = join(homedir(), '.croft', 'nudged.json')
 const STATE_KEPT = 200
 
 /** Enough to hold the turn that just ended; a long session's head is not needed. */
@@ -36,14 +36,14 @@ const TAIL_BYTES = 512 * 1024
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'apply_patch'])
 const COMMIT = /\bgit\b[^\n]*\bcommit\b/
 /** Run as a command of its own, not quoted by grep or asked for its help. */
-const LEARNED = /(?:^|[\n;&|(]\s*)(?:\w+=\S*\s+)*cairn (?:re)?learn\s+(?!-h\b|--help\b)\S/
+const LEARNED = /(?:^|[\n;&|(]\s*)(?:\w+=\S*\s+)*croft (?:re)?learn\s+(?!-h\b|--help\b)\S/
 
 const REASON =
   'Before you hand back: did this work establish something the next agent should know — ' +
   'a constraint, a trap, a decision and its reason, or a dead end? If so, record it now: ' +
-  '`cairn learn "<title>" --project <KEY> --body -` (add `--task <ref>` when it came from ' +
-  'one), or `cairn note <ref> "<what failed>" --kind attempt` for a dead end. If nothing ' +
-  'qualifies, stop without saying more. Cairn asks this once per session.'
+  '`croft learn "<title>" --project <KEY> --body -` (add `--task <ref>` when it came from ' +
+  'one), or `croft note <ref> "<what failed>" --kind attempt` for a dead end. If nothing ' +
+  'qualifies, stop without saying more. Croft asks this once per session.'
 
 const readStdin = async () => {
   let raw = ''
@@ -131,12 +131,12 @@ const turnDidWork = (tail) => {
 }
 
 /**
- * Whether the agent RAN `cairn learn` in this session. The words alone are
+ * Whether the agent RAN `croft learn` in this session. The words alone are
  * everywhere — the briefing, the skill, this hook's own question — so only a
  * command counts, and only the lines that mention it are parsed.
  */
 const alreadyLearned = (path) =>
-  parseRows(readFileSync(path, 'utf8').split('\n').filter((line) => /cairn (?:re)?learn/.test(line)))
+  parseRows(readFileSync(path, 'utf8').split('\n').filter((line) => /croft (?:re)?learn/.test(line)))
     .flatMap(actionsOf)
     .some((a) => a.command && LEARNED.test(a.command))
 
@@ -157,7 +157,7 @@ const remember = (state, sessionId) => {
 }
 
 const main = async () => {
-  if (process.env.CAIRN_LEARN_NUDGE === '0') return
+  if (process.env.CROFT_LEARN_NUDGE === '0') return
   if (SUMMARISER_FLAGS.some((name) => process.env[name] === '1')) return
 
   const payload = await readStdin()
@@ -179,5 +179,5 @@ const main = async () => {
 }
 
 main().catch((error) => {
-  if (process.env.CAIRN_HOOK_DEBUG === '1') console.error('[cairn-learn-nudge]', error)
+  if (process.env.CROFT_HOOK_DEBUG === '1') console.error('[croft-learn-nudge]', error)
 })

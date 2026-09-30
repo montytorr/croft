@@ -29,7 +29,7 @@ For users with \`roles.hermes = CUSTOMER_SERVICE\` and an \`aircallUserId\`, mat
 const prose = (words: number) =>
   Array.from({ length: words }, (_, i) => (i % 12 === 11 ? 'done.' : 'word')).join(' ')
 
-describe('bodyProblems: the body that prompted it (CAIRN-312)', () => {
+describe('bodyProblems: the body that prompted it (CROFT-312)', () => {
   const problems = bodyProblems(WALL)
 
   it('turns each shouted label into the heading it should be', () => {
@@ -67,7 +67,7 @@ describe('bodyProblems: what passes', () => {
     ['empty', ''],
     ['whitespace', '   \n  '],
     ['one line', 'Clicking save drops the draft; expected it to persist. Repro: edit, save, reload.'],
-    ['a short note with a ref', 'CAIRN-291: moved the body rule into the API. See the thread.'],
+    ['a short note with a ref', 'CROFT-291: moved the body rule into the API. See the thread.'],
     ['inline markers', 'TODO: check the staging logs.\nNOTE: the cron runs at 10:30.\nJSON: the payload is fine.'],
     ['prose abbreviations and versions', 'Upgrade to v1.2.3, e.g. via npm; i.e. the U.S.A. mirror. Node.js and Next.js 14.2 are fine.'],
     ['URLs, emails and links', 'See https://example.com/a/b.js?x=1, mail ops@example.com, or [the spec](./docs/spec.md).'],
@@ -119,7 +119,7 @@ describe('bodyProblems: code is exempt', () => {
 
   it('ignores inline code, including a span that wraps onto the next line', () => {
     expect(bodyProblems('The fix is in `src/a/b.ts:12` and `resolve(x)`, via `a.b.c` and `SOME_FLAG`.')).toEqual([])
-    expect(bodyProblems('Run `cairn sync --also skill=<path>/cairn/\nSKILL.md` once.')).toEqual([])
+    expect(bodyProblems('Run `croft sync --also skill=<path>/croft/\nSKILL.md` once.')).toEqual([])
     expect(bodyProblems('A ``double `tick` span with call.site.here()`` is still code.')).toEqual([])
   })
 })

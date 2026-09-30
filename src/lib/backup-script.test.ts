@@ -22,8 +22,8 @@ afterEach(async () => {
 })
 
 describe('backup script', () => {
-  it('uses CAIRN_DB_USER for the pg_dump container command', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'cairn-backup-test-'))
+  it('uses CROFT_DB_USER for the pg_dump container command', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'croft-backup-test-'))
     temporaryDirectories.push(directory)
     const bin = join(directory, 'bin')
     const backup = join(directory, 'backup')
@@ -42,15 +42,15 @@ head -c 2048 /dev/zero
     const result = await run('bash', ['scripts/backup.sh'], {
       ...process.env,
       PATH: `${bin}:${process.env.PATH}`,
-      CAIRN_BACKUP_DIR: backup,
-      CAIRN_DB_CONTAINER: 'test-postgres',
-      CAIRN_DB_NAME: 'test-cairn',
-      CAIRN_DB_USER: 'cairn_app',
-      CAIRN_ATTACHMENT_DIR: attachments,
+      CROFT_BACKUP_DIR: backup,
+      CROFT_DB_CONTAINER: 'test-postgres',
+      CROFT_DB_NAME: 'test-croft',
+      CROFT_DB_USER: 'croft_app',
+      CROFT_ATTACHMENT_DIR: attachments,
       DOCKER_LOG: dockerLog,
     })
 
     expect(result.code, result.stderr).toBe(0)
-    expect(await readFile(dockerLog, 'utf8')).toBe('exec test-postgres pg_dump -U cairn_app -d test-cairn -Fc --schema=public --no-owner --no-privileges\n')
+    expect(await readFile(dockerLog, 'utf8')).toBe('exec test-postgres pg_dump -U croft_app -d test-croft -Fc --schema=public --no-owner --no-privileges\n')
   })
 })

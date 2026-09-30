@@ -4,7 +4,7 @@ import { pool } from '@/lib/db/client'
 import { recallCounts, unusedKnowledge } from '@/lib/api/knowledge-use'
 
 /**
- * Per-entry recall counts (CAIRN-270), from the rows 053 records, against the
+ * Per-entry recall counts (CROFT-270), from the rows 053 records, against the
  * installed `knowledge_recall_counts`.
  */
 
@@ -53,7 +53,7 @@ beforeAll(async () => {
   await entry('older-recalled', '90 days')
   await entry('never-recalled-limited', '60 days')
 
-  await searched([slug('busy'), 'CAIRN-1', slug('busy')])
+  await searched([slug('busy'), 'CROFT-1', slug('busy')])
   await searched([slug('busy')], '2 days')
   await read(slug('busy'), true)
   // Spelled the way [[a_b]] references are, and resolved on read.

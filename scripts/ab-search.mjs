@@ -8,7 +8,7 @@
  * running it against the real store, and the only honest control is the same
  * store at the same instant — a "before" taken yesterday is confounded by
  * every task filed since, which is how the 2026-09-21 baseline moved 0.73 ->
- * 0.82 in a day without a line of code changing (CAIRN-259). Inside a
+ * 0.82 in a day without a line of code changing (CROFT-259). Inside a
  * transaction, `create or replace function` is visible only to this session
  * and the rollback puts it back, so production never sees the candidate.
  *

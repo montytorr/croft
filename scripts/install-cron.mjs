@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Cairn's scheduled maintenance, as something you can read in a pull request.
+ * Croft's scheduled maintenance, as something you can read in a pull request.
  *
- * These jobs are OPTIONAL. Cairn works without any of them: they are the
+ * These jobs are OPTIONAL. Croft works without any of them: they are the
  * difference between a tracker that notices its own problems and one that
  * waits to be asked. Install none, some, or all.
  *
@@ -11,7 +11,7 @@
  *   node scripts/install-cron.mjs --remove   # take it out again
  *   node scripts/install-cron.mjs --run agent-files   # run that job now
  *
- * `cairn setup` runs this with `--only agent-files` (plus reconcile and vitals
+ * `croft setup` runs this with `--only agent-files` (plus reconcile and vitals
  * under `--maintenance`); the rest, like openclaw-sessions, are installed here.
  *
  * Printing is the default on purpose: a script that edits a crontab the moment
@@ -22,7 +22,7 @@
  * would be a second thing to keep in step, which is the failure this file
  * exists to end — the jobs used to live only in the crontab on one box.
  *
- * Cairn's lines live between two markers and the installer only ever touches
+ * Croft's lines live between two markers and the installer only ever touches
  * what is between them. The manual edits these replace filtered the crontab by
  * grepping for the previous command, which worked and was one bad pattern away
  * from dropping eighteen lines of unrelated scheduling.
@@ -37,8 +37,8 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const BEGIN = '# >>> cairn maintenance (managed by scripts/install-cron.mjs)'
-const END = '# <<< cairn maintenance'
+const BEGIN = '# >>> croft maintenance (managed by scripts/install-cron.mjs)'
+const END = '# <<< croft maintenance'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 
@@ -55,29 +55,29 @@ const MAC = process.platform === 'darwin'
 /**
  * Defaults that describe the machine this is running on rather than one host.
  *
- * A Mac has no /usr/local/bin/cairn, cannot write /var/log as the logged-in
+ * A Mac has no /usr/local/bin/croft, cannot write /var/log as the logged-in
  * user, and keeps node wherever Homebrew or nvm put it — so the Linux defaults
  * made every job skip, correctly but uselessly.
  */
 const firstPresent = (...paths) => paths.find((path) => existsSync(path)) ?? paths[paths.length - 1]
 
 const CLI = env(
-  'CAIRN_CLI_PATH',
-  firstPresent(join(homedir(), '.local/bin/cairn'), '/usr/local/bin/cairn'),
+  'CROFT_CLI_PATH',
+  firstPresent(join(homedir(), '.local/bin/croft'), '/usr/local/bin/croft'),
 )
 // process.execPath is the node actually running this, which is the one that
 // will still be there tomorrow. Pinned on Linux, where /usr/bin/node is what
 // the installed crontabs already name.
-const NODE = env('CAIRN_NODE_PATH', MAC ? process.execPath : '/usr/bin/node')
-const LOGS = env('CAIRN_LOG_DIR', MAC ? join(homedir(), 'Library/Logs') : '/var/log')
+const NODE = env('CROFT_NODE_PATH', MAC ? process.execPath : '/usr/bin/node')
+const LOGS = env('CROFT_LOG_DIR', MAC ? join(homedir(), 'Library/Logs') : '/var/log')
 const SYNC = env(
-  'CAIRN_SYNC_SCRIPT',
+  'CROFT_SYNC_SCRIPT',
   MAC
-    ? join(homedir(), '.cairn/maintenance/sync-agent-files.mjs')
-    : '/opt/cairn-maintenance/sync-agent-files.mjs',
+    ? join(homedir(), '.croft/maintenance/sync-agent-files.mjs')
+    : '/opt/croft-maintenance/sync-agent-files.mjs',
 )
-const RAW = env('CAIRN_RAW_BASE', 'https://raw.githubusercontent.com/montytorr/cairn/main')
-const HOOKS = env('CAIRN_HOOKS_DIR', join(homedir(), '.cairn/hooks'))
+const RAW = env('CROFT_RAW_BASE', 'https://raw.githubusercontent.com/montytorr/croft/main')
+const HOOKS = env('CROFT_HOOKS_DIR', join(homedir(), '.croft/hooks'))
 
 /**
  * An env override that ends up, unquoted for cron's own purposes, in a
@@ -99,8 +99,8 @@ const rejectUnsafeEnvValue = (name, value) => {
 }
 
 /** Where a runtime keeps transcripts nothing else will hand us. */
-const OPENCLAW_SESSIONS = env('CAIRN_OPENCLAW_SESSIONS', '')
-rejectUnsafeEnvValue('CAIRN_OPENCLAW_SESSIONS', OPENCLAW_SESSIONS)
+const OPENCLAW_SESSIONS = env('CROFT_OPENCLAW_SESSIONS', '')
+rejectUnsafeEnvValue('CROFT_OPENCLAW_SESSIONS', OPENCLAW_SESSIONS)
 
 /**
  * How the sweep reaches a summariser, when the identity it must run as cannot.
@@ -111,20 +111,20 @@ rejectUnsafeEnvValue('CAIRN_OPENCLAW_SESSIONS', OPENCLAW_SESSIONS)
  * recorded with its files and refs and no prose at all, silently, for the life
  * of the feature. Point this at a wrapper that can summarise.
  */
-const SUMMARY_CLI = env('CAIRN_SUMMARY_CLI', '')
-rejectUnsafeEnvValue('CAIRN_SUMMARY_CLI', SUMMARY_CLI)
+const SUMMARY_CLI = env('CROFT_SUMMARY_CLI', '')
+rejectUnsafeEnvValue('CROFT_SUMMARY_CLI', SUMMARY_CLI)
 
 /** Tasks the jobs report into. Empty disables reporting for that job. */
-const NOTIFY_FILES = env('CAIRN_NOTIFY_FILES', '')
-const NOTIFY_VITALS = env('CAIRN_NOTIFY_VITALS', '')
+const NOTIFY_FILES = env('CROFT_NOTIFY_FILES', '')
+const NOTIFY_VITALS = env('CROFT_NOTIFY_VITALS', '')
 
 /** Extra copies outside this user's home, as `artefact=path`, comma separated. */
-const ALSO = env('CAIRN_SYNC_ALSO', '')
+const ALSO = env('CROFT_SYNC_ALSO', '')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean)
 
-const log = (name) => join(LOGS, `cairn-${name}.log`)
+const log = (name) => join(LOGS, `croft-${name}.log`)
 
 /**
  * Whether the CLI the jobs will run knows --all-instances. Read from the file,
@@ -140,7 +140,7 @@ const FANS_OUT = (() => {
   }
 })()
 const ALL_INSTANCES = FANS_OUT ? ['--all-instances'] : []
-if (!FANS_OUT && existsSync(join(homedir(), '.cairn', 'instances.json'))) {
+if (!FANS_OUT && existsSync(join(homedir(), '.croft', 'instances.json'))) {
   console.error(
     `warning: ${CLI} predates --all-instances, so reconcile and vitals will reach one instance only. ` +
       'Run the agent-files job to update it, then run this installer again.',
@@ -159,7 +159,7 @@ const JOBS = [
     why: 'Releases claims an agent stopped working on, and moves the task back to todo.',
     requires: [CLI],
     every: 30,
-    env: { CAIRN_AGENT: 'maintenance' },
+    env: { CROFT_AGENT: 'maintenance' },
     // One run per instance where a machine has several (README, "Several
     // instances"); exactly the old run where it has one.
     command: [CLI, 'reconcile', ...ALL_INSTANCES],
@@ -169,7 +169,7 @@ const JOBS = [
     why: 'Asks daily whether the memory is still being written, and says so only when it is not.',
     requires: [CLI],
     at: { hour: 8, minute: 0 },
-    env: { CAIRN_AGENT: 'maintenance' },
+    env: { CROFT_AGENT: 'maintenance' },
     command: [CLI, 'vitals', ...ALL_INSTANCES, ...(NOTIFY_VITALS ? ['--notify', NOTIFY_VITALS] : [])],
   },
   {
@@ -179,14 +179,14 @@ const JOBS = [
     at: { minute: 23 },
     /**
      * A laptop is not a server. The server is also repaired by every deploy
-     * (CAIRN-257), so hourly is its fallback; a Mac has no such trigger, and
+     * (CROFT-257), so hourly is its fallback; a Mac has no such trigger, and
      * sleeps through slots, so an hourly job left it up to an hour and often
-     * several behind every merge (CAIRN-290). launchd runs a missed calendar
+     * several behind every merge (CROFT-290). launchd runs a missed calendar
      * slot on wake — StartInterval would drop it — so: more slots, and a run
      * at load, which is login and every reinstall.
      */
     launchd: { every: 15, runAtLoad: true },
-    env: { CAIRN_AGENT: 'maintenance' },
+    env: { CROFT_AGENT: 'maintenance' },
     command: [
       NODE,
       SYNC,
@@ -199,14 +199,14 @@ const JOBS = [
   {
     name: 'openclaw-sessions',
     why: 'OpenClaw has no session-end event, so its transcripts are swept instead.',
-    requires: [OPENCLAW_SESSIONS, join(HOOKS, 'cairn-session-end.mjs'), NODE],
+    requires: [OPENCLAW_SESSIONS, join(HOOKS, 'croft-session-end.mjs'), NODE],
     every: 30,
     env: {
-      CAIRN_AGENT: 'openclaw',
-      CAIRN_PLATFORM: 'openclaw',
-      ...(SUMMARY_CLI ? { CAIRN_SUMMARY_CLI: SUMMARY_CLI } : {}),
+      CROFT_AGENT: 'openclaw',
+      CROFT_PLATFORM: 'openclaw',
+      ...(SUMMARY_CLI ? { CROFT_SUMMARY_CLI: SUMMARY_CLI } : {}),
     },
-    command: [NODE, join(HOOKS, 'cairn-session-end.mjs'), '--scan', OPENCLAW_SESSIONS],
+    command: [NODE, join(HOOKS, 'croft-session-end.mjs'), '--scan', OPENCLAW_SESSIONS],
   },
 ]
 
@@ -222,7 +222,7 @@ const cronFields = (job) =>
  * reopen it (`'...'` -> `'...'\''...'`), which is the standard POSIX way to
  * embed a `'` inside single quotes. Every argument and every env value is
  * quoted this way so that a path with a space, or a name an attacker chose
- * (an OpenClaw agent directory, CAIRN-... F2), cannot add words, options or
+ * (an OpenClaw agent directory, CROFT-... F2), cannot add words, options or
  * shell operators to the command sh actually runs.
  */
 const shQuote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`
@@ -255,7 +255,7 @@ const cronLine = (job) => {
 // LaunchAgent runs as the logged-in user, which is whose files these are.
 // ---------------------------------------------------------------------------
 
-const LABEL = (name) => `com.cairn.${name}`
+const LABEL = (name) => `com.croft.${name}`
 const AGENTS_DIR = join(homedir(), 'Library/LaunchAgents')
 const plistPath = (name) => join(AGENTS_DIR, `${LABEL(name)}.plist`)
 
@@ -273,7 +273,7 @@ const calendar = (job) =>
 
 /**
  * A LaunchAgent inherits almost no environment, so the PATH a job needs has to
- * be stated. sync-agent-files reports by calling `cairn`, which is on nobody's
+ * be stated. sync-agent-files reports by calling `croft`, which is on nobody's
  * PATH under launchd.
  */
 const jobPath = [dirname(CLI), dirname(NODE), '/usr/bin', '/bin', '/usr/sbin', '/sbin']
@@ -364,7 +364,7 @@ const withoutOurs = (text) => {
  * Every job's own `# name: why` line and rendered command, out of the
  * managed block already in the crontab, keyed by name.
  *
- * `--only` is what `cairn setup` passes on every re-run, naming just the jobs
+ * `--only` is what `croft setup` passes on every re-run, naming just the jobs
  * it is touching this time (agent-files, plus reconcile/vitals under
  * --maintenance, plus openclaw-sessions where it applies) — never the full
  * JOBS list. Rewriting the whole block to hold only those names used to throw
@@ -395,13 +395,13 @@ const existingManagedLines = (text) => {
 // ---------------------------------------------------------------------------
 // --run <job>: run an installed job NOW, exactly as the schedule runs it.
 //
-// WHY. Cairn's code is push-based — merge to main, GitHub Actions deploys —
+// WHY. Croft's code is push-based — merge to main, GitHub Actions deploys —
 // while the files agents READ about that code are pull-based, repaired by the
 // hourly `agent-files` job. The two clocks are independent, so after a merge
 // that touches both there is a window in which every agent on every machine
 // reads instructions that contradict the code already live. Measured on
 // 2026-09-21: merge at 16:14, previous sync at 15:23, 51 minutes, and up to 59
-// in the general case (CAIRN-257).
+// in the general case (CROFT-257).
 //
 // So the deploy calls this the moment it has finished deploying. The schedule
 // is NOT replaced and must not be: it is the fallback for a machine that was

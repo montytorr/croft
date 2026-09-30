@@ -6,7 +6,7 @@ import { BookOpen, CircleAlert, Eye, EyeOff, History, ListChecks, NotebookPen } 
 import { Button, Input } from '@/components/ui/control'
 import { Spinner } from '@/components/spinner'
 import { BrandMark, useBrand } from '@/components/brand'
-import { CairnIllustration } from './cairn-illustration'
+import { CroftIllustration } from './croft-illustration'
 // `?redirect=` comes from the URL bar, so it is attacker-controlled; this
 // honours a same-site path only.
 import { safeRedirect } from '@/lib/auth/login-redirect'
@@ -78,7 +78,7 @@ export const LoginForm = () => {
         </div>
 
         <div className="relative flex max-w-[34rem] flex-col gap-8">
-          <CairnIllustration className="w-[10rem]" />
+          <CroftIllustration className="w-[10rem]" />
           <div>
             {/* Upright, the second half in the muted grey: the family's
                 headings carry no italics and no accent-coloured words. */}
@@ -176,10 +176,10 @@ export const LoginForm = () => {
           {/* Who can come in, and how agents do: the two questions the old
               "single-user" line answered wrongly once admins could add people. */}
           <div className="border-border text-fg-subtle mt-10 flex flex-col gap-2 border-t pt-5 text-[0.75rem] leading-relaxed">
-            <p>No account yet? An administrator of this Cairn can add you.</p>
+            <p>No account yet? An administrator of this Croft can add you.</p>
             <p>
               Agents don’t sign in here. They connect with an API key, which{' '}
-              <code className="font-mono">cairn setup</code> pairs from your machine.
+              <code className="font-mono">croft setup</code> pairs from your machine.
             </p>
           </div>
         </div>

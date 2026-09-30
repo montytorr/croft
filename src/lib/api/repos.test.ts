@@ -4,27 +4,27 @@ import { normaliseRemote, projectKeyFromRepoRows } from './repos'
 describe('normaliseRemote', () => {
   it('resolves the ssh and https spellings of one repo to the same string', () => {
     // The whole point: a clone made either way must reach the same row.
-    expect(normaliseRemote('git@github.com:montytorr/cairn.git')).toBe('github.com/montytorr/cairn')
-    expect(normaliseRemote('https://github.com/montytorr/cairn.git')).toBe(
-      'github.com/montytorr/cairn',
+    expect(normaliseRemote('git@github.com:montytorr/croft.git')).toBe('github.com/montytorr/croft')
+    expect(normaliseRemote('https://github.com/montytorr/croft.git')).toBe(
+      'github.com/montytorr/croft',
     )
   })
 
   it('drops credentials, so a tokenised remote is not a different repository', () => {
-    expect(normaliseRemote('https://thierry:ghp_secret@github.com/montytorr/cairn.git')).toBe(
-      'github.com/montytorr/cairn',
+    expect(normaliseRemote('https://thierry:ghp_secret@github.com/montytorr/croft.git')).toBe(
+      'github.com/montytorr/croft',
     )
   })
 
   it('drops a port, which is transport and not identity', () => {
-    expect(normaliseRemote('ssh://git@github.com:22/montytorr/cairn.git')).toBe(
-      'github.com/montytorr/cairn',
+    expect(normaliseRemote('ssh://git@github.com:22/montytorr/croft.git')).toBe(
+      'github.com/montytorr/croft',
     )
   })
 
   it('ignores case and a trailing slash', () => {
-    expect(normaliseRemote('https://GitHub.com/MontyTorr/Cairn/')).toBe(
-      'github.com/montytorr/cairn',
+    expect(normaliseRemote('https://GitHub.com/MontyTorr/Croft/')).toBe(
+      'github.com/montytorr/croft',
     )
   })
 
@@ -40,9 +40,9 @@ describe('normaliseRemote', () => {
   it('reduces a remote carrying both .git and a trailing slash', () => {
     // The suffixes were stripped in the order that leaves `.git` behind, so
     // one repository got two identities depending on a trailing slash.
-    expect(normaliseRemote('git@github.com:montytorr/cairn.git/')).toBe('github.com/montytorr/cairn')
-    expect(normaliseRemote('https://github.com/montytorr/cairn.git/')).toBe(
-      'github.com/montytorr/cairn',
+    expect(normaliseRemote('git@github.com:montytorr/croft.git/')).toBe('github.com/montytorr/croft')
+    expect(normaliseRemote('https://github.com/montytorr/croft.git/')).toBe(
+      'github.com/montytorr/croft',
     )
   })
 

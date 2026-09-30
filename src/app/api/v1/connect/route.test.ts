@@ -11,7 +11,7 @@ import { POST } from './route'
 
 const post = (body: object, address = '203.0.113.1') =>
   POST(
-    new Request('https://cairn.example.test/api/v1/connect', {
+    new Request('https://croft.example.test/api/v1/connect', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-forwarded-for': address },
       body: JSON.stringify(body),
@@ -22,7 +22,7 @@ describe('POST /api/v1/connect', () => {
   beforeEach(() => {
     mocks.createConnectRequest.mockReset().mockResolvedValue({
       deviceCode: 'device-secret', userCode: 'BCDF-2345',
-      verificationUrl: 'https://cairn.example.test/connect/BCDF-2345', expiresIn: 600, interval: 3,
+      verificationUrl: 'https://croft.example.test/connect/BCDF-2345', expiresIn: 600, interval: 3,
     })
   })
 

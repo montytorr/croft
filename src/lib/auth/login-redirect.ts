@@ -5,9 +5,9 @@
  * and landed on / after signing in instead of where it was going (a
  * `/connect/<code>` approval, above all).
  */
-export const REQUESTED_PATH_HEADER = 'x-cairn-path'
+export const REQUESTED_PATH_HEADER = 'x-croft-path'
 
-const SAME_SITE = 'http://cairn.invalid'
+const SAME_SITE = 'http://croft.invalid'
 
 /**
  * A same-site path, or `/`. Parsed the way the browser will parse it, not

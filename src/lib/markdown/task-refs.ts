@@ -20,7 +20,7 @@ type Parent = { type: string; children: unknown[] }
  * Turns bare task refs in prose into links.
  *
  * Agents cross-reference constantly ("superseded by CAI-31", "same cause as
- * HERMES-92") and until now those were dead text. Cairn is only useful as
+ * HERMES-92") and until now those were dead text. Croft is only useful as
  * shared memory if following a reference costs nothing, so this is closer to
  * a core feature than to typography.
  */

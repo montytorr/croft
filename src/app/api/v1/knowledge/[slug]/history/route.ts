@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 type Params = { slug: string }
 
 /**
- * What an entry used to say, and who changed it (CAIRN-266).
+ * What an entry used to say, and who changed it (CROFT-266).
  *
  * `version` is the live row's number, so the answer reads the same way the
  * revisions do: version N was replaced by the edit recorded on revision N.

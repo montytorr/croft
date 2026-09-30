@@ -50,7 +50,7 @@ export type Candidate = {
   blockedAt?: string | null
   /** Tasks this one waits on that are not finished. */
   unmetDeps?: number
-  /** The human the task belongs to (CAIRN-310), and their name to show. */
+  /** The human the task belongs to (CROFT-310), and their name to show. */
   assigneeId?: string | null
   assignee?: string | null
 }
@@ -81,7 +81,7 @@ const priorityRank = (priority: string) => {
  *
  * Either side being unable to name a session means "cannot tell", and cannot
  * tell falls back to the label. Treating it as "somebody else's" would make
- * every claim made before this existed disappear from `cairn next` at once.
+ * every claim made before this existed disappear from `croft next` at once.
  */
 const isMine = (task: Candidate, me: string | null, mySession: string | null) =>
   Boolean(task.claimedBy) &&

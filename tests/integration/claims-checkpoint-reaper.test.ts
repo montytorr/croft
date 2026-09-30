@@ -7,7 +7,7 @@ import { reconcileClaims } from '@/lib/api/reconcile'
 import { sessionUpsert } from '@/schemas/session'
 
 /**
- * CAIRN-283 and CAIRN-284, against a real database, because every failure
+ * CROFT-283 and CROFT-284, against a real database, because every failure
  * here was invisible from the application: a checkpoint overwritten reads like
  * a checkpoint, an updated_at bumped by a trigger reads like an edit, and a
  * reaper that selects nothing logs `#0` and exits 0.
@@ -96,7 +96,7 @@ afterAll(async () => {
   await pool().end()
 })
 
-describe('session-end auto-checkpoint (CAIRN-283)', () => {
+describe('session-end auto-checkpoint (CROFT-283)', () => {
   it('keeps real checkpoints, skips other sessions, and never counts as activity', async () => {
     const handoffUnnamed = await insertTask({ claimedSession: null, checkpoint: HANDOFF })
     const handoffMine = await insertTask({ claimedSession: SESSION, checkpoint: HANDOFF })
@@ -111,7 +111,7 @@ describe('session-end auto-checkpoint (CAIRN-283)', () => {
       externalId: `reaper:${randomUUID()}`,
       platformSource: 'claude',
       completed: 'Shipped the reaper fix.',
-      taskRefs: [worked.ref, 'CAIRN-277'],
+      taskRefs: [worked.ref, 'CROFT-277'],
     })
     const { checkpointed } = await upsertSession(agent('claude-code', SESSION), input)
 
@@ -188,7 +188,7 @@ describe('session-end auto-checkpoint (CAIRN-283)', () => {
   })
 })
 
-describe('releases (CAIRN-284)', () => {
+describe('releases (CROFT-284)', () => {
   it('manual release moves a held doing task to todo and forgets the session', async () => {
     const task = await insertTask({ claimedSession: SESSION })
     const version = (await pool().query('select ownership_version from tasks where id = $1', [task.id]))

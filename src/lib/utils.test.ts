@@ -3,7 +3,7 @@ import { taskRefHref } from './utils'
 
 describe('taskRefHref', () => {
   it('builds a task link from a plain ref', () => {
-    expect(taskRefHref('CAIRN-75')).toBe('/projects/CAIRN/tasks/75')
+    expect(taskRefHref('CROFT-75')).toBe('/projects/CROFT/tasks/75')
   })
 
   it('handles a project key carrying digits', () => {
@@ -16,6 +16,6 @@ describe('taskRefHref', () => {
     // parses the shape, so it does not need to know SHA-256 is not a task.
     expect(taskRefHref('not a ref')).toBeNull()
     expect(taskRefHref('lowercase-9')).toBeNull()
-    expect(taskRefHref('CAIRN')).toBeNull()
+    expect(taskRefHref('CROFT')).toBeNull()
   })
 })

@@ -4,7 +4,7 @@ import { pool } from '@/lib/db/client'
 import { mentionsOf } from '@/lib/api/mentions'
 
 /**
- * Backlinks (CAIRN-267): a ref written anywhere on one task is readable from
+ * Backlinks (CROFT-267): a ref written anywhere on one task is readable from
  * the task it names. Filled by triggers, so every assertion here is about the
  * installed SQL — the unit suite cannot see a trigger at all.
  */

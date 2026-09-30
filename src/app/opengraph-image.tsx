@@ -3,7 +3,7 @@ import { getBranding } from '@/lib/branding'
 import { STOCK_MARK } from '@/lib/brand-colour'
 
 /**
- * The social card. Without one, every Cairn link pasted into Slack or a pull
+ * The social card. Without one, every Croft link pasted into Slack or a pull
  * request renders as a bare URL.
  *
  * Colours are the app's own dark tokens read from globals.css (--bg, --fg,

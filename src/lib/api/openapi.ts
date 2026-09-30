@@ -54,7 +54,7 @@ const errorResponse = {
             type: 'array',
             items: { type: 'string' },
             description:
-              'Present when an agent\'s task description is refused as unreadable (CAIRN-312): ' +
+              'Present when an agent\'s task description is refused as unreadable (CROFT-312): ' +
               'one instruction per problem — a heading to write, a paragraph to break up, a path ' +
               'to put in backticks. `error` repeats them.',
           },
@@ -69,7 +69,7 @@ const errorResponse = {
  * What a knowledge write says when its `[[refs]]` do not resolve.
  *
  * The ordinary failure envelope plus the half that makes it actionable. 63% of
- * the dangling references already in the store point at a fact Cairn holds
+ * the dangling references already in the store point at a fact Croft holds
  * under a different slug, so "that does not exist" is true and useless; the
  * names that nearly are it are the answer. `error` repeats all of it in prose,
  * because the CLI prints that field and drops everything beside it.
@@ -164,7 +164,7 @@ const person = {
   required: ['id', 'email', 'name', 'active'],
 }
 
-/** One agent key, the same shape to an administrator and to its owner (CAIRN-317). */
+/** One agent key, the same shape to an administrator and to its owner (CROFT-317). */
 const agentKey = {
   type: 'object',
   properties: {
@@ -234,7 +234,7 @@ const taskSummary = {
 
 /**
  * How a lookup was reached when it went through a key the project no longer
- * has. Present only then — a current key or ref changes nothing (CAIRN-264).
+ * has. Present only then — a current key or ref changes nothing (CROFT-264).
  */
 const keyRename = {
   type: 'object',
@@ -394,7 +394,7 @@ const vitalsReport = {
             'gap in the memory or a phrasing the index does not match.',
         },
         directReads: integer(
-          'Facts looked up by slug rather than searched for — `cairn know <slug>`, the ' +
+          'Facts looked up by slug rather than searched for — `croft know <slug>`, the ' +
             'MCP tool, and every browser read. Absent from a server before migration ' +
             '053, which is not the same as zero.',
         ),
@@ -431,7 +431,7 @@ const vitalsReport = {
 export const openapiSpec = () => ({
   openapi: '3.1.0',
   info: {
-    title: 'Cairn API',
+    title: 'Croft API',
     version: '0.1.0',
     description: [
       'Agent-first task tracker whose tasks double as shared memory.',
@@ -607,7 +607,7 @@ export const openapiSpec = () => ({
             key: {
               type: 'string',
               description:
-                'Changing this changes every task ref. The former key is retained and keeps resolving, so refs already written into commits and notes still find the task; the response carries `former_key`, and the retirement records who made it and what the key became (`former_keys`). A key retired by another project is refused, because reusing it would make those refs ambiguous. `cairn project rekey <KEY> <NEW>` is the CLI for this.',
+                'Changing this changes every task ref. The former key is retained and keeps resolving, so refs already written into commits and notes still find the task; the response carries `former_key`, and the retirement records who made it and what the key became (`former_keys`). A key retired by another project is refused, because reusing it would make those refs ambiguous. `croft project rekey <KEY> <NEW>` is the CLI for this.',
             },
             status: { type: 'string', enum: ['active', 'archived'] },
           },
@@ -687,7 +687,7 @@ export const openapiSpec = () => ({
           'wall of text — capitals for headings, a long unbroken paragraph, paths and calls outside ' +
           'backticks — is refused with `validation_failed` and `problems`, one fix each. A 409 ' +
           'means the project is archived — most likely the copy left behind by a move to another ' +
-          'Cairn instance; restore it first, or point the CLI at the other instance.',
+          'Croft instance; restore it first, or point the CLI at the other instance.',
         requestBody: body(json(createTaskSchema)),
         responses: {
           '201': okResponse('Created.', taskSummary),
@@ -745,7 +745,7 @@ export const openapiSpec = () => ({
           '`dueDate: null` clears the due date. An agent\'s changed `description` meets the same ' +
           'readable-markdown check as on create. Every write here, including moving the task ' +
           'elsewhere, is refused with 409 if its current project is archived — most likely the ' +
-          'copy left behind by a move to another Cairn instance; restore the project first, or ' +
+          'copy left behind by a move to another Croft instance; restore the project first, or ' +
           'point the CLI at the other instance.',
         requestBody: body(json(updateTaskSchema)),
         responses: {
@@ -778,7 +778,7 @@ export const openapiSpec = () => ({
         summary: 'Claim a task',
         description:
           'A 409 means another agent holds it, or that the task\'s project is archived — most ' +
-          'likely the copy left behind by a move to another Cairn instance. Pick different work, ' +
+          'likely the copy left behind by a move to another Croft instance. Pick different work, ' +
           'or restore the project / point the CLI at the other instance.',
         responses: { '200': okResponse('Claimed.'), '409': errorResponse },
       },
@@ -1014,7 +1014,7 @@ export const openapiSpec = () => ({
             description:
               'Instead of the index: current entries no search returned and no direct read ' +
               'fetched in this many days, never-recalled first, leaving out entries younger ' +
-              'than the window. The session briefing and `cairn recall` record nothing and are ' +
+              'than the window. The session briefing and `croft recall` record nothing and are ' +
               'not counted; `counted` in the response says so.',
             schema: { type: 'integer', minimum: 1, maximum: 365 },
           },
@@ -1309,7 +1309,7 @@ export const openapiSpec = () => ({
     },
     '/vitals': {
       get: {
-        summary: "Cairn's own vital signs, and what looks wrong",
+        summary: "Croft's own vital signs, and what looks wrong",
         description:
           'Counts for the last `hours` (default 24, max 720) against the week before, plus ' +
           '`findings` — the ones worth acting on. Separate from `/health`, which reports on ' +
@@ -1618,7 +1618,7 @@ export const openapiSpec = () => ({
       get: {
         summary: 'List your own agent keys (signed-in human browser session only)',
         description:
-          'Every key you own, active and revoked — the ones `cairn setup` paired (named ' +
+          'Every key you own, active and revoked — the ones `croft setup` paired (named ' +
           '`<runtime> on <host>`) and any an administrator issued you. Never the hash or the key ' +
           'itself: that was shown once, when it was minted. An agent API key gets 403, even an ' +
           'administrator\'s: a key must not be able to list or revoke its siblings.',

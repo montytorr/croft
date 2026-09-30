@@ -62,7 +62,7 @@ describe('UsersManager destructive actions', () => {
           id: 'key-1',
           agentName: 'clawclaw',
           name: 'Workstation',
-          keyPrefix: 'cairn_abcd',
+          keyPrefix: 'croft_abcd',
           lastUsedAt: null,
           revokedAt: null,
           createdAt: '2026-09-17T00:00:00.000Z',
@@ -117,7 +117,7 @@ describe('UsersManager destructive actions', () => {
   })
 })
 
-describe('UsersManager handing over open tasks (CAIRN-310)', () => {
+describe('UsersManager handing over open tasks (CROFT-310)', () => {
   let container: HTMLDivElement
   let root: ReturnType<typeof createRoot>
   const confirmMock = vi.fn(() => true)

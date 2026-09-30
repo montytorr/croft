@@ -10,16 +10,16 @@
 --    found the wrong one are indistinguishable rows. One array on an insert
 --    that already happens fixes that for good.
 --
--- 2. Direct recall by slug — `cairn know <slug>`, GET /api/v1/knowledge/[slug],
+-- 2. Direct recall by slug — `croft know <slug>`, GET /api/v1/knowledge/[slug],
 --    and every browser read — was not recorded anywhere. That is the one path
 --    that IS "do we call knowledge when we need it", and it was the one path
 --    with no instrumentation. The MISS is the valuable half: a miss on a
---    guessed slug is a dangling reference (CAIRN-253) being followed live,
+--    guessed slug is a dangling reference (CROFT-253) being followed live,
 --    observed at the moment it fails rather than reconstructed later.
 --
 -- WHY A SEPARATE TABLE, AND NOT `search_events` WITH THE SLUG AS THE QUERY.
 --
--- Reusing the table would have made direct reads show up in cairn_memory_use
+-- Reusing the table would have made direct reads show up in croft_memory_use
 -- for free, which is genuinely what we want. It would also have corrupted the
 -- three numbers that table already answers:
 --
@@ -35,7 +35,7 @@
 --   - `result_count` on a slug lookup is only ever 0 or 1, so pooling it with
 --     search turns `searches` into a count of two different acts.
 --
--- So: a separate table with its own columns, and cairn_memory_use extended to
+-- So: a separate table with its own columns, and croft_memory_use extended to
 -- read both. The aggregate reports direct reads alongside searches instead of
 -- inside them, and the one place where the two genuinely mean the same thing —
 -- "did this actor ask the memory anything before filing work" — explicitly
@@ -86,9 +86,9 @@ create index if not exists knowledge_reads_slug_idx
   on knowledge_reads (slug, created_at desc);
 
 -- ---------------------------------------------------------------------------
--- 3. Teach cairn_memory_use about direct reads.
+-- 3. Teach croft_memory_use about direct reads.
 --
--- Transformed, not re-copied. cairn_memory_use was written in 025, replaced in
+-- Transformed, not re-copied. croft_memory_use was written in 025, replaced in
 -- 027, and had its owner predicates stripped in 048 when the workspace became
 -- shared. Pasting the 027 body back would silently revive the tenancy filters
 -- 048 removed, which is the exact failure mode 048's own header warns about.
@@ -105,16 +105,16 @@ begin
   select p.oid into fn
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
-   where n.nspname = 'public' and p.proname = 'cairn_memory_use';
+   where n.nspname = 'public' and p.proname = 'croft_memory_use';
 
   if fn is null then
-    raise exception 'cairn_memory_use is not installed';
+    raise exception 'croft_memory_use is not installed';
   end if;
 
   definition := pg_get_functiondef(fn);
 
   if definition like '%directReads%' then
-    raise notice 'cairn_memory_use already counts direct reads; nothing to do';
+    raise notice 'croft_memory_use already counts direct reads; nothing to do';
     return;
   end if;
 
@@ -134,7 +134,7 @@ begin
   -- `replace` is global; only the final select is preceded by a newline at
   -- column zero, but assert rather than trust it.
   if (length(updated) - length(definition)) <= 0 then
-    raise exception 'cairn_memory_use: the final select was not found';
+    raise exception 'croft_memory_use: the final select was not found';
   end if;
 
   -- Reported alongside the search numbers, never folded into them. A direct
@@ -177,7 +177,7 @@ begin
      or updated not like '%recentSlugMisses%'
      or updated not like '%reads as (%'
      or updated not like '%select 1 from knowledge_reads r%' then
-    raise exception 'cairn_memory_use: rewrite did not produce all four changes';
+    raise exception 'croft_memory_use: rewrite did not produce all four changes';
   end if;
 
   execute updated;

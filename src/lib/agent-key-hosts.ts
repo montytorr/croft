@@ -1,5 +1,5 @@
 /**
- * Pairing names every key `<runtime> on <host>` (CAIRN-314), and the host is
+ * Pairing names every key `<runtime> on <host>` (CROFT-314), and the host is
  * what someone retiring a laptop is looking for. Only a name that is exactly
  * that shape — the runtime matching the key's own agent name, the host as
  * `/api/v1/connect` accepts one — counts; anything an administrator typed by

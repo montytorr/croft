@@ -110,7 +110,7 @@ export const UserMenu = ({
             Settings
           </Link>
 
-          {/* Everyone, not just administrators: these are your own keys (CAIRN-315). */}
+          {/* Everyone, not just administrators: these are your own keys (CROFT-315). */}
           <Link
             href="/settings/keys"
             role="menuitem"

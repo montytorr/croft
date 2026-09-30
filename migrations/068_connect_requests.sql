@@ -1,5 +1,5 @@
 -- ===========================================================================
--- 068: browser pairing so a machine can get API keys for its own agents (CAIRN-314)
+-- 068: browser pairing so a machine can get API keys for its own agents (CROFT-314)
 --
 -- Today only an administrator can mint a key, from Settings, for someone
 -- else's agent. That is right for managing other people's credentials and

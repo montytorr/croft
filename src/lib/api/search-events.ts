@@ -39,7 +39,7 @@ export const recordSearch = async (
    * Without this only the COUNT was stored, so "did the search return the right
    * fact" was unanswerable in principle: a widened search that found the right
    * entry and a precise one that found the wrong entry are the same row. The
-   * refs are what `cairn show` and `cairn know` take, so a stored event can be
+   * refs are what `croft show` and `croft know` take, so a stored event can be
    * replayed against the corpus rather than merely counted.
    */
   returnedSlugs: string[],
@@ -60,7 +60,7 @@ export const recordSearch = async (
 }
 
 /**
- * Records that a named fact was recalled directly — `cairn know <slug>`, the
+ * Records that a named fact was recalled directly — `croft know <slug>`, the
  * knowledge page, anything that addresses an entry rather than searching for
  * one.
  *

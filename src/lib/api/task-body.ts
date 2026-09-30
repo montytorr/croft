@@ -3,9 +3,9 @@ import type { Actor } from './auth'
 import { bodyProblems } from '@/lib/markdown-body'
 
 /**
- * Refuses an agent's task body that would be a wall of text (CAIRN-312).
+ * Refuses an agent's task body that would be a wall of text (CROFT-312).
  *
- * Here rather than in the CLI for the reason CAIRN-291 moved the bug/spike
+ * Here rather than in the CLI for the reason CROFT-291 moved the bug/spike
  * rule: this is where every caller meets it — the CLI, the MCP server that
  * shells it, and anything talking HTTP directly. Agents only: a person typing
  * into the board's editor is looking at the result as they write it, and a

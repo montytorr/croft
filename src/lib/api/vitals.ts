@@ -2,7 +2,7 @@ import { admin } from '@/lib/db/client'
 import type { Actor } from './auth'
 
 /**
- * Whether Cairn is still working.
+ * Whether Croft is still working.
  *
  * Everything that broke this week broke quietly. Sessions recorded nothing for
  * two days; ten tasks sat in In Progress with nobody on them; every automatic
@@ -39,7 +39,7 @@ export type Vitals = {
      * Not "never claimed", which is what this counted until migration 054 and
      * what made it wrong — nine of ten it flagged had moved to in-review hours
      * earlier, several with commits against them. A claim is one way of being
-     * visible, not the only one. See CAIRN-251.
+     * visible, not the only one. See CROFT-251.
      *
      * Optional because a server older than migration 054 does not send it —
      * one on 051 sends the old key under the old meaning — and a check that
@@ -53,7 +53,7 @@ export type Vitals = {
   // not send it. Absent means "assume runtime" — see the check below.
   agents: { agent: string; actorType?: string; recent: number; baseline: number }[]
   /**
-   * What cairn_vitals cannot see: claim liveness, the reaper, the summariser
+   * What croft_vitals cannot see: claim liveness, the reaper, the summariser
    * and session volume per runtime and host, knowledge verification. From
    * migration 065, in a function of its own.
    *
@@ -158,7 +158,7 @@ export const assess = (v: Vitals): Finding[] => {
         `No session recorded in ${hours}, against ${v.sessions.baseline} in the week before. ` +
         `That is the observation, not the cause: an idle runtime, a hook that never fired ` +
         `and a hook that could not write all produce it. ` +
-        `cairn-session-end.mjs --dry-run <transcript> separates them.`,
+        `croft-session-end.mjs --dry-run <transcript> separates them.`,
     })
   }
 
@@ -238,12 +238,12 @@ export const assess = (v: Vitals): Finding[] => {
     }
   }
 
-  // Also a habit rather than a breakage, and the one CAIRN-135 measured at 36%
+  // Also a habit rather than a breakage, and the one CROFT-135 measured at 36%
   // of closed tasks before shipping auto-claim on note and checkpoint. That
   // number had no reader afterwards: nothing recomputed it, so nobody would
   // have known if it went back up. This is the reader.
   //
-  // It read the wrong thing until migration 054. CAIRN-251 classified all ten
+  // It read the wrong thing until migration 054. CROFT-251 classified all ten
   // tasks it flagged in a 24h window: none was the bare created->done shape it
   // was filed for, nine had moved to in-review hours earlier, several carried
   // commits and test runs. So it counted two things it should not have — a
@@ -264,11 +264,11 @@ export const assess = (v: Vitals): Finding[] => {
   // and crying about it teaches people to skip the line.
   //
   // Deliberately not an alarm, deliberately not auto-claim on close, and
-  // deliberately not a hint on `cairn done`. CAIRN-146 rejected inferring
+  // deliberately not a hint on `croft done`. CROFT-146 rejected inferring
   // intent from an ambiguous signal, and closing is at least as ambiguous as
   // annotating: --kind verified exists precisely for closing somebody else's
-  // fix. CAIRN-211 refused the per-call nag — it "is not actionable, and
-  // trains people to ignore the line" — and CAIRN-135 called restating the
+  // fix. CROFT-211 refused the per-call nag — it "is not actionable, and
+  // trains people to ignore the line" — and CROFT-135 called restating the
   // rule "the third version of the same non-fix".
   const untraced = v.tasks.closedWithoutTrace
   if (untraced !== undefined && v.tasks.closed >= 5 && untraced / v.tasks.closed >= 0.25) {
@@ -280,7 +280,7 @@ export const assess = (v: Vitals): Finding[] => {
         `nothing recorded in between — no claim, no status move, no commit, no test run. ` +
         `Nothing said the work was happening while it happened, so the board showed them free, ` +
         `and had one crashed halfway it would have looked untouched rather than abandoned. ` +
-        `\`cairn add --start\`, or claim before you begin.`,
+        `\`croft add --start\`, or claim before you begin.`,
     })
   }
 
@@ -342,7 +342,7 @@ const label = (r: Pick<RuntimeHost, 'runtime' | 'host'>) => `${r.runtime}@${r.ho
 const pct = (n: number, d: number) => `${Math.round((n / d) * 100)}%`
 
 /**
- * The checks migration 065 made possible, each one a blind spot CAIRN-282
+ * The checks migration 065 made possible, each one a blind spot CROFT-282
  * found reading green while it failed.
  *
  * Grouped into one finding per check, listing every runtime or claim it
@@ -404,7 +404,7 @@ export const assessSignals = (v: Vitals, now = Date.now()): Finding[] => {
   const reaperNote =
     `Last automatic release ${formatAgo(s.reaper.lastReleaseAt, now)}; ` +
     `the maintenance identity last wrote ${formatAgo(s.reaper.maintenanceLastWriteAt, now)}. ` +
-    `\`CAIRN_AGENT=maintenance cairn reconcile --dry-run\` shows what it would take.`
+    `\`CROFT_AGENT=maintenance croft reconcile --dry-run\` shows what it would take.`
   if (beyondReaper && s.reaper.released7d === 0) {
     findings.push({
       code: 'reaper-idle',
@@ -479,7 +479,7 @@ export const assessSignals = (v: Vitals, now = Date.now()): Finding[] => {
     })
   }
 
-  // Seen in the month before and not since, so cairn_vitals' lists — which
+  // Seen in the month before and not since, so croft_vitals' lists — which
   // only reach back a week — no longer contain them at all.
   const gone = s.runtimes.filter((r) => r.recent === 0 && r.baseline === 0)
   const goneAgents = s.absentAgents
@@ -503,7 +503,7 @@ export const assessSignals = (v: Vitals, now = Date.now()): Finding[] => {
 /**
  * The shape of the work, as opposed to the health of the system.
  *
- * Deliberately not a leaderboard. The agents read Cairn -- it is their working
+ * Deliberately not a leaderboard. The agents read Croft -- it is their working
  * memory -- so a visible closure score creates an incentive to close things,
  * which is the one behaviour least worth optimising. Per agent there is only
  * what is actionable: what it holds now, and what it walked away from.
@@ -519,7 +519,7 @@ export type WorkShape = {
 }
 
 export const readWorkShapeFor = async (userId: string, hours = 24): Promise<WorkShape> => {
-  const { data, error } = await admin().rpc('cairn_work_shape', { p_owner: userId, p_hours: hours })
+  const { data, error } = await admin().rpc('croft_work_shape', { p_owner: userId, p_hours: hours })
   if (error) throw new Error(error.message)
   return data as unknown as WorkShape
 }
@@ -541,7 +541,7 @@ export type MemoryUse = {
   tasksFiledWithoutChecking: number
   recentMisses: string[]
   /**
-   * Facts fetched by name rather than searched for -- `cairn know <slug>` and
+   * Facts fetched by name rather than searched for -- `croft know <slug>` and
    * every browser read of an entry. It is the path that best answers "do we
    * call knowledge when we need it", and until migration 053 it was the one
    * path with no instrumentation on it at all.
@@ -563,13 +563,13 @@ export type MemoryUse = {
 }
 
 export const readMemoryUseFor = async (userId: string, hours = 24): Promise<MemoryUse> => {
-  const { data, error } = await admin().rpc('cairn_memory_use', { p_owner: userId, p_hours: hours })
+  const { data, error } = await admin().rpc('croft_memory_use', { p_owner: userId, p_hours: hours })
   if (error) throw new Error(error.message)
   return data as unknown as MemoryUse
 }
 
 export const readSignalsFor = async (userId: string, hours = 24): Promise<VitalsSignals> => {
-  const { data, error } = await admin().rpc('cairn_vitals_signals', { p_owner: userId, p_hours: hours })
+  const { data, error } = await admin().rpc('croft_vitals_signals', { p_owner: userId, p_hours: hours })
   if (error) throw new Error(error.message)
   return data as unknown as VitalsSignals
 }
@@ -581,18 +581,18 @@ export const readSignalsFor = async (userId: string, hours = 24): Promise<Vitals
  * The summariser's `claude -p` is recorded by the Claude SessionEnd hook like
  * any other session — four or five a week — which inflated the volume and,
  * having no prose of its own, diluted the summarised share the alarm reads.
- * 065 counts sessions without them; those totals replace cairn_vitals' here
+ * 065 counts sessions without them; those totals replace croft_vitals' here
  * rather than inside it, for the reason 065's header gives. `withFiles` is
  * left alone: the summariser touches no file, so it never counted there.
  *
  * The signals are optional. Their failure is logged and carried as
  * `signalsError`, and assess() turns it into a warning — a monitor that goes
- * quietly blind reads as a healthy one, which is the bug CAIRN-288 is about.
+ * quietly blind reads as a healthy one, which is the bug CROFT-288 is about.
  */
 export const readVitalsFor = async (userId: string, hours = 24): Promise<Vitals> => {
   const [base, signals] = await Promise.all([
     (async () => {
-      const { data, error } = await admin().rpc('cairn_vitals', { p_owner: userId, p_hours: hours })
+      const { data, error } = await admin().rpc('croft_vitals', { p_owner: userId, p_hours: hours })
       if (error) throw new Error(error.message)
       return data as unknown as Vitals
     })(),
@@ -626,10 +626,10 @@ export const readVitalsFor = async (userId: string, hours = 24): Promise<Vitals>
  * with a browser open. The things that write knowledge here cannot open one.
  * That is the failure knowledge/gaps/route.ts names in its own header, "the
  * findings were visible only to a person who happened to click Map", repeated
- * one panel over; it is why this read carries the memory block. See CAIRN-254.
+ * one panel over; it is why this read carries the memory block. See CROFT-254.
  *
  * Two round trips rather than one. The page already pays for both separately,
- * and folding memory into cairn_vitals would mean rewriting a function five
+ * and folding memory into croft_vitals would mean rewriting a function five
  * migrations have transformed in order to move a number that is already there.
  *
  * `memory` is null rather than fatal when the aggregate cannot be read: this
@@ -664,7 +664,7 @@ export const readVitals = async (actor: Actor, hours = 24): Promise<VitalsReport
  * `unstable_cache`. That one serves the stale entry and revalidates after the
  * response has gone: App Runner throttles an instance's CPU between requests,
  * and a read-only root cannot persist the entry at all, so the banner kept
- * showing an alarm the database had already cleared (CAIRN-303). Per process,
+ * showing an alarm the database had already cleared (CROFT-303). Per process,
  * which for a minute-old health summary is fine.
  */
 const VITALS_TTL_MS = 60_000

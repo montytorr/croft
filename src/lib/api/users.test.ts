@@ -4,9 +4,9 @@ const mocks = vi.hoisted(() => ({
   query: vi.fn(),
   transaction: vi.fn(),
   generatedKey: {
-    key: 'cairn_test_key',
+    key: 'croft_test_key',
     keyHash: 'test-hash',
-    keyPrefix: 'cairn_test',
+    keyPrefix: 'croft_test',
   },
 }))
 
@@ -139,7 +139,7 @@ describe('user credential administration', () => {
     expect(statements[6]).toContain('update api_keys set revoked_at = now()')
   })
 
-  describe('open tasks on deactivation (CAIRN-310)', () => {
+  describe('open tasks on deactivation (CROFT-310)', () => {
     const owner = { ...activeUser, role: 'member', openTaskCount: 3 }
 
     it('refuses to disable an assignee of open tasks without reassignTo, and says how many', async () => {

@@ -6,7 +6,7 @@ import { recallFor, type Recall } from '@/lib/api/recall'
 import type { Actor } from '@/lib/api/auth'
 
 /**
- * `cairn recall <ref>` (CAIRN-268), on the shape it exists for: a decision
+ * `croft recall <ref>` (CROFT-268), on the shape it exists for: a decision
  * closed on one task that constrains another, written as a finding naming it —
  * BB-343 and BB-333. Everything it reads is installed SQL: mentions from
  * triggers, file links from triggers, full-text search.

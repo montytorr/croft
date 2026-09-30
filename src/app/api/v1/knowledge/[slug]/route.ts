@@ -11,24 +11,24 @@ export const dynamic = 'force-dynamic'
 type Params = { slug: string }
 
 /**
- * Whether a read says it is part of a sweep (`X-Cairn-Read: sweep`, sent by
- * `cairn know --sweep` or CAIRN_SWEEP=1). The database also tags bursts by
+ * Whether a read says it is part of a sweep (`X-Croft-Read: sweep`, sent by
+ * `croft know --sweep` or CROFT_SWEEP=1). The database also tags bursts by
  * rate (064), because the audit loops that inflated recall never said so.
  */
 const isSweepRead = (req: Request): boolean =>
-  req.headers.get('x-cairn-read')?.trim().toLowerCase() === 'sweep'
+  req.headers.get('x-croft-read')?.trim().toLowerCase() === 'sweep'
 
 /**
  * Direct recall: the agent already knows what it wants and asks for it by name.
  *
  * Instrumented because this is the single path that answers "do agents call
  * knowledge when they need it", and it recorded nothing — `recordSearch` only
- * ever fired from /api/v1/search, so every `cairn know <slug>` and every
+ * ever fired from /api/v1/search, so every `croft know <slug>` and every
  * browser read was invisible.
  *
  * The miss is recorded as deliberately as the hit. A 404 here is an agent
  * following a reference to a fact it expected to exist, so a miss is a
- * dangling reference (CAIRN-253) caught in the act instead of reconstructed
+ * dangling reference (CROFT-253) caught in the act instead of reconstructed
  * from the corpus afterwards. Absence of a row would say nothing at all.
  */
 export const GET = route<Params>({

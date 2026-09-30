@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-const cli = join(process.cwd(), 'cli', 'cairn.mjs')
+const cli = join(process.cwd(), 'cli', 'croft.mjs')
 
 const run = (
   home: string,
@@ -21,10 +21,10 @@ const run = (
       env: {
         ...process.env,
         HOME: home,
-        CAIRN_AGENT: 'integration-agent',
-        CAIRN_API_KEY: key,
-        CAIRN_BASE_URL: base,
-        CAIRN_DEADLINE_MS: '1',
+        CROFT_AGENT: 'integration-agent',
+        CROFT_API_KEY: key,
+        CROFT_BASE_URL: base,
+        CROFT_DEADLINE_MS: '1',
         NO_PROXY: '127.0.0.1,localhost',
         HTTP_PROXY: '',
         HTTPS_PROXY: '',
@@ -55,7 +55,7 @@ describe('durable CLI outbox', () => {
   const seen = new Map<string, number>()
 
   beforeEach(async () => {
-    home = await mkdtemp(join(tmpdir(), 'cairn-outbox-'))
+    home = await mkdtemp(join(tmpdir(), 'croft-outbox-'))
     received.length = 0
     attempts.length = 0
     requestPaths.length = 0
@@ -118,12 +118,12 @@ describe('durable CLI outbox', () => {
   it('preserves concurrent appends and replays each mutation with a stable unique key', async () => {
     const queued = await Promise.all(
       Array.from({ length: 12 }, (_, index) =>
-        run(home, base, ['comment', 'CAIRN-163', `queued-${index}`]),
+        run(home, base, ['comment', 'CROFT-163', `queued-${index}`]),
       ),
     )
     expect(queued.every((result) => result.code === 0 && result.stderr.includes('queued locally'))).toBe(true)
 
-    const lines = (await readFile(join(home, '.cairn', 'outbox.jsonl'), 'utf8')).trim().split('\n')
+    const lines = (await readFile(join(home, '.croft', 'outbox.jsonl'), 'utf8')).trim().split('\n')
     const records = lines.map((line) => JSON.parse(line))
     expect(records).toHaveLength(12)
     expect(new Set(records.map((record) => record.id)).size).toBe(12)
@@ -138,7 +138,7 @@ describe('durable CLI outbox', () => {
   })
 
   it('stops the whole drain at the oldest transient failure and leaves newer shards queued', async () => {
-    const outboxDir = join(home, '.cairn')
+    const outboxDir = join(home, '.croft')
     await mkdir(outboxDir, { recursive: true })
     const key = 'crn_integration_key'
     const makeItem = (id: string, queuedAt: string) => ({
@@ -173,12 +173,12 @@ describe('durable CLI outbox', () => {
   })
 
   it('quarantines records when the runtime key identity changes', async () => {
-    await run(home, base, ['comment', 'CAIRN-163', 'bound to old key'], 'crn_key_a')
+    await run(home, base, ['comment', 'CROFT-163', 'bound to old key'], 'crn_key_a')
     mode = 'success'
     const replay = await run(home, base, ['replay'], 'crn_key_b')
     expect(replay.stdout).toContain('sent 0, rejected 1, still queued 0')
     expect(received).toHaveLength(0)
-    const rejected = await readFile(join(home, '.cairn', 'outbox.jsonl.rejected'), 'utf8')
+    const rejected = await readFile(join(home, '.croft', 'outbox.jsonl.rejected'), 'utf8')
     expect(rejected).toContain('replay context mismatch')
     expect(rejected).toContain('a key this runtime no longer uses')
   })
@@ -190,22 +190,22 @@ describe('durable CLI outbox', () => {
    * arrived. It is somebody else's write, not a bad one.
    */
   it("leaves another runtime's queued write for that runtime to send", async () => {
-    await run(home, base, ['comment', 'CAIRN-163', 'queued by claude'], 'crn_claude', { CAIRN_AGENT: 'claude-code' })
+    await run(home, base, ['comment', 'CROFT-163', 'queued by claude'], 'crn_claude', { CROFT_AGENT: 'claude-code' })
     mode = 'success'
 
-    const codex = await run(home, base, ['replay'], 'crn_codex', { CAIRN_AGENT: 'codex' })
+    const codex = await run(home, base, ['replay'], 'crn_codex', { CROFT_AGENT: 'codex' })
     expect(codex.stdout).toContain('sent 0, rejected 0, still queued 1 (1 for another runtime or instance)')
     expect(received).toHaveLength(0)
 
-    const claude = await run(home, base, ['replay'], 'crn_claude', { CAIRN_AGENT: 'claude-code' })
+    const claude = await run(home, base, ['replay'], 'crn_claude', { CROFT_AGENT: 'claude-code' })
     expect(claude.stdout).toContain('sent 1, rejected 0, still queued 0')
     expect(received).toHaveLength(1)
     expect(received[0]?.body).toContain('queued by claude')
   })
 
   it('leaves a write queued for another instance in place while draining its own', async () => {
-    await run(home, base, ['comment', 'CAIRN-163', 'mine'])
-    const outbox = join(home, '.cairn', 'outbox.jsonl')
+    await run(home, base, ['comment', 'CROFT-163', 'mine'])
+    const outbox = join(home, '.croft', 'outbox.jsonl')
     const own = (await readFile(outbox, 'utf8')).trim()
     const other = { ...JSON.parse(own), id: 'other-instance-item', base: 'http://127.0.0.1:9', body: { body: 'theirs' } }
     await writeFile(outbox, `${own}\n${JSON.stringify(other)}\n`)
@@ -221,7 +221,7 @@ describe('durable CLI outbox', () => {
     id,
     t: new Date().toISOString(),
     method: 'POST',
-    path: '/api/v1/tasks/CAIRN-163/comments',
+    path: '/api/v1/tasks/CROFT-163/comments',
     body: { body: id },
     agent: 'claude-code',
     base,
@@ -234,13 +234,13 @@ describe('durable CLI outbox', () => {
    * the replay ran: a checkpoint could then be sent ahead of an older one.
    */
   it('puts kept writes back in front of anything queued while the replay ran', async () => {
-    const outbox = join(home, '.cairn', 'outbox.jsonl')
-    await mkdir(join(home, '.cairn'), { recursive: true })
+    const outbox = join(home, '.croft', 'outbox.jsonl')
+    await mkdir(join(home, '.croft'), { recursive: true })
     await writeFile(outbox, `${JSON.stringify(foreignItem('older'))}\n`)
     mode = 'success'
 
     const replay = await run(home, base, ['replay'], undefined, {
-      CAIRN_TEST_ENQUEUE_DURING_REPLAY: JSON.stringify(foreignItem('newer')),
+      CROFT_TEST_ENQUEUE_DURING_REPLAY: JSON.stringify(foreignItem('newer')),
     })
     expect(replay.code).toBe(0)
     const ids = (await readFile(outbox, 'utf8')).trim().split('\n').map((line) => JSON.parse(line).id)
@@ -248,13 +248,13 @@ describe('durable CLI outbox', () => {
   })
 
   it('does not drain a queue that holds only other runtimes\' writes', async () => {
-    const outbox = join(home, '.cairn', 'outbox.jsonl')
-    await mkdir(join(home, '.cairn'), { recursive: true })
+    const outbox = join(home, '.croft', 'outbox.jsonl')
+    await mkdir(join(home, '.croft'), { recursive: true })
     await writeFile(outbox, `${JSON.stringify(foreignItem('theirs'))}\n`)
     const before = await stat(outbox)
     mode = 'success'
 
-    const write = await run(home, base, ['comment', 'CAIRN-163', 'mine'])
+    const write = await run(home, base, ['comment', 'CROFT-163', 'mine'])
     expect(write.code).toBe(0)
     const after = await stat(outbox)
     expect(after.ino).toBe(before.ino)
@@ -263,59 +263,59 @@ describe('durable CLI outbox', () => {
   })
 
   it('does not let another runtime\'s queued checkpoint shift this one\'s sequence', async () => {
-    const ownershipDir = join(home, '.cairn', 'ownership')
+    const ownershipDir = join(home, '.croft', 'ownership')
     await mkdir(ownershipDir, { recursive: true })
     await writeFile(
-      join(ownershipDir, 'CAIRN-163.json'),
+      join(ownershipDir, 'CROFT-163.json'),
       JSON.stringify({ ownershipVersion: 7, checkpointVersion: 3, agent: 'integration-agent' }),
     )
     const theirs = foreignItem('their-checkpoint', {
-      path: '/api/v1/tasks/CAIRN-163/checkpoint',
+      path: '/api/v1/tasks/CROFT-163/checkpoint',
       body: { summary: 'theirs', ownershipVersion: 7, checkpointVersion: 3 },
     })
-    await writeFile(join(home, '.cairn', 'outbox.jsonl'), `${JSON.stringify(theirs)}\n`)
+    await writeFile(join(home, '.croft', 'outbox.jsonl'), `${JSON.stringify(theirs)}\n`)
 
-    await run(home, base, ['checkpoint', 'CAIRN-163', '--summary', 'mine'])
-    const lines = (await readFile(join(home, '.cairn', 'outbox.jsonl'), 'utf8')).trim().split('\n')
+    await run(home, base, ['checkpoint', 'CROFT-163', '--summary', 'mine'])
+    const lines = (await readFile(join(home, '.croft', 'outbox.jsonl'), 'utf8')).trim().split('\n')
     const mine = lines.map((line) => JSON.parse(line)).find((item) => item.body.summary === 'mine')
     expect(mine?.body.checkpointVersion).toBe(3)
   })
 
   it('quarantines a foreign write with no readable queued-at time instead of keeping it forever', async () => {
-    await mkdir(join(home, '.cairn'), { recursive: true })
-    await writeFile(join(home, '.cairn', 'outbox.jsonl'), `${JSON.stringify(foreignItem('timeless', { t: undefined }))}\n`)
+    await mkdir(join(home, '.croft'), { recursive: true })
+    await writeFile(join(home, '.croft', 'outbox.jsonl'), `${JSON.stringify(foreignItem('timeless', { t: undefined }))}\n`)
     mode = 'success'
 
     const replay = await run(home, base, ['replay'])
     expect(replay.stdout).toContain('sent 0, rejected 1, still queued 0')
-    const rejected = await readFile(join(home, '.cairn', 'outbox.jsonl.rejected'), 'utf8')
+    const rejected = await readFile(join(home, '.croft', 'outbox.jsonl.rejected'), 'utf8')
     expect(rejected).toContain('no queued-at time')
   })
 
   it('quarantines a foreign write nobody has replayed in 30 days, so the queue cannot grow forever', async () => {
-    await mkdir(join(home, '.cairn'), { recursive: true })
+    await mkdir(join(home, '.croft'), { recursive: true })
     const stale = {
       id: 'stale-item',
       t: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString(),
       method: 'POST',
-      path: '/api/v1/tasks/CAIRN-163/comments',
+      path: '/api/v1/tasks/CROFT-163/comments',
       body: { body: 'abandoned' },
       agent: 'retired-runtime',
       base,
       keyId: 'x',
     }
-    await writeFile(join(home, '.cairn', 'outbox.jsonl'), `${JSON.stringify(stale)}\n`)
+    await writeFile(join(home, '.croft', 'outbox.jsonl'), `${JSON.stringify(stale)}\n`)
     mode = 'success'
 
     const replay = await run(home, base, ['replay'])
     expect(replay.stdout).toContain('sent 0, rejected 1, still queued 0')
-    const rejected = await readFile(join(home, '.cairn', 'outbox.jsonl.rejected'), 'utf8')
+    const rejected = await readFile(join(home, '.croft', 'outbox.jsonl.rejected'), 'utf8')
     expect(rejected).toContain('in 30 days')
   })
 
   it('serializes concurrent replay workers without duplicating side effects', async () => {
     await Promise.all(Array.from({ length: 12 }, (_, index) =>
-      run(home, base, ['comment', 'CAIRN-163', `concurrent-${index}`]),
+      run(home, base, ['comment', 'CROFT-163', `concurrent-${index}`]),
     ))
     mode = 'success'
     const results = await Promise.all([
@@ -331,8 +331,8 @@ describe('durable CLI outbox', () => {
     ['a reused live PID', () => process.pid],
     ['a dead PID', () => 2147483647],
   ])('recovers an abandoned replay lease with %s', async (_case, pid) => {
-    await run(home, base, ['comment', 'CAIRN-163', 'recover after PID reuse'])
-    await writeFile(join(home, '.cairn', 'outbox.jsonl.replay.lock'), JSON.stringify({
+    await run(home, base, ['comment', 'CROFT-163', 'recover after PID reuse'])
+    await writeFile(join(home, '.croft', 'outbox.jsonl.replay.lock'), JSON.stringify({
       pid: pid(), start: 'previous-process-incarnation', token: 'abandoned',
     }))
     mode = 'success'
@@ -340,12 +340,12 @@ describe('durable CLI outbox', () => {
     const replay = await run(home, base, ['replay'])
     expect(replay.code).toBe(0)
     expect(received).toHaveLength(1)
-    expect(existsSync(join(home, '.cairn', 'outbox.jsonl.replay.lock'))).toBe(false)
+    expect(existsSync(join(home, '.croft', 'outbox.jsonl.replay.lock'))).toBe(false)
   })
 
   it('recovers a legacy pid-token lease held by an unrelated live process', async () => {
-    await run(home, base, ['comment', 'CAIRN-163', 'recover legacy lease'])
-    const lock = join(home, '.cairn', 'outbox.jsonl.replay.lock')
+    await run(home, base, ['comment', 'CROFT-163', 'recover legacy lease'])
+    const lock = join(home, '.croft', 'outbox.jsonl.replay.lock')
     await writeFile(lock, `${process.pid}-abandoned-owner`)
     mode = 'success'
 
@@ -356,7 +356,7 @@ describe('durable CLI outbox', () => {
   })
 
   it('does not send a newer shard while an older worker is in flight and then fails transiently', async () => {
-    const outboxDir = join(home, '.cairn')
+    const outboxDir = join(home, '.croft')
     await mkdir(outboxDir, { recursive: true })
     const makeItem = (id: string, t: string) => ({
       id, t, method: 'POST', path: `/api/v1/tasks/${id}`, body: { id },
@@ -385,33 +385,33 @@ describe('durable CLI outbox', () => {
   })
 
   it('reserves monotonic checkpoint sequences under concurrent offline writes', async () => {
-    const ownershipDir = join(home, '.cairn', 'ownership')
+    const ownershipDir = join(home, '.croft', 'ownership')
     await mkdir(ownershipDir, { recursive: true })
     await writeFile(
-      join(ownershipDir, 'CAIRN-163.json'),
+      join(ownershipDir, 'CROFT-163.json'),
       JSON.stringify({ ownershipVersion: 7, checkpointVersion: 3, agent: 'integration-agent' }),
     )
     const queued = await Promise.all([
-      run(home, base, ['checkpoint', 'CAIRN-163', '--summary', 'first']),
-      run(home, base, ['checkpoint', 'CAIRN-163', '--summary', 'second']),
+      run(home, base, ['checkpoint', 'CROFT-163', '--summary', 'first']),
+      run(home, base, ['checkpoint', 'CROFT-163', '--summary', 'second']),
     ])
     expect(queued.every((result) => result.code === 0)).toBe(true)
 
-    const lines = (await readFile(join(home, '.cairn', 'outbox.jsonl'), 'utf8')).trim().split('\n')
+    const lines = (await readFile(join(home, '.croft', 'outbox.jsonl'), 'utf8')).trim().split('\n')
     const versions = lines.map((line) => JSON.parse(line).body.checkpointVersion).sort()
     expect(versions).toEqual([3, 4])
     expect(lines.every((line) => JSON.parse(line).body.ownershipVersion === 7)).toBe(true)
   })
 
   it('recovers a dead worker processing file immediately after an acknowledged send', async () => {
-    await run(home, base, ['comment', 'CAIRN-163', 'crash recovery'])
+    await run(home, base, ['comment', 'CROFT-163', 'crash recovery'])
     mode = 'success'
     const crashed = await run(
       home,
       base,
       ['replay'],
       'crn_integration_key',
-      { CAIRN_TEST_CRASH_AFTER_SEND: '1' },
+      { CROFT_TEST_CRASH_AFTER_SEND: '1' },
     )
     expect(crashed.code).not.toBe(0)
 
@@ -424,57 +424,57 @@ describe('durable CLI outbox', () => {
   })
 
   it('recovers an orphaned processing file through the next ordinary successful write', async () => {
-    await run(home, base, ['comment', 'CAIRN-163', 'orphan recovery'])
+    await run(home, base, ['comment', 'CROFT-163', 'orphan recovery'])
     mode = 'success'
     const crashed = await run(
       home,
       base,
       ['replay'],
       'crn_integration_key',
-      { CAIRN_TEST_CRASH_AFTER_SEND: '1' },
+      { CROFT_TEST_CRASH_AFTER_SEND: '1' },
     )
     expect(crashed.code).not.toBe(0)
 
-    const ordinary = await run(home, base, ['comment', 'CAIRN-163', 'ordinary write'])
+    const ordinary = await run(home, base, ['comment', 'CROFT-163', 'ordinary write'])
     expect(ordinary.code).toBe(0)
     expect(received).toHaveLength(2)
     expect(new Set(received.map((request) => request.id)).size).toBe(2)
   })
 
   it('does not reserve a checkpoint sequence twice after local progress persistence fails', async () => {
-    const ownershipDir = join(home, '.cairn', 'ownership')
+    const ownershipDir = join(home, '.croft', 'ownership')
     await mkdir(ownershipDir, { recursive: true })
     await writeFile(
-      join(ownershipDir, 'CAIRN-163.json'),
+      join(ownershipDir, 'CROFT-163.json'),
       JSON.stringify({ ownershipVersion: 7, checkpointVersion: 3, agent: 'integration-agent' }),
     )
-    await run(home, base, ['checkpoint', 'CAIRN-163', '--summary', 'acknowledged'])
+    await run(home, base, ['checkpoint', 'CROFT-163', '--summary', 'acknowledged'])
     mode = 'success'
     const failed = await run(
       home,
       base,
       ['replay'],
       'crn_integration_key',
-      { CAIRN_TEST_FAIL_PERSIST_AFTER_SEND: '1' },
+      { CROFT_TEST_FAIL_PERSIST_AFTER_SEND: '1' },
     )
     expect(failed.code).not.toBe(0)
 
     mode = 'fail'
-    await run(home, base, ['checkpoint', 'CAIRN-163', '--summary', 'next'])
-    const lines = (await readFile(join(home, '.cairn', 'outbox.jsonl'), 'utf8')).trim().split('\n')
+    await run(home, base, ['checkpoint', 'CROFT-163', '--summary', 'next'])
+    const lines = (await readFile(join(home, '.croft', 'outbox.jsonl'), 'utf8')).trim().split('\n')
     const versions = lines.map((line) => JSON.parse(line).body.checkpointVersion).sort()
     expect(versions).toEqual([3, 4])
   })
 
   it('retains an acknowledged item when local replay persistence fails', async () => {
-    await run(home, base, ['comment', 'CAIRN-163', 'persistence recovery'])
+    await run(home, base, ['comment', 'CROFT-163', 'persistence recovery'])
     mode = 'success'
     const failed = await run(
       home,
       base,
       ['replay'],
       'crn_integration_key',
-      { CAIRN_TEST_FAIL_PERSIST_AFTER_SEND: '1' },
+      { CROFT_TEST_FAIL_PERSIST_AFTER_SEND: '1' },
     )
     expect(failed.code).not.toBe(0)
 
@@ -487,31 +487,31 @@ describe('durable CLI outbox', () => {
   })
 
   it('recovers checkpoint state after a crash following processing-file compaction', async () => {
-    const ownershipDir = join(home, '.cairn', 'ownership')
+    const ownershipDir = join(home, '.croft', 'ownership')
     await mkdir(ownershipDir, { recursive: true })
     await writeFile(
-      join(ownershipDir, 'CAIRN-163.json'),
+      join(ownershipDir, 'CROFT-163.json'),
       JSON.stringify({ ownershipVersion: 7, checkpointVersion: 3, agent: 'integration-agent' }),
     )
-    await run(home, base, ['checkpoint', 'CAIRN-163', '--summary', 'after-rename'])
+    await run(home, base, ['checkpoint', 'CROFT-163', '--summary', 'after-rename'])
     mode = 'success'
     const crashed = await run(home, base, ['replay'], 'crn_integration_key', {
-      CAIRN_TEST_CRASH_AFTER_RENAME_BEFORE_STATE: '1',
+      CROFT_TEST_CRASH_AFTER_RENAME_BEFORE_STATE: '1',
     })
     expect(crashed.code).not.toBe(0)
 
-    const recovered = await run(home, base, ['checkpoint', 'CAIRN-163', '--summary', 'successor'])
+    const recovered = await run(home, base, ['checkpoint', 'CROFT-163', '--summary', 'successor'])
     expect(recovered.code).toBe(0)
     expect(received).toHaveLength(2)
-    const state = JSON.parse(await readFile(join(ownershipDir, 'CAIRN-163.json'), 'utf8'))
+    const state = JSON.parse(await readFile(join(ownershipDir, 'CROFT-163.json'), 'utf8'))
     expect(state.checkpointVersion).toBe(5)
   })
 
   it('requeues the original record when rejected-sidecar persistence fails', async () => {
-    await run(home, base, ['comment', 'CAIRN-163', 'rejected persistence'])
+    await run(home, base, ['comment', 'CROFT-163', 'rejected persistence'])
     mode = 'success'
     const failed = await run(home, base, ['replay'], 'crn_key_b', {
-      CAIRN_TEST_FAIL_REJECT_PERSIST: '1',
+      CROFT_TEST_FAIL_REJECT_PERSIST: '1',
     })
     expect(failed.code).toBe(0)
     expect(failed.stdout).toContain('still queued 1')
@@ -524,15 +524,15 @@ describe('durable CLI outbox', () => {
   })
 
   it('does not leave acknowledgement markers for non-checkpoint writes', async () => {
-    await run(home, base, ['comment', 'CAIRN-163', 'marker comment'])
-    await run(home, base, ['note', 'CAIRN-163', 'marker note'])
-    await run(home, base, ['beat', 'CAIRN-163'])
+    await run(home, base, ['comment', 'CROFT-163', 'marker comment'])
+    await run(home, base, ['note', 'CROFT-163', 'marker note'])
+    await run(home, base, ['beat', 'CROFT-163'])
     mode = 'success'
 
     const replay = await run(home, base, ['replay'])
     expect(replay.code).toBe(0)
     expect(replay.stdout).toContain('sent 3, rejected 0, still queued 0')
-    const artifacts = await readdir(join(home, '.cairn'))
+    const artifacts = await readdir(join(home, '.croft'))
     expect(artifacts.filter((name) => name.includes('.ack-')).length).toBe(0)
   })
 })

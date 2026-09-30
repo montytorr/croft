@@ -1,11 +1,11 @@
 #!/bin/bash
 #
-# Cairn backup. Configure with environment variables and run from cron.
+# Croft backup. Configure with environment variables and run from cron.
 #
-#   CAIRN_BACKUP_DIR     where to write backups (default: /srv/backups/cairn)
-#   CAIRN_DB_CONTAINER   Postgres container name (default: cairn-postgres)
-#   CAIRN_DB_USER        Postgres role for pg_dump (default: postgres)
-#   CAIRN_ATTACHMENT_DIR attachment tree (default: /srv/cairn/attachments)
+#   CROFT_BACKUP_DIR     where to write backups (default: /srv/backups/croft)
+#   CROFT_DB_CONTAINER   Postgres container name (default: croft-postgres)
+#   CROFT_DB_USER        Postgres role for pg_dump (default: postgres)
+#   CROFT_ATTACHMENT_DIR attachment tree (default: /srv/croft/attachments)
 #
 # Backs up BOTH halves, because either alone is useless: a database dump
 # without the storage tree loses every attachment, and the storage tree
@@ -15,11 +15,11 @@
 #
 set -euo pipefail
 
-DEST=${CAIRN_BACKUP_DIR:-/srv/backups/cairn}
-DB_CONTAINER=${CAIRN_DB_CONTAINER:-cairn-postgres}
-DB_NAME=${CAIRN_DB_NAME:-cairn}
-DB_USER=${CAIRN_DB_USER:-postgres}
-ATTACHMENTS=${CAIRN_ATTACHMENT_DIR:-/srv/cairn/attachments}
+DEST=${CROFT_BACKUP_DIR:-/srv/backups/croft}
+DB_CONTAINER=${CROFT_DB_CONTAINER:-croft-postgres}
+DB_NAME=${CROFT_DB_NAME:-croft}
+DB_USER=${CROFT_DB_USER:-postgres}
+ATTACHMENTS=${CROFT_ATTACHMENT_DIR:-/srv/croft/attachments}
 
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 DOW=$(date -u +%u)
@@ -29,9 +29,9 @@ fail() { log "FAILED: $*"; exit 1; }
 
 mkdir -p "$DEST/daily" "$DEST/weekly" || fail "cannot create $DEST"
 
-DUMP="$DEST/daily/cairn-db-$STAMP.dump"
+DUMP="$DEST/daily/croft-db-$STAMP.dump"
 TMP="$DUMP.tmp"
-FILES="$DEST/daily/cairn-storage-$STAMP.tar.gz"
+FILES="$DEST/daily/croft-storage-$STAMP.tar.gz"
 trap 'rm -f "$TMP"' EXIT
 
 log "starting backup $STAMP"
@@ -60,8 +60,8 @@ log "storage archived"
 
 [ "$DOW" = "7" ] && cp -p "$DUMP" "$FILES" "$DEST/weekly/" && log "promoted to weekly"
 
-find "$DEST/daily"  -name 'cairn-db-*.dump'        -mtime +7  -delete
-find "$DEST/daily"  -name 'cairn-storage-*.tar.gz' -mtime +7  -delete
-find "$DEST/weekly" -name 'cairn-*'                -mtime +28 -delete
+find "$DEST/daily"  -name 'croft-db-*.dump'        -mtime +7  -delete
+find "$DEST/daily"  -name 'croft-storage-*.tar.gz' -mtime +7  -delete
+find "$DEST/weekly" -name 'croft-*'                -mtime +28 -delete
 
 log "backup $STAMP complete"

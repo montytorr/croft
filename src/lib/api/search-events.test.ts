@@ -39,15 +39,15 @@ describe('recordSearch', () => {
    */
   it('stores which entries came back, in rank order', async () => {
     await recordSearch(actor, 'supavisor pool timeouts', null, 3, false, [
-      'CAIRN-131',
+      'CROFT-131',
       'pgbouncer-vs-supavisor',
-      'CAIRN-88',
+      'CROFT-88',
     ])
 
     expect(inserted().returned_slugs).toEqual([
-      'CAIRN-131',
+      'CROFT-131',
       'pgbouncer-vs-supavisor',
-      'CAIRN-88',
+      'CROFT-88',
     ])
   })
 
@@ -57,20 +57,20 @@ describe('recordSearch', () => {
    * existed, which say nothing either way.
    */
   it('distinguishes "returned nothing" from "we did not record it"', async () => {
-    await recordSearch(actor, 'a subject cairn has never heard of', null, 0, true, [])
+    await recordSearch(actor, 'a subject croft has never heard of', null, 0, true, [])
 
     expect(inserted().returned_slugs).toEqual([])
     expect(inserted().returned_slugs).not.toBeNull()
   })
 
   it('caps the list so one search cannot write an unbounded row', async () => {
-    const many = Array.from({ length: 100 }, (_, i) => `CAIRN-${i}`)
+    const many = Array.from({ length: 100 }, (_, i) => `CROFT-${i}`)
     await recordSearch(actor, 'everything', null, many.length, true, many)
 
     const stored = inserted().returned_slugs as string[]
     expect(stored).toHaveLength(50)
     // The head of the ranked list, not an arbitrary slice of it.
-    expect(stored[0]).toBe('CAIRN-0')
+    expect(stored[0]).toBe('CROFT-0')
   })
 
   it('still records the rest of the event when there are no results at all', async () => {
@@ -88,7 +88,7 @@ describe('recordSearch', () => {
 
   it('never fails the search it is measuring', async () => {
     mocks.insert.mockRejectedValue(new Error('search_events is gone'))
-    await expect(recordSearch(actor, 'anything', null, 1, false, ['CAIRN-1'])).resolves.toBeUndefined()
+    await expect(recordSearch(actor, 'anything', null, 1, false, ['CROFT-1'])).resolves.toBeUndefined()
   })
 })
 

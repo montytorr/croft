@@ -45,7 +45,7 @@ const SEGMENT_OFF = 'text-fg-subtle hover:text-fg'
 
 type Mode = 'scene' | 'flat'
 
-const STORAGE = 'cairn:knowledge-map-mode'
+const STORAGE = 'croft:knowledge-map-mode'
 
 /**
  * Whether this browser can actually do it.

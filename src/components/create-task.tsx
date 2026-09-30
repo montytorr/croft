@@ -69,7 +69,7 @@ export const CreateTask = ({
     if (open) titleRef.current?.focus()
   }, [open])
 
-  // The same duplicate check the CLI does on `cairn add`, surfaced as you
+  // The same duplicate check the CLI does on `croft add`, surfaced as you
   // type. Finding the existing task is more useful than filing a second one.
   // Derived rather than cleared in an effect.
   const showSimilar = title.trim().length >= 8
@@ -273,12 +273,12 @@ export const CreateTask = ({
             <InlineInput
               value={labels}
               onChange={(e) => setLabels(e.target.value)}
-              list="cairn-known-labels"
+              list="croft-known-labels"
               placeholder="labels…"
               aria-label="Labels, comma separated"
               className="w-[8.125rem] text-[0.75rem]"
             />
-            <datalist id="cairn-known-labels">
+            <datalist id="croft-known-labels">
               {known.map((l) => (
                 <option key={l} value={l} />
               ))}

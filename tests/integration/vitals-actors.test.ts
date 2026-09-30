@@ -24,7 +24,7 @@ const databaseUrl = process.env.DATABASE_URL
 if (!databaseUrl) throw new Error('DATABASE_URL is required for integration tests')
 
 const freshDatabase = async () => {
-  const name = `cairn_vitals_${randomUUID().replaceAll('-', '')}`
+  const name = `croft_vitals_${randomUUID().replaceAll('-', '')}`
   const admin = new Client({ connectionString: databaseUrl })
   await admin.connect()
   await admin.query(`create database "${name}"`)
@@ -43,7 +43,7 @@ const freshDatabase = async () => {
   return client
 }
 
-describe('cairn_vitals', () => {
+describe('croft_vitals', () => {
   it('reports people and runtimes, and says which is which', async () => {
     const client = await freshDatabase()
     try {
@@ -81,7 +81,7 @@ describe('cairn_vitals', () => {
         )
       }
 
-      const { rows } = await client.query('select cairn_vitals($1, 24) as v', [user])
+      const { rows } = await client.query('select croft_vitals($1, 24) as v', [user])
       const agents = (rows[0].v.agents ?? []) as {
         agent: string
         actorType: string
@@ -138,7 +138,7 @@ describe('cairn_vitals', () => {
       await write('agent', 'codex · Cal', `now() - interval '72 hours'`)
       await write('human', 'Cal', `now() - interval '72 hours'`)
 
-      const { rows } = await client.query('select cairn_vitals($1, 24) as v', [user])
+      const { rows } = await client.query('select croft_vitals($1, 24) as v', [user])
       const agents = (rows[0].v.agents ?? []) as {
         agent: string
         actorType: string

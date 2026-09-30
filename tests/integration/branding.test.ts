@@ -16,7 +16,7 @@ if (!databaseUrl) throw new Error('DATABASE_URL is required for integration test
 let client: Client
 
 beforeAll(async () => {
-  const name = `cairn_branding_${randomUUID().replaceAll('-', '')}`
+  const name = `croft_branding_${randomUUID().replaceAll('-', '')}`
   const root = new Client({ connectionString: databaseUrl })
   await root.connect()
   await root.query(`create database "${name}"`)
@@ -49,7 +49,7 @@ describe('instance_branding', () => {
   it('holds one row, upserted on its constant key', async () => {
     await client.query('begin')
     try {
-      await client.query(`insert into instance_branding (name, accent) values ('Dispofi Cairn', '#01519b')`)
+      await client.query(`insert into instance_branding (name, accent) values ('Dispofi Croft', '#01519b')`)
       await client.query(
         `insert into instance_branding (id, name) values (true, 'Renamed')
          on conflict (id) do update set name = excluded.name`,

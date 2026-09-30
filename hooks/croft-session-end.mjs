@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The write-without-being-asked half of Cairn's memory.
+ * The write-without-being-asked half of Croft's memory.
  *
  * Runs when a session ends and records what happened: the request, what was
  * learned, what got done, where it was left, which files were touched and
@@ -33,9 +33,9 @@ import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { createInterface } from 'node:readline'
 
-const CLI = process.env.CAIRN_CLI ?? 'cairn'
-const MODEL = process.env.CAIRN_SUMMARY_MODEL ?? 'claude-haiku-4-5-20251001'
-const SUMMARY_TIMEOUT_MS = Number(process.env.CAIRN_SUMMARY_TIMEOUT_MS ?? 60_000)
+const CLI = process.env.CROFT_CLI ?? 'croft'
+const MODEL = process.env.CROFT_SUMMARY_MODEL ?? 'claude-haiku-4-5-20251001'
+const SUMMARY_TIMEOUT_MS = Number(process.env.CROFT_SUMMARY_TIMEOUT_MS ?? 60_000)
 
 /** Enough transcript for a summary, bounded so cost cannot run away. */
 const MAX_DIGEST_CHARS = 24_000
@@ -46,11 +46,11 @@ const MAX_DIGEST_CHARS = 24_000
  *
  * Every summariser, not only this one. Quarry runs the same kind of hook with
  * its own `claude -p` child and marks it QUARRY_SUMMARISER; checking only our
- * own flag recorded 37 of Quarry's child runs as Cairn sessions, each wearing
- * a copy of its parent's summary (CAIRN-287). AGENT_MEMORY_SUMMARISER is the
+ * own flag recorded 37 of Quarry's child runs as Croft sessions, each wearing
+ * a copy of its parent's summary (CROFT-287). AGENT_MEMORY_SUMMARISER is the
  * shared name either tool can set.
  */
-const SUMMARISER_FLAGS = ['CAIRN_SUMMARISER', 'QUARRY_SUMMARISER', 'AGENT_MEMORY_SUMMARISER']
+const SUMMARISER_FLAGS = ['CROFT_SUMMARISER', 'QUARRY_SUMMARISER', 'AGENT_MEMORY_SUMMARISER']
 if (SUMMARISER_FLAGS.some((name) => process.env[name] === '1')) process.exit(0)
 
 const DRY_RUN = process.argv.includes('--dry-run')
@@ -60,7 +60,7 @@ const DRY_RUN = process.argv.includes('--dry-run')
  * no end time, and held tasks left alone. Codex's Stop fires after every turn,
  * and running the recorder there as a session END closed the session on its
  * first turn (a closed session cannot be reopened) and stamped a checkpoint on
- * every held task each time the agent handed back (CAIRN-319).
+ * every held task each time the agent handed back (CROFT-319).
  */
 const ONGOING = process.argv.includes('--ongoing')
 
@@ -130,7 +130,7 @@ const SCHEDULED_PROMPT = /^\[cron:[0-9a-f-]{8,}/i
  * or Quarry's ("a sales memory").
  *
  * An environment flag is the first defence and it does not always survive: a
- * CAIRN_SUMMARY_CLI wrapper that drops to another account through sudo resets
+ * CROFT_SUMMARY_CLI wrapper that drops to another account through sudo resets
  * the environment, and the child's own SessionEnd then records it. The prompt
  * survives everything, so a transcript that opens with it is a summariser run
  * whatever the environment said.
@@ -263,7 +263,7 @@ const parseTranscript = async (path) => {
 
     for (const block of content) {
       if (block?.type === 'text' && typeof block.text === 'string') {
-        // Narration is NOT scanned for refs. An agent that quotes a `cairn
+        // Narration is NOT scanned for refs. An agent that quotes a `croft
         // check` index is discussing twenty tasks and working on one; recording
         // all twenty makes the file and task index answer "everything" to every
         // question, which is the same as knowing nothing.
@@ -283,11 +283,11 @@ const parseTranscript = async (path) => {
         for (const m of input.command.matchAll(TASK_REF)) out.refs.add(m[0])
         for (const m of input.command.matchAll(SHELL_PATH)) out.files.add(m[1])
 
-        // Strongest evidence there is: a cairn command naming a ref is this
+        // Strongest evidence there is: a croft command naming a ref is this
         // session acting on that task, not mentioning it. When any exist, they
         // are the answer -- a long session quotes far more refs than it works.
         for (const line of input.command.split('\n')) {
-          if (!/\bcairn\s+\w/.test(line)) continue
+          if (!/\bcroft\s+\w/.test(line)) continue
           for (const m of line.matchAll(TASK_REF)) out.actedOn.add(m[0])
         }
       }
@@ -385,7 +385,7 @@ const parseCodexRollout = async (path) => {
       for (const m of input.matchAll(TASK_REF)) out.refs.add(m[0])
       for (const m of input.matchAll(SHELL_PATH)) out.files.add(m[1])
       for (const part of input.split(/\\n|\n/)) {
-        if (!/\bcairn\s+\w/.test(part)) continue
+        if (!/\bcroft\s+\w/.test(part)) continue
         for (const m of part.matchAll(TASK_REF)) out.actedOn.add(m[0])
       }
     }
@@ -436,7 +436,7 @@ const RECENT_MS = 6 * 60 * 60 * 1000
  * write time across Codex, OpenClaw and Claude alike, but every runtime shares
  * a clock and the transcript gives both ends of the window.
  */
-const ACTED_PATH = join(homedir(), '.cairn', 'acted.jsonl')
+const ACTED_PATH = join(homedir(), '.croft', 'acted.jsonl')
 
 /** A write can land after the last transcript line, never meaningfully before. */
 const ACTED_SLACK_MS = 2 * 60 * 1000
@@ -498,7 +498,7 @@ const actedFromBreadcrumbs = ({ startedAt, endedAt, cwd, sessionId }) => {
 }
 
 /**
- * Breadcrumbs first, then refs seen beside a `cairn` command in the transcript.
+ * Breadcrumbs first, then refs seen beside a `croft` command in the transcript.
  *
  * BARE PROSE MENTIONS USED TO BE THE LAST RESORT AND ARE NOT ANY MORE. The
  * reasoning was that a guessed link beats no link; the counter-example is a
@@ -506,10 +506,10 @@ const actedFromBreadcrumbs = ({ startedAt, endedAt, cwd, sessionId }) => {
  * another session, while working on something else entirely. Under the old
  * rule it would have been recorded as having worked all four, and those links
  * drive the end-of-session checkpoint -- so the tasks would carry a progress
- * report about work nobody did to them. CAIRN-209 has one.
+ * report about work nobody did to them. CROFT-209 has one.
  *
  * Discussing a task is not working on it. The remaining fallback is refs that
- * appeared on a line with a `cairn` command, which is observed action rather
+ * appeared on a line with a `croft` command, which is observed action rather
  * than conversation.
  */
 const chooseRefs = (t, cwd, sessionId) =>
@@ -520,7 +520,7 @@ const chooseRefs = (t, cwd, sessionId) =>
 const refSource = (t, cwd, sessionId) =>
   actedFromBreadcrumbs({ startedAt: t.startedAt, endedAt: t.endedAt, cwd, sessionId })
     ? 'breadcrumbs'
-    : 'cairn-commands'
+    : 'croft-commands'
 
 const idFromRollout = (path) => {
   const name = path.split('/').pop() ?? ''
@@ -655,10 +655,10 @@ in the transcript below.`
  * Codex had no SessionEnd, so `install-hooks.mjs` wired the recorder to Stop,
  * which fires at the end of each assistant turn — and still does, as a live
  * checkpoint (`--ongoing`), beside the SessionEnd that now closes the session
- * (CAIRN-319). `record()` then summarised
+ * (CROFT-319). `record()` then summarised
  * unconditionally: a forty-turn session made forty model calls, each with up
  * to 24 KB of transcript, to write and rewrite one row. The row was always
- * right -- `cairn session end` upserts on (platform, id) -- but the calls
+ * right -- `croft session end` upserts on (platform, id) -- but the calls
  * multiplied, which is the exact economics the comment at the top of this file
  * says the design escaped. Nobody chose one call per turn; it arrived because
  * Stop was the only event Codex had.
@@ -668,7 +668,7 @@ in the transcript below.`
  *   - If the digest is byte-for-byte what was last summarised for this
  *     session, the model would return what it returned before. Reuse it.
  *   - Otherwise, if the last call for this session was under
- *     CAIRN_SUMMARY_MIN_INTERVAL_MS ago, reuse it anyway. The deterministic
+ *     CROFT_SUMMARY_MIN_INTERVAL_MS ago, reuse it anyway. The deterministic
  *     half -- files, task refs, counts -- is still written fresh every time,
  *     and a row with slightly older prose beats a row rewritten forty times.
  *
@@ -679,8 +679,8 @@ in the transcript below.`
  * a session is long. Its CONTENT does not -- the tail moves -- so this hashes
  * rather than measures.
  */
-const SUMMARY_STATE = join(homedir(), '.cairn', 'summaries.json')
-const MIN_INTERVAL_MS = Number(process.env.CAIRN_SUMMARY_MIN_INTERVAL_MS ?? 600_000)
+const SUMMARY_STATE = join(homedir(), '.croft', 'summaries.json')
+const MIN_INTERVAL_MS = Number(process.env.CROFT_SUMMARY_MIN_INTERVAL_MS ?? 600_000)
 /** Enough that one machine's sessions do not accumulate without bound. */
 const KEEP_SUMMARIES = 50
 
@@ -711,7 +711,7 @@ const rememberSummary = (sessionId, digestHash, summary) => {
 /**
  * A session whose row is already closed refuses every live checkpoint (409,
  * CLI exit SESSION_CLOSED_EXIT): the old per-turn hook ended it mid-upgrade,
- * or someone ran `cairn session end` by hand. Checkpointing it again each turn
+ * or someone ran `croft session end` by hand. Checkpointing it again each turn
  * would pay the summariser for a write that cannot land, so the refusal is
  * remembered and later live checkpoints of that session stop before either.
  * Its real close still records — ending an ended session is allowed.
@@ -756,10 +756,10 @@ const summaryFor = async (sessionId, digest) => {
  *
  * Every failure used to be swallowed, stderr included, and the summariser was
  * down on both hosts for about forty hours on 09-23 without a line anywhere
- * saying so (CAIRN-287). Still never fatal — this is a hook — but no longer
- * silent: `tail ~/.cairn/summariser.log` answers "why has nothing got prose".
+ * saying so (CROFT-287). Still never fatal — this is a hook — but no longer
+ * silent: `tail ~/.croft/summariser.log` answers "why has nothing got prose".
  */
-const SUMMARISER_LOG = join(homedir(), '.cairn', 'summariser.log')
+const SUMMARISER_LOG = join(homedir(), '.croft', 'summariser.log')
 const LOG_MAX_BYTES = 256 * 1024
 
 const logSummariser = (line) => {
@@ -810,7 +810,7 @@ const runSummariser = (input, persistFlag) =>
 
     let child
     try {
-      child = spawn(process.env.CAIRN_SUMMARY_CLI ?? 'claude', args, {
+      child = spawn(process.env.CROFT_SUMMARY_CLI ?? 'claude', args, {
         cwd: tmpdir(),
         stdio: ['pipe', 'pipe', 'pipe'],
         env,
@@ -887,7 +887,7 @@ const summarise = async (digest) => {
  * summariser answers.
  *
  * The row is still written at once with its deterministic half — that rule
- * stands — and its missing prose is what `cairn vitals` counts. What was
+ * stands — and its missing prose is what `croft vitals` counts. What was
  * missing was any way back: nothing retried, so forty hours of sessions kept
  * their raw first prompt as a headline for good. This queue holds the
  * transcript path, which only this machine can read, and the next run of the
@@ -897,11 +897,11 @@ const summarise = async (digest) => {
  * session, RETRY_WINDOW_MS of age, and never sooner than RETRY_SPACING_MS
  * after the last attempt — Codex runs this hook every turn.
  */
-const UNSUMMARISED_PATH = join(homedir(), '.cairn', 'unsummarised.json')
-const RETRY_BATCH = Number(process.env.CAIRN_SUMMARY_RETRY_BATCH ?? 2)
+const UNSUMMARISED_PATH = join(homedir(), '.croft', 'unsummarised.json')
+const RETRY_BATCH = Number(process.env.CROFT_SUMMARY_RETRY_BATCH ?? 2)
 const RETRY_MAX_TRIES = 4
 const RETRY_WINDOW_MS = 48 * 3_600_000
-const RETRY_SPACING_MS = Number(process.env.CAIRN_SUMMARY_RETRY_SPACING_MS ?? 15 * 60_000)
+const RETRY_SPACING_MS = Number(process.env.CROFT_SUMMARY_RETRY_SPACING_MS ?? 15 * 60_000)
 
 const readUnsummarised = () => {
   try {
@@ -942,12 +942,12 @@ const dueRetries = (queue, now, exclude) =>
     .sort(([, a], [, b]) => (a.firstAt ?? 0) - (b.firstAt ?? 0))
     .slice(0, RETRY_BATCH)
 
-const DEBUG = process.env.CAIRN_HOOK_DEBUG === '1'
+const DEBUG = process.env.CROFT_HOOK_DEBUG === '1'
 
-/** The CLI's "several instances, and nothing says which" (cli/cairn.mjs). */
+/** The CLI's "several instances, and nothing says which" (cli/croft.mjs). */
 const UNDECIDED_EXIT = 10
 const SESSION_CLOSED_EXIT = 11
-const UNROUTED_DIR = join(homedir(), '.cairn', 'unrouted')
+const UNROUTED_DIR = join(homedir(), '.croft', 'unrouted')
 
 const post = (args) =>
   new Promise((resolve) => {
@@ -962,7 +962,7 @@ const post = (args) =>
  * Nobody has said which instance this session's directory belongs to, and a
  * hook cannot ask. Guessing would file it on the wrong server; dropping it
  * would lose it. So it waits here, one file per session — a later attempt for
- * the same session replaces the earlier one — and `cairn route add` sends it
+ * the same session replaces the earlier one — and `croft route add` sends it
  * the moment the answer is saved.
  */
 const park = (sessionId, cwd, args, platform, agent) => {
@@ -1012,7 +1012,7 @@ const record = async (payload, opts = {}) => {
   sessionId = sessionId ?? idFromRollout(transcriptPath)
   if (!sessionId) return
 
-  // Sniffed rather than taken from CAIRN_PLATFORM: the format is a fact about
+  // Sniffed rather than taken from CROFT_PLATFORM: the format is a fact about
   // the file, and a mislabelled platform should not silently produce an empty
   // session.
   const parse = looksLikeCodex(transcriptPath) ? parseCodexRollout : parseTranscript
@@ -1065,8 +1065,8 @@ const record = async (payload, opts = {}) => {
   if (opts.ongoing && knownClosed(sessionId)) return { sessionId }
 
   const cwd = payload.cwd ?? t.cwd
-  const platform = opts.platform ?? process.env.CAIRN_PLATFORM ?? 'claude'
-  const agent = opts.agent ?? process.env.CAIRN_AGENT
+  const platform = opts.platform ?? process.env.CROFT_PLATFORM ?? 'claude'
+  const agent = opts.agent ?? process.env.CROFT_AGENT
   const files = keepFiles(t.files, cwd)
   const outcome = await summaryFor(sessionId, buildDigest(t))
   const summary = outcome.summary ?? {}
@@ -1176,8 +1176,8 @@ const retryUnsummarised = async (currentId) => {
  * call and re-reading yesterday's sessions hourly would pay for it again and
  * again for nothing.
  */
-const SETTLED_MS = Number(process.env.CAIRN_ROLLOUT_SETTLE_MIN ?? 10) * 60_000
-const SEEN_PATH = join(homedir(), '.cairn', 'recorded-rollouts')
+const SETTLED_MS = Number(process.env.CROFT_ROLLOUT_SETTLE_MIN ?? 10) * 60_000
+const SEEN_PATH = join(homedir(), '.croft', 'recorded-rollouts')
 const SEEN_CAP = 2000
 
 const readSeen = () => {
@@ -1220,7 +1220,7 @@ const scan = async (root, windowHours) => {
       found.push({ path, id, mtime })
     }
   } catch (error) {
-    if (DEBUG) console.error('[cairn-session-end] scan', error)
+    if (DEBUG) console.error('[croft-session-end] scan', error)
     return
   }
 
@@ -1249,6 +1249,6 @@ const main = async () => {
 
 main().catch((error) => {
   // Silent by default, on purpose: a memory system must never be the reason a
-  // session fails to close. CAIRN_HOOK_DEBUG=1 when that silence is the problem.
-  if (DEBUG) console.error('[cairn-session-end]', error)
+  // session fails to close. CROFT_HOOK_DEBUG=1 when that silence is the problem.
+  if (DEBUG) console.error('[croft-session-end]', error)
 })

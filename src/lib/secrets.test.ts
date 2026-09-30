@@ -63,7 +63,7 @@ describe('detectSecret: credential assignments', () => {
     'password: ******',
     'password: xxxxxxxx',
     'token: $GITHUB_TOKEN',
-    'token=${CAIRN_API_KEY}',
+    'token=${CROFT_API_KEY}',
     'api_key: process.env.OPENAI_API_KEY',
     'secret: os.environ["X"]',
     'password: string',
@@ -74,7 +74,7 @@ describe('detectSecret: credential assignments', () => {
     'password: [redacted]',
     'password: see 1Password',
     'token: stored in the vault',
-    // A handoff note refused as "a value assigned to password" (CAIRN-303).
+    // A handoff note refused as "a value assigned to password" (CROFT-303).
     '1. After Cal signs in and changes the password: update-service without the bootstrap settings.',
     'max_tokens: 4096',
     'tokens: 500',
@@ -86,8 +86,8 @@ describe('detectSecret: credential assignments', () => {
     'password = your-password-here',
     'password: changeme',
     'token: null',
-    'export CAIRN_API_KEY=sk_live_...',
-    "CAIRN_OPERATOR_PASSWORD='a-long-password'",
+    'export CROFT_API_KEY=sk_live_...',
+    "CROFT_OPERATOR_PASSWORD='a-long-password'",
     'headers → `isOld ? Jwttoken : tm-placement-id`.',
     'const token : string = read()',
     '200 `{_links:{signInPassword:{source:"/json/sign-in"}}}`',
@@ -103,14 +103,14 @@ describe('detectSecret: credential assignments', () => {
 
 describe('detectSecret: connection URLs', () => {
   it('refuses a password inside a URL', () => {
-    expect(detectSecret('postgres://cairn:hunter2hunter2@db:5432/cairn')?.pattern).toBe('url_credential')
+    expect(detectSecret('postgres://croft:hunter2hunter2@db:5432/croft')?.pattern).toBe('url_credential')
   })
 
   it('accepts placeholder and env-templated URLs', () => {
     expect(detectSecret('postgres://user:password@localhost/db')).toBeNull()
     expect(detectSecret('postgres://postgres:postgres@localhost/db')).toBeNull()
-    expect(detectSecret('postgres://cairn:${PGPASSWORD}@db/cairn')).toBeNull()
-    expect(detectSecret('https://github.com/montytorr/cairn')).toBeNull()
+    expect(detectSecret('postgres://croft:${PGPASSWORD}@db/croft')).toBeNull()
+    expect(detectSecret('https://github.com/montytorr/croft')).toBeNull()
   })
 })
 

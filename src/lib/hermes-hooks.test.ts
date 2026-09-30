@@ -27,7 +27,7 @@ afterEach(async () => {
 
 describe('Hermes Agent by Nous Research hooks', () => {
   it('installs one pre-LLM briefing hook without replacing existing Hermes hooks', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'cairn-hermes-hook-test-'))
+    const directory = await mkdtemp(join(tmpdir(), 'croft-hermes-hook-test-'))
     temporaryDirectories.push(directory)
     const bin = join(directory, 'bin')
     const hooks = join(directory, 'hooks.json')
@@ -62,9 +62,9 @@ process.exit(64)
       PATH: `${bin}:${process.env.PATH}`,
       FAKE_HOOKS: hooks,
       FAKE_HERMES_LOG: commandLog,
-      CAIRN_HOOK_CLI: '/trusted/cairn-router',
+      CROFT_HOOK_CLI: '/trusted/croft-router',
       // A real OpenClaw on the developer's PATH must not be driven by this suite.
-      CAIRN_OPENCLAW_BIN: 'openclaw-not-installed',
+      CROFT_OPENCLAW_BIN: 'openclaw-not-installed',
     }
 
     const first = await run('node', ['scripts/install-hooks.mjs'], environment)
@@ -73,9 +73,9 @@ process.exit(64)
     expect(installed.pre_tool_call).toEqual([{ command: '/existing/hook', timeout: 5 }])
     expect(installed.pre_llm_call).toHaveLength(1)
     expect(installed.pre_llm_call[0]).toMatchObject({ timeout: 10 })
-    expect(installed.pre_llm_call[0].command).toContain('CAIRN_AGENT=hermes')
-    expect(installed.pre_llm_call[0].command).toContain('CAIRN_CLI=/trusted/cairn-router')
-    expect(installed.pre_llm_call[0].command).toContain('cairn-context.mjs')
+    expect(installed.pre_llm_call[0].command).toContain('CROFT_AGENT=hermes')
+    expect(installed.pre_llm_call[0].command).toContain('CROFT_CLI=/trusted/croft-router')
+    expect(installed.pre_llm_call[0].command).toContain('croft-context.mjs')
 
     const second = await run('node', ['scripts/install-hooks.mjs'], environment)
     expect(second.code, second.stderr).toBe(0)
@@ -83,7 +83,7 @@ process.exit(64)
 
     const rejected = await run('node', ['scripts/install-hooks.mjs'], {
       ...environment,
-      CAIRN_HOOK_CLI: 'router; not-a-command',
+      CROFT_HOOK_CLI: 'router; not-a-command',
     })
     expect(rejected.code).toBe(1)
     expect(rejected.stderr).toContain('must be one safe executable path')
@@ -109,23 +109,23 @@ process.exit(64)
     expect(JSON.parse(await readFile(hooks, 'utf8')).pre_llm_call).toBeUndefined()
   })
 
-  it('injects the Cairn briefing only for Hermes first turns', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'cairn-hermes-context-test-'))
+  it('injects the Croft briefing only for Hermes first turns', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'croft-hermes-context-test-'))
     temporaryDirectories.push(directory)
-    const fakeCairn = join(directory, 'cairn')
-    await writeFile(fakeCairn, '#!/bin/sh\nprintf "## Cairn [MES]\\nKnown here: affiliate governance\\n"\n')
-    await chmod(fakeCairn, 0o755)
-    const environment = { ...process.env, CAIRN_CLI: fakeCairn }
+    const fakeCroft = join(directory, 'croft')
+    await writeFile(fakeCroft, '#!/bin/sh\nprintf "## Croft [MES]\\nKnown here: affiliate governance\\n"\n')
+    await chmod(fakeCroft, 0o755)
+    const environment = { ...process.env, CROFT_CLI: fakeCroft }
 
-    const first = await run('node', ['hooks/cairn-context.mjs'], environment, JSON.stringify({
+    const first = await run('node', ['hooks/croft-context.mjs'], environment, JSON.stringify({
       hook_event_name: 'pre_llm_call',
       cwd: '/project',
       extra: { is_first_turn: true },
     }))
     expect(first.code).toBe(0)
-    expect(JSON.parse(first.stdout)).toEqual({ context: '## Cairn [MES]\nKnown here: affiliate governance' })
+    expect(JSON.parse(first.stdout)).toEqual({ context: '## Croft [MES]\nKnown here: affiliate governance' })
 
-    const later = await run('node', ['hooks/cairn-context.mjs'], environment, JSON.stringify({
+    const later = await run('node', ['hooks/croft-context.mjs'], environment, JSON.stringify({
       hook_event_name: 'pre_llm_call',
       cwd: '/project',
       extra: { is_first_turn: false },
@@ -133,17 +133,17 @@ process.exit(64)
     expect(later.code).toBe(0)
     expect(later.stdout).toBe('')
 
-    const compatibilityFirstTurn = await run('node', ['hooks/cairn-context.mjs'], environment, JSON.stringify({
+    const compatibilityFirstTurn = await run('node', ['hooks/croft-context.mjs'], environment, JSON.stringify({
       hook_event_name: 'pre_llm_call',
       cwd: '/project',
       is_first_turn: true,
     }))
     expect(compatibilityFirstTurn.code).toBe(0)
-    expect(JSON.parse(compatibilityFirstTurn.stdout)).toEqual({ context: '## Cairn [MES]\nKnown here: affiliate governance' })
+    expect(JSON.parse(compatibilityFirstTurn.stdout)).toEqual({ context: '## Croft [MES]\nKnown here: affiliate governance' })
 
     // Neither location carries the key: no briefing is possible, so say so
     // rather than look like an ordinary later turn.
-    const missing = await run('node', ['hooks/cairn-context.mjs'], environment, JSON.stringify({
+    const missing = await run('node', ['hooks/croft-context.mjs'], environment, JSON.stringify({
       hook_event_name: 'pre_llm_call',
       cwd: '/project',
       extra: {},

@@ -95,7 +95,7 @@ as $$
   notes as (
     select 'note'::text as kind, n.created_at as at, n.actor_id as actor,
            p.key as project_key, p.key || '-' || t.number as ref,
-           cairn_clip(regexp_replace(n.note, '\s+', ' ', 'g'), 160) as title,
+           croft_clip(regexp_replace(n.note, '\s+', ' ', 'g'), 160) as title,
            n.kind as detail
     from task_notes n
     join tasks t    on t.id = n.task_id
@@ -108,7 +108,7 @@ as $$
   comments as (
     select 'comment'::text as kind, c.created_at as at, c.actor_id as actor,
            p.key as project_key, p.key || '-' || t.number as ref,
-           cairn_clip(regexp_replace(c.content, '\s+', ' ', 'g'), 160) as title,
+           croft_clip(regexp_replace(c.content, '\s+', ' ', 'g'), 160) as title,
            c.comment_type as detail
     from task_comments c
     join tasks t    on t.id = c.task_id

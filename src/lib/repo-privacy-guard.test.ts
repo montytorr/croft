@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest'
  * things that must not appear in a public repository is itself a list of those
  * things in a public repository. What it checks instead is shape: an absolute
  * path into somebody's home directory is never right in a file anyone else will
- * clone, whoever's home it is. `CAIRN_PRIVATE_TERMS` lets CI add real names
+ * clone, whoever's home it is. `CROFT_PRIVATE_TERMS` lets CI add real names
  * without committing them.
  */
 
@@ -50,7 +50,7 @@ const HOME_PATHS = [
 ]
 
 const extraTerms = (): RegExp[] =>
-  (process.env.CAIRN_PRIVATE_TERMS ?? '')
+  (process.env.CROFT_PRIVATE_TERMS ?? '')
     .split(',')
     .map((term) => term.trim())
     .filter(Boolean)
@@ -101,7 +101,7 @@ describe('the repository does not carry one machine or one workspace', () => {
 
     expect(
       found,
-      'CAIRN_PRIVATE_TERMS matched. These are names that must not ship:\n\n' + found.join('\n'),
+      'CROFT_PRIVATE_TERMS matched. These are names that must not ship:\n\n' + found.join('\n'),
     ).toEqual([])
   })
 })

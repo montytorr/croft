@@ -6,7 +6,7 @@ import { BUILT_AT, BUILT_AT_HEADER, CLI_FINGERPRINT, CLI_HEADER } from './cli-fi
  * Every response says which version served it, so a stale CLI can notice
  * without being asked.
  *
- * `cairn --version` already compares the two, but that is the one command an
+ * `croft --version` already compares the two, but that is the one command an
  * agent has no reason to run — so a copy that has drifted goes on working,
  * just not the way the docs say, until something it needs is missing. Putting
  * the number on the ordinary path costs a header and turns discovery-by-
@@ -14,12 +14,12 @@ import { BUILT_AT, BUILT_AT_HEADER, CLI_FINGERPRINT, CLI_HEADER } from './cli-fi
  *
  * TWO HEADERS, BECAUSE THE VERSION ANSWERS A NARROWER QUESTION THAN IT LOOKS.
  * Releases are cut by hand and 133 commits fitted inside v0.5.1, so a copy
- * that is months of work behind still agrees on the number (CAIRN-261). The
+ * that is months of work behind still agrees on the number (CROFT-261). The
  * version stays — it is the right thing to say when the two sides belong to
  * different releases, and it is what a human reads — and the content hash
  * sits beside it for everything finer than that.
  */
-export const VERSION_HEADER = 'x-cairn-version'
+export const VERSION_HEADER = 'x-croft-version'
 
 const withVersion = (init?: ResponseInit): ResponseInit => {
   const headers = new Headers(init?.headers)

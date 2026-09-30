@@ -1,7 +1,7 @@
 /**
  * Per-key token bucket, held in process memory.
  *
- * Cairn runs as a single container, so an in-memory bucket is the honest
+ * Croft runs as a single container, so an in-memory bucket is the honest
  * choice — a Redis-backed limiter would add a dependency to solve a problem
  * this deployment does not have. If it ever runs more than one replica this
  * becomes per-replica, which is the point at which to move it.

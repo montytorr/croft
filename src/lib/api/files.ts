@@ -4,7 +4,7 @@ import { admin, pool } from '@/lib/db/client'
  * The file index: which sessions, tasks and knowledge concern a given path.
  *
  * This exists to answer a question nobody asks. The agent is about to read
- * `src/lib/api/search.ts`; something should say "CAIRN-31 measured ranking
+ * `src/lib/api/search.ts`; something should say "CROFT-31 measured ranking
  * here, and knowledge/postgres-ts-rank explains why it is ordered in SQL" —
  * without a search string, without a tool call, without anyone remembering.
  *
@@ -143,7 +143,7 @@ export const contextForFile = async (_userId: string, rawPath: string): Promise<
     }
   }
 
-  // What is known about the file comes from the links (CAIRN-269). The embed
+  // What is known about the file comes from the links (CROFT-269). The embed
   // above reads `file_touches.knowledge_id`, which nothing writes; it stays for
   // any row that ever does, and these come first because they are the answer.
   const linked = new Map((await knowledgeLinkedTo(path, basename)).map((k) => [k.slug, k]))

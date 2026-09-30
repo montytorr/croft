@@ -3,7 +3,7 @@
 --
 -- 055 changed `search_all`. `search_tasks` was left alone on purpose, because
 -- extending an unscored change to a second function is how you ship something
--- and never learn whether it helped (CAIRN-260). It has now been scored, and
+-- and never learn whether it helped (CROFT-260). It has now been scored, and
 -- this is what the measurement says.
 --
 -- WHAT WAS MEASURED, 2026-09-21, against the live store, by applying this
@@ -27,7 +27,7 @@
 --
 -- 2. REAL TRAFFIC SAYS OTHERWISE, AND IT IS THE SAME DEFECT. In 90 days,
 --    607 searches ran with kinds=['task'] and only 27 widened. Most of that
---    is not the bug: 580 are `cairn add`'s duplicate probe, which ORs its own
+--    is not the bug: 580 are `croft add`'s duplicate probe, which ORs its own
 --    terms before sending them, so the precise arm legitimately matches.
 --    Excluding those and short queries leaves 23 real natural-language
 --    questions, of which 3 did not widen — and those 3 are what the eval set
@@ -35,7 +35,7 @@
 --
 --    All three are transformed. "claim on note annotation vs work" returned
 --    a Queue-it pause, an algorithm port, an incident and a Flashbuy crash;
---    it now returns CAIRN-146 "Auto-claim on note cannot tell annotating a
+--    it now returns CROFT-146 "Auto-claim on note cannot tell annotating a
 --    task from working on it" at rank 1, followed by three more tasks about
 --    claiming. "scaffold hydration temporary cartNeed magic link scoping"
 --    gains BB-357 "scaffold hydration is 100% dead" and BB-324 "magic-link
@@ -48,7 +48,7 @@
 -- 055 made on search_all, and it is now measured on both sides rather than
 -- argued.
 --
--- AND THE DIVERGENCE GOES. `cairn check "x"` and `cairn check "x" --tasks`
+-- AND THE DIVERGENCE GOES. `croft check "x"` and `croft check "x" --tasks`
 -- are the same gate with a filter. Since 055 they ranked by different rules
 -- and only one of them could suppress its own fallback.
 --
@@ -241,7 +241,7 @@ $migration$;
 -- Said on the parameter itself, because its name now reads as the opposite of
 -- what it does and the next person will look here first.
 comment on function search_tasks(uuid, text, text[], text, text, text, int, int) is
-  'Task-only prior-work retrieval, used by the web UI and by `cairn check '
+  'Task-only prior-work retrieval, used by the web UI and by `croft check '
   '--tasks`. Both arms always run and are merged: the precise arm returns rows '
   'carrying at least half the distinctive terms, the wide arm everything '
   'matching any of them, and a row found by both appears once, in the precise '

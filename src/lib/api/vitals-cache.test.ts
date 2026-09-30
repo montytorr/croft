@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * unstable_cache, which serves a stale entry and refreshes it after the
  * response — on App Runner, whose instances get no CPU between requests, the
  * refresh did not land and the banner kept an alarm the database had cleared
- * (CAIRN-303). The cache now refreshes before answering once it is stale.
+ * (CROFT-303). The cache now refreshes before answering once it is stale.
  */
 let calls = 0
 let recent = 0
@@ -14,7 +14,7 @@ let failNext = false
 vi.mock('@/lib/db/client', () => ({
   admin: () => ({
     rpc: async (name: string) => {
-      if (name === 'cairn_vitals') {
+      if (name === 'croft_vitals') {
         calls += 1
         if (failNext) {
           failNext = false

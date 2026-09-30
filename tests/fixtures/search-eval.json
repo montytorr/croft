@@ -1,10 +1,10 @@
 {
-  "$schema": "https://cairn.local/search-eval.v1",
-  "title": "cairn check retrieval evaluation set",
-  "filed_under": "CAIRN-247 (spike: cairn check is English-stemmed word overlap, and half the corpus is French)",
+  "$schema": "https://croft.local/search-eval.v1",
+  "title": "croft check retrieval evaluation set",
+  "filed_under": "CROFT-247 (spike: croft check is English-stemmed word overlap, and half the corpus is French)",
   "created": "2026-09-21",
   "readme": [
-    "WHAT THIS IS. Twenty real questions an agent would type into `cairn check` before",
+    "WHAT THIS IS. Twenty real questions an agent would type into `croft check` before",
     "starting work, each paired with the rows that are the known-good answers. The refs",
     "were verified by hand against the live store on 2026-09-21: every expected ref",
     "exists and genuinely answers the question. The queries are deliberately NOT copies",
@@ -12,16 +12,16 @@
     "wording of the row it is hoping to find. That is the whole point: retrieval is only",
     "worth measuring on paraphrase.",
     "",
-    "WHY IT EXISTS. CAIRN-247 says: 'Collect twenty such queries with their known-good",
+    "WHY IT EXISTS. CROFT-247 says: 'Collect twenty such queries with their known-good",
     "answers and score whatever is built against them, or we will ship embeddings and",
     "have no idea whether they helped.' This is that set. Score BEFORE and AFTER any",
     "change to the search configuration (language config, pgvector, ranking) and compare.",
     "",
     "SCOPE. Every case carries a `scope` — the project filter and the --kinds filter it is",
-    "run with, null for the bare `cairn check \"<query>\"` an agent actually types. It is part",
-    "of the case, not of the runner: `--project CAIRN` and `--kinds knowledge` reorder the",
+    "run with, null for the bare `croft check \"<query>\"` an agent actually types. It is part",
+    "of the case, not of the runner: `--project CROFT` and `--kinds knowledge` reorder the",
     "same store, so a case that does not pin its invocation has several correct answers and",
-    "two people re-scoring it will disagree without either being wrong (CAIRN-259).",
+    "two people re-scoring it will disagree without either being wrong (CROFT-259).",
     "",
     "HOW TO SCORE. Run `node scripts/score-search-eval.mjs`, which reads the scope out of each",
     "case and reports recall@20, recall@5, MRR and the share of hits that came back precise",
@@ -64,7 +64,7 @@
       "projects": 35,
       "tasksEverFiled": 3110
     },
-    "cliVersion": "cairn 0.5.1\nserver 0.5.1 (8d2d606) https://tasks.montytorr.com",
+    "cliVersion": "croft 0.5.1\nserver 0.5.1 (8d2d606) https://tasks.montytorr.com",
     "overall": {
       "n": 22,
       "recall@20": 0.864,
@@ -201,7 +201,7 @@
       "fr-11": [
         "SA-17",
         "HM-511",
-        "CAIRN-212",
+        "CROFT-212",
         "2026-04-07",
         "HM-222"
       ],
@@ -234,57 +234,57 @@
         "HERMES-107"
       ],
       "en-01": [
-        "CAIRN-135",
-        "CAIRN-211",
-        "CAIRN-103",
-        "CAIRN-120",
-        "CAIRN-64"
+        "CROFT-135",
+        "CROFT-211",
+        "CROFT-103",
+        "CROFT-120",
+        "CROFT-64"
       ],
       "en-02": [
-        "CAIRN-254",
-        "CAIRN-235",
+        "CROFT-254",
+        "CROFT-235",
         "AC-68",
         "AC-66",
-        "CAIRN-110"
+        "CROFT-110"
       ],
       "en-03": [
-        "CAIRN-192",
-        "CAIRN-189",
-        "CAIRN-253",
-        "CAIRN-206",
-        "CAIRN-254"
+        "CROFT-192",
+        "CROFT-189",
+        "CROFT-253",
+        "CROFT-206",
+        "CROFT-254"
       ],
       "en-04": [
-        "CAIRN-127",
-        "CAIRN-230",
-        "CAIRN-196",
-        "CAIRN-198",
-        "CAIRN-200"
+        "CROFT-127",
+        "CROFT-230",
+        "CROFT-196",
+        "CROFT-198",
+        "CROFT-200"
       ],
       "en-05": [
-        "CAIRN-225",
-        "CAIRN-104",
-        "CAIRN-182",
-        "CAIRN-98",
-        "CAIRN-69"
+        "CROFT-225",
+        "CROFT-104",
+        "CROFT-182",
+        "CROFT-98",
+        "CROFT-69"
       ],
       "en-06": [
         "git-blame-line-porcelain-has-no-commit-prefix-so-the-obvious-grep-returns-zero",
         "AC-85",
-        "CAIRN-142",
-        "CAIRN-117",
-        "CAIRN-115"
+        "CROFT-142",
+        "CROFT-117",
+        "CROFT-115"
       ],
       "en-07": [
         "AC-90",
         "TRIG-9",
         "DD-67",
         "AC-32",
-        "CAIRN-142"
+        "CROFT-142"
       ]
     },
     "findings": [
-      "These are search_all numbers — the path a bare `cairn check` takes. search_tasks is scored separately with --arm tasks, because 7 of the 22 cases expect a knowledge slug that arm can never return.",
+      "These are search_all numbers — the path a bare `croft check` takes. search_tasks is scored separately with --arm tasks, because 7 of the 22 cases expect a knowledge slug that arm can never return.",
       "Against the pre-055 snapshot (recall@20 0.73, MRR 0.614, 3 precise hits, 20 of 22 widened) the honest comparison is precise_hits 3 -> 15 and queries_widened 20 -> 0. Those two are structural: both arms now always run, so the response-level widened flag means \"nothing cleared the precise arm\" and no longer measures what it measured then.",
       "recall@20 0.73 -> 0.864 is NOT all 055. The store grew between the two measurements — the same file recorded 0.73 and a re-run the same day gave 0.82 — which is why this baseline records the corpus size and the server build it was taken against.",
       "The English subset carries the change: recall@20 0.43 -> 0.857. en-05 is the only English case still missing.",
@@ -415,7 +415,7 @@
         "HM-706",
         "HM-701"
       ],
-      "why": "A knowledge entry written to answer exactly this question. If `cairn know` cannot return it for the question it was written for, the memory is write-only."
+      "why": "A knowledge entry written to answer exactly this question. If `croft know` cannot return it for the question it was written for, the memory is write-only."
     },
     {
       "id": "fr-10",
@@ -508,10 +508,10 @@
         "kinds": null
       },
       "expectedRefs": [
-        "CAIRN-211",
-        "CAIRN-135"
+        "CROFT-211",
+        "CROFT-135"
       ],
-      "why": "The case from the CAIRN-247 session: both refs are the right answers and both ranked below unrelated rows, found only because a human recognised the titles."
+      "why": "The case from the CROFT-247 session: both refs are the right answers and both ranked below unrelated rows, found only because a human recognised the titles."
     },
     {
       "id": "en-02",
@@ -522,9 +522,9 @@
         "kinds": null
       },
       "expectedRefs": [
-        "CAIRN-254"
+        "CROFT-254"
       ],
-      "why": "CAIRN-254 is that exact question, filed and partly built. Paraphrase with 'recall'/'telemetry' deliberately absent."
+      "why": "CROFT-254 is that exact question, filed and partly built. Paraphrase with 'recall'/'telemetry' deliberately absent."
     },
     {
       "id": "en-03",
@@ -535,9 +535,9 @@
         "kinds": null
       },
       "expectedRefs": [
-        "CAIRN-253"
+        "CROFT-253"
       ],
-      "why": "'Two thirds of dangling knowledge references point at facts Cairn already holds'. The query avoids the words 'dangling' and 'reference' on purpose."
+      "why": "'Two thirds of dangling knowledge references point at facts Croft already holds'. The query avoids the words 'dangling' and 'reference' on purpose."
     },
     {
       "id": "en-04",
@@ -548,7 +548,7 @@
         "kinds": null
       },
       "expectedRefs": [
-        "CAIRN-246"
+        "CROFT-246"
       ],
       "why": "'A stale CLI only confesses if you ask it: --version is the one command that checks'. Tests 'stale' <-> 'older'."
     },
@@ -561,7 +561,7 @@
         "kinds": null
       },
       "expectedRefs": [
-        "clear-fires-sessionend-so-cairn-records-the-work"
+        "clear-fires-sessionend-so-croft-records-the-work"
       ],
       "why": "A knowledge entry written for this question. 'clearing' vs 'clear' is the plain English stemming case — it must keep working under any language-config change."
     },

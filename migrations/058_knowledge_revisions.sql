@@ -1,5 +1,5 @@
 -- ===========================================================================
--- 058: a correction keeps what it corrected (CAIRN-266)
+-- 058: a correction keeps what it corrected (CROFT-266)
 --
 -- `relearn` was a plain UPDATE. The previous title, body, labels and scope were
 -- gone the moment it ran, `actor_id` went on naming whoever first wrote the

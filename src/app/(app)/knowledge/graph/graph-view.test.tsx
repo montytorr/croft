@@ -15,7 +15,7 @@ import type { KnowledgeGraph } from '@/lib/api/knowledge-graph'
 
 const graph = (over: Partial<KnowledgeGraph> = {}): KnowledgeGraph => ({
   nodes: [
-    { slug: 'alpha', title: 'Alpha', project: 'CAIRN', entity: null, degree: 1, island: 0, x: 10, y: 10 },
+    { slug: 'alpha', title: 'Alpha', project: 'CROFT', entity: null, degree: 1, island: 0, x: 10, y: 10 },
     { slug: 'beta', title: 'Beta', project: null, entity: null, degree: 1, island: 0, x: 60, y: 30 },
     { slug: 'lonely', title: 'Lonely', project: null, entity: null, degree: 0, island: -1, x: 0, y: 200 },
   ],
@@ -116,7 +116,7 @@ describe('the map shell', () => {
   })
 
   it('offers only the projects and worlds that are on the map', () => {
-    // CAIRN has no knowledge in this fixture, so it must not be offered —
+    // CROFT has no knowledge in this fixture, so it must not be offered —
     // picking it would black the map out with no explanation.
     const html = renderToStaticMarkup(
       <GraphView

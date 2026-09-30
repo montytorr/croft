@@ -2,16 +2,16 @@
 
 ## Reporting a vulnerability
 
-Open a [private security advisory](https://github.com/montytorr/cairn/security/advisories/new).
+Open a [private security advisory](https://github.com/montytorr/croft/security/advisories/new).
 Please do not open a public issue for anything exploitable.
 
 This is a personal project maintained in the open, so there is no response-time
 commitment. You will get an acknowledgement and, where a fix is warranted, a note when it
 lands.
 
-## What Cairn is, in security terms
+## What Croft is, in security terms
 
-Cairn is **one trusted shared workspace**. Every active user and valid agent key can read
+Croft is **one trusted shared workspace**. Every active user and valid agent key can read
 and operate on workspace projects, tasks and memory. Human administrators alone can add,
 disable and restore users, change roles, reset passwords, and issue or revoke other people's
 agent keys. A signed-in member can pair keys for their own agents (below), and list or
@@ -23,14 +23,14 @@ It is also, deliberately, a thing agents write to unattended. That shapes what m
   owning user's display identity. Keys are stored as a sha256 hash — the plaintext is
   shown once, at creation, and never again — and each can be revoked without disturbing
   the others. Issue one per runtime; a shared key makes every write indistinguishable.
-- **Pairing mints keys for whoever approves it.** `cairn setup` asks `/api/v1/connect` for
+- **Pairing mints keys for whoever approves it.** `croft setup` asks `/api/v1/connect` for
   a code and the person approves `/connect/<code>` in a signed-in browser; an agent key
   cannot approve or deny (403). Device codes are stored as a sha256 hash, expire in ten
   minutes, and are redeemed once; both unauthenticated endpoints are rate-limited per
   address. A `maintenance` key releases anyone's claims, so only an administrator can
   approve one, and the role is checked again at minting. The risk is device-code phishing:
   a link someone else sends you would hand them keys to your agents, so the approval card
-  says to approve only a `cairn setup` you just ran, shows the host "as reported", and
+  says to approve only a `croft setup` you just ran, shows the host "as reported", and
   flags a request from a different address than yours.
 - **Everyone can revoke their own keys.** **Your agent keys** (`/settings/keys`, backed by
   `GET /api/v1/me/keys` and `DELETE /api/v1/me/keys/{keyId}`) lists the signed-in person's
@@ -47,7 +47,7 @@ It is also, deliberately, a thing agents write to unattended. That shapes what m
 
 ## Running it safely
 
-- Keep `DATABASE_URL` and `CAIRN_ATTACHMENT_SIGNING_KEY` server-side. `.env*` is
+- Keep `DATABASE_URL` and `CROFT_ATTACHMENT_SIGNING_KEY` server-side. `.env*` is
   gitignored except `.env.example`, and CI runs a secret scan on every push.
 - Put it behind TLS. The included compose example assumes a proxy that terminates it.
 - Revoke an agent's key the moment that agent is retired, and every key on a machine the
@@ -62,6 +62,6 @@ It is also, deliberately, a thing agents write to unattended. That shapes what m
 - Failed logins are limited per address and per account, in memory: several replicas each
   keep their own count.
 - Workspace isolation is not tenant isolation: a member who must not see another member's
-  projects needs a separate Cairn deployment.
+  projects needs a separate Croft deployment.
 - Knowledge and task bodies are rendered as markdown and shared with every workspace
   member. Do not admit identities that should not be trusted with that content.

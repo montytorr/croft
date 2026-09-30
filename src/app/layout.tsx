@@ -19,17 +19,17 @@ const DESCRIPTION = 'Agent-first task tracker whose tasks double as shared memor
 /**
  * Where relative metadata URLs — the opengraph-image among them — resolve.
  *
- * Read from CAIRN_BASE_URL, the same variable the CLI and .env.example already
+ * Read from CROFT_BASE_URL, the same variable the CLI and .env.example already
  * use for "the public URL of this instance", rather than hardcoding one host:
- * Cairn is self-hosted, so the card has to point at whatever instance served
+ * Croft is self-hosted, so the card has to point at whatever instance served
  * it. The localhost fallback only matters in development; without any
  * metadataBase Next emits a build warning and resolves the card against
  * localhost anyway.
  */
-const baseUrl = process.env.CAIRN_BASE_URL || 'http://localhost:3000'
+const baseUrl = process.env.CROFT_BASE_URL || 'http://localhost:3000'
 
 /**
- * Named for the instance, so a personal Cairn and a work one open side by side
+ * Named for the instance, so a personal Croft and a work one open side by side
  * are two different tabs. Each page gives only its own part of the title.
  *
  * The icons are routes rather than icon.svg and apple-icon.tsx files: those

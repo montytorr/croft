@@ -2,7 +2,7 @@
 -- 065: vitals can see quiet claims, a dead reaper, a failing summariser and a
 --      runtime that stopped
 --
--- CAIRN-282 recomputed every vitals number against production and every one
+-- CROFT-282 recomputed every vitals number against production and every one
 -- matched its SQL. The panel still read "nothing wrong in the last 24h" while:
 --
 --   * 17 of 22 held claims had shown no sign of life for more than 20h, and
@@ -18,8 +18,8 @@
 --   * the summariser's own `claude -p` runs were being recorded as sessions,
 --     inflating the volume and diluting the summarised share.
 --
--- A NEW FUNCTION, NOT A SEVENTH TRANSFORMATION OF cairn_vitals. Everything
--- here is new data rather than a change to a number cairn_vitals already
+-- A NEW FUNCTION, NOT A SEVENTH TRANSFORMATION OF croft_vitals. Everything
+-- here is new data rather than a change to a number croft_vitals already
 -- returns, and five migrations have rewritten that function by editing its
 -- installed text (048, 050, 051, 054; 050 once by re-copying, which reverted
 -- 048). Adding six CTEs to it through string surgery is how the next one of
@@ -48,7 +48,7 @@
 -- without anyone looking. "Still held, not progressed" is the session-end hook
 -- recording that a claim was held while the session worked elsewhere, and
 -- counting it let a runtime that records a session every 30 minutes keep a
--- week-old claim alive forever (CAIRN-283).
+-- week-old claim alive forever (CROFT-283).
 --
 -- updated_at is safe to read since 063: auto_checkpoint_task_atomic writes
 -- under a transaction-local flag that touch_updated_at honours, so the
@@ -137,7 +137,7 @@ as $$
 $$;
 
 -- The summariser's own `claude -p` run, captured by the Claude SessionEnd
--- hook as if it were work. Its prompt is fixed (hooks/cairn-session-end.mjs).
+-- hook as if it were work. Its prompt is fixed (hooks/croft-session-end.mjs).
 create or replace function session_is_summariser(p_request text)
 returns boolean
 language sql
@@ -146,7 +146,7 @@ as $$
   select coalesce(ltrim(p_request) like 'You are writing one entry in an engineering memory%', false)
 $$;
 
-create or replace function cairn_vitals_signals(p_owner uuid, p_hours int default 24)
+create or replace function croft_vitals_signals(p_owner uuid, p_hours int default 24)
 returns jsonb
 language sql
 stable
@@ -240,7 +240,7 @@ with
       ), '[]'::jsonb)                                                                  as quietest
     from held h
   ),
-  -- The reaper, judged by what it did. `cairn reconcile` with nothing to do
+  -- The reaper, judged by what it did. `croft reconcile` with nothing to do
   -- leaves no trace, so a release is the only evidence it runs at all; that
   -- is why "no release" only means something when there is a quiet claim it
   -- should have taken.
@@ -261,7 +261,7 @@ with
     ) as last_write_at
   ),
   -- A runtime that wrote nothing in the window or the week before falls out
-  -- of cairn_vitals' agent list entirely, so "silent" could never be said of
+  -- of croft_vitals' agent list entirely, so "silent" could never be said of
   -- it. These are the ones seen before that and not since.
   absent_agents as (
     select coalesce(jsonb_agg(jsonb_build_object('agent', a.agent, 'lastSeenAt', a.last_seen)

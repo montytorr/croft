@@ -10,4 +10,4 @@ labels: bug
 
 **Steps to reproduce**
 
-**Environment** — Cairn commit, Node version, self-hosted or otherwise
+**Environment** — Croft commit, Node version, self-hosted or otherwise

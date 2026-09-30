@@ -73,12 +73,12 @@ export const titleFor = (row: ActivityRow): string => {
 
 /**
  * The trail: a dotted line down the feed, one stone on it per event, and a
- * small cairn where each day begins. The dot sits level with the kind tile
+ * small croft where each day begins. The dot sits level with the kind tile
  * (row padding 0.5rem + the tile's 1px offset + half its 1.25rem), so the
  * line reads as passing through the icons rather than beside them.
  *
  * Drawn per row rather than once per day, so the first stone of a day starts
- * the line and the last one ends it — a trail that runs past its final cairn
+ * the line and the last one ends it — a trail that runs past its final croft
  * into empty space reads as unfinished.
  */
 const STONE_Y = '1.1875rem'
@@ -96,8 +96,8 @@ const Trail = ({ color }: { color: string }) => (
   </span>
 )
 
-/** A small cairn on the trail where a day begins: three stones, the top one lit. */
-const DayCairn = () => (
+/** A small croft on the trail where a day begins: three stones, the top one lit. */
+const DayCroft = () => (
   <span aria-hidden className="flex w-2 shrink-0 justify-center">
     <svg viewBox="0 0 10 10" className="size-2.5 overflow-visible">
       <rect x="0.5" y="7.2" width="9" height="2.3" rx="1.15" fill="var(--fg-subtle)" opacity="0.5" />
@@ -202,7 +202,7 @@ export const ActivityList = ({ rows }: { rows: ActivityRow[] }) => {
         <section key={day}>
           <h2 className="group-band border-border text-fg sticky top-0 z-10 flex items-center gap-2.5 border-b px-4 py-2 text-[0.75rem] font-medium">
             <span aria-hidden className="w-[2.375rem] shrink-0" />
-            <DayCairn />
+            <DayCroft />
             {new Date(`${day}T12:00:00Z`).toLocaleDateString('en-GB', {
               weekday: 'long',
               day: 'numeric',

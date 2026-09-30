@@ -158,7 +158,7 @@ const closeness = (ref: string, candidate: string): number | null => {
  * Existing slugs that might be what a missing reference meant, closest first.
  *
  * This is the half of the answer that makes a refusal worth receiving. 63% of
- * dangling references in the store point at a fact Cairn already holds under a
+ * dangling references in the store point at a fact Croft already holds under a
  * different slug, so "that does not exist" is true and useless; "that does not
  * exist, and here are the three names that nearly are it" is the whole fix.
  */
@@ -381,7 +381,7 @@ type Row = {
  * had.
  *
  * `markdown.tsx` passes no `known` list, so `remarkKnowledgeRefs` links every
- * reference whether or not its target exists — CAIRN-192 left it that way
+ * reference whether or not its target exists — CROFT-192 left it that way
  * because the only list to hand was a page capped at 300 against a corpus of
  * 377, and using it would have marked 77 real entries as missing. This is the
  * whole set and nothing else: one column, no bodies.
@@ -565,7 +565,7 @@ const islandsOf = (ids: string[], edges: Edge[]): { sizes: number[]; of: Map<str
 /**
  * What the map shows, for a reader who has no screen.
  *
- * Cairn is agent-facing and these findings were visible only in a browser:
+ * Croft is agent-facing and these findings were visible only in a browser:
  * the entries that wrote themselves into a corner, and the references pointing
  * at things nobody ever wrote. An agent that cannot see them cannot fix them.
  */
@@ -611,7 +611,7 @@ const corpusVersion = async (): Promise<string> => {
 
 const graphFor = unstable_cache(
   async (_version: string): Promise<KnowledgeGraph> => buildGraph(),
-  ['cairn-knowledge-graph'],
+  ['croft-knowledge-graph'],
   { revalidate: 3600 },
 )
 

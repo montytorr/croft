@@ -3,7 +3,7 @@ import { signUrls, verifyAttachmentToken } from './attachments'
 
 describe('native attachment links', () => {
   beforeEach(() => {
-    process.env.CAIRN_ATTACHMENT_SIGNING_KEY = 'test-signing-key-with-enough-entropy'
+    process.env.CROFT_ATTACHMENT_SIGNING_KEY = 'test-signing-key-with-enough-entropy'
   })
 
   it('signs preview and download intent separately', async () => {

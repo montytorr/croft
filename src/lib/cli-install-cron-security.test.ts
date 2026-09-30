@@ -18,7 +18,7 @@ import { afterEach, describe, expect, it } from 'vitest'
  * (faked) crontab and back out through `--run`.
  *
  * F3 — `--install --only X` used to rewrite the whole managed block, which
- * silently dropped every previously-installed job not named in `X`. `cairn
+ * silently dropped every previously-installed job not named in `X`. `croft
  * setup` calls this with `--only` on every run, so a second run used to
  * quietly un-schedule reconcile/vitals/openclaw-sessions the moment a caller
  * asked for just one of them. This pins that a scoped re-run keeps the rest.
@@ -52,7 +52,7 @@ writeFileSync(process.env.RECORD, JSON.stringify({ args: process.argv.slice(2) }
 /** A machine with a fake crontab (a plain file) and everything reconcile,
  * vitals, agent-files and openclaw-sessions each need to be "applicable". */
 const setUp = async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'cairn-install-cron-security-'))
+  const directory = await mkdtemp(join(tmpdir(), 'croft-install-cron-security-'))
   temporaryDirectories.push(directory)
 
   const bin = join(directory, 'bin')
@@ -69,7 +69,7 @@ if [ "$1" = "-l" ]; then cat "$FAKE_CRONTAB"; else cat > "$FAKE_CRONTAB"; fi
   // reconcile and vitals require only CLI to exist; agent-files requires its
   // sync script and node; openclaw-sessions requires its sessions directory,
   // the session-end hook, and node.
-  const cli = join(directory, 'cairn')
+  const cli = join(directory, 'croft')
   await writeFile(cli, "#!/usr/bin/env node\nconsole.log('all-instances')\n")
 
   const recorder = join(directory, 'recorder.mjs')
@@ -77,7 +77,7 @@ if [ "$1" = "-l" ]; then cat "$FAKE_CRONTAB"; else cat > "$FAKE_CRONTAB"; fi
 
   const hooks = join(directory, 'hooks')
   await mkdir(hooks, { recursive: true })
-  await writeFile(join(hooks, 'cairn-session-end.mjs'), '// stub\n')
+  await writeFile(join(hooks, 'croft-session-end.mjs'), '// stub\n')
 
   const recorded = join(directory, 'recorded.json')
 
@@ -91,11 +91,11 @@ if [ "$1" = "-l" ]; then cat "$FAKE_CRONTAB"; else cat > "$FAKE_CRONTAB"; fi
       PATH: `${bin}:${process.env.PATH ?? ''}`,
       FAKE_CRONTAB: crontabFile,
       RECORD: recorded,
-      CAIRN_CLI_PATH: cli,
-      CAIRN_NODE_PATH: process.execPath,
-      CAIRN_SYNC_SCRIPT: recorder,
-      CAIRN_LOG_DIR: directory,
-      CAIRN_HOOKS_DIR: hooks,
+      CROFT_CLI_PATH: cli,
+      CROFT_NODE_PATH: process.execPath,
+      CROFT_SYNC_SCRIPT: recorder,
+      CROFT_LOG_DIR: directory,
+      CROFT_HOOKS_DIR: hooks,
     },
   }
 }
@@ -105,7 +105,7 @@ describe('install-cron.mjs — crontab quoting (F2)', () => {
     const { crontabFile, recorded, recorder, environment } = await setUp()
     const spacedSync = recorder.replace('recorder.mjs', 'a recorder with spaces.mjs')
     await writeFile(spacedSync, RECORDER)
-    const env = { ...environment, CAIRN_SYNC_SCRIPT: spacedSync }
+    const env = { ...environment, CROFT_SYNC_SCRIPT: spacedSync }
 
     const installed = await run(['--install', '--only', 'agent-files', '--cron'], env)
     expect(installed.code).toBe(0)
@@ -124,7 +124,7 @@ describe('install-cron.mjs — crontab quoting (F2)', () => {
 
   it('escapes a literal % so cron cannot read it as a newline, and unescapes it back out', async () => {
     const { crontabFile, recorded, environment } = await setUp()
-    const env = { ...environment, CAIRN_NOTIFY_FILES: 'weekly: 100% done' }
+    const env = { ...environment, CROFT_NOTIFY_FILES: 'weekly: 100% done' }
 
     const installed = await run(['--install', '--only', 'agent-files', '--cron'], env)
     expect(installed.code).toBe(0)
@@ -144,11 +144,11 @@ describe('install-cron.mjs — crontab quoting (F2)', () => {
     expect(record.args).toContain('weekly: 100% done')
   })
 
-  it('refuses a CAIRN_SUMMARY_CLI override carrying a newline or %', async () => {
+  it('refuses a CROFT_SUMMARY_CLI override carrying a newline or %', async () => {
     const { environment } = await setUp()
-    const result = await run(['--cron'], { ...environment, CAIRN_SUMMARY_CLI: '/bin/x\n* * * * * evil' })
+    const result = await run(['--cron'], { ...environment, CROFT_SUMMARY_CLI: '/bin/x\n* * * * * evil' })
     expect(result.code).toBe(2)
-    expect(result.stderr).toContain('CAIRN_SUMMARY_CLI contains a newline, carriage return or %')
+    expect(result.stderr).toContain('CROFT_SUMMARY_CLI contains a newline, carriage return or %')
   })
 })
 
@@ -167,7 +167,7 @@ describe('install-cron.mjs — --only keeps other jobs (F3)', () => {
     await mkdir(sessions, { recursive: true })
     const second = await run(
       ['--install', '--only', 'openclaw-sessions', '--cron'],
-      { ...environment, CAIRN_OPENCLAW_SESSIONS: sessions },
+      { ...environment, CROFT_OPENCLAW_SESSIONS: sessions },
     )
     expect(second.code).toBe(0)
 
@@ -203,7 +203,7 @@ describe('install-cron.mjs — --only keeps other jobs (F3)', () => {
     expect(removed.code).toBe(0)
 
     const after = await readFile(crontabFile, 'utf8')
-    expect(after).not.toContain('cairn maintenance')
+    expect(after).not.toContain('croft maintenance')
     expect(after).toContain('someone-elses-backup')
   })
 })

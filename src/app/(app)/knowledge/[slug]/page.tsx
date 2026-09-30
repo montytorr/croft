@@ -59,9 +59,9 @@ const KnowledgeDetailPage = async ({ params }: { params: Promise<{ slug: string 
     firstProject ? entitiesForProject(user.id, firstProject) : Promise.resolve([]),
     // Where this was learned. Stored since knowledge existed, shown nowhere.
     sourceTaskRef(user.id, row.source_task_id),
-    // What it said before each correction (CAIRN-266).
+    // What it said before each correction (CROFT-266).
     knowledgeRevisions(user.id, slug),
-    // How often it is actually handed to anyone (CAIRN-270).
+    // How often it is actually handed to anyone (CROFT-270).
     recallCounts([row.id]),
   ])
 

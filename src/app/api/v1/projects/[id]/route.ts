@@ -22,7 +22,7 @@ type ProjectRow = {
 /**
  * By uuid, live key, or a key the project used to have. A retired key acts on
  * the live project and says so in `renamed_from`, rather than answering "No
- * project AC" about a project that was only renamed (CAIRN-264).
+ * project AC" about a project that was only renamed (CROFT-264).
  */
 const resolve = (idOrKey: string) =>
   resolveProject<ProjectRow>(idOrKey, 'id, key, title, description, status, task_counter')

@@ -21,7 +21,7 @@ const GlobalError = ({ error }: { error: Error & { digest?: string } }) => (
       }}
     >
       <div>
-        <h1 style={{ fontSize: 15, fontWeight: 500, margin: 0 }}>Cairn failed to start.</h1>
+        <h1 style={{ fontSize: 15, fontWeight: 500, margin: 0 }}>Croft failed to start.</h1>
         <p style={{ fontSize: 13, color: '#8a8f98', marginTop: 8 }}>
           Reload the page. If it persists, the server logs will have the detail.
         </p>

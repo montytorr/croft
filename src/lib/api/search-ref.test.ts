@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 /**
  * A ref is an exact address, so searching one must return that task.
  *
- * It did not. `CAIRN-131` returned CAIRN-105 — the task whose resolution
- * mentions it — and `CAIRN-106` returned nothing at all. The ref is a project
+ * It did not. `CROFT-131` returned CROFT-105 — the task whose resolution
+ * mentions it — and `CROFT-106` returned nothing at all. The ref is a project
  * key plus a number and the key lives in another table, so no generated column
  * on `tasks` can reach it and the search vector never held it.
  *
@@ -27,20 +27,20 @@ const parseNumber = (q: string) => {
 
 describe('which queries are an exact ref', () => {
   it('accepts the refs this system issues', () => {
-    expect(parse('CAIRN-131')).toBe('CAIRN-131')
+    expect(parse('CROFT-131')).toBe('CROFT-131')
     expect(parse('OD-36')).toBe('OD-36')
     expect(parse('HM-700')).toBe('HM-700')
   })
 
   it('accepts the spelling a human types', () => {
-    expect(parse('cairn-131')).toBe('CAIRN-131')
-    expect(parse('  CAIRN-131  ')).toBe('CAIRN-131')
+    expect(parse('croft-131')).toBe('CROFT-131')
+    expect(parse('  CROFT-131  ')).toBe('CROFT-131')
   })
 
   it('is not fooled by prose that merely contains a ref', () => {
     // Otherwise the first ref in a sentence would hijack a real search.
-    expect(parse('why did CAIRN-131 regress')).toBeNull()
-    expect(parse('CAIRN-131 and CAIRN-105')).toBeNull()
+    expect(parse('why did CROFT-131 regress')).toBeNull()
+    expect(parse('CROFT-131 and CROFT-105')).toBeNull()
   })
 
   it('lets the database decide the genuinely ambiguous ones', () => {
@@ -63,8 +63,8 @@ describe('which queries are an exact ref', () => {
   })
 
   it('rejects a ref with no number, which is a project not a task', () => {
-    expect(parse('CAIRN-')).toBeNull()
-    expect(parse('CAIRN')).toBeNull()
+    expect(parse('CROFT-')).toBeNull()
+    expect(parse('CROFT')).toBeNull()
   })
 
   it('reads a bare number as an address, which is how people refer to a task', () => {

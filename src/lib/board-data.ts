@@ -4,7 +4,7 @@ import { withAssignees, type Person } from '@/lib/api/people'
 import type { TaskPriority, TaskStatus, TaskType } from '@/schemas/task'
 
 /**
- * Data loader for the cross-project board (`/board`, CAIRN-72).
+ * Data loader for the cross-project board (`/board`, CROFT-72).
  *
  * A deliberate standalone copy of the projection `listTasks`/`listAllTasks`
  * use in `src/lib/data.ts`, not an import from it: that file is being edited

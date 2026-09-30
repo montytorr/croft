@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 /**
- * Single source of truth for Cairn's domain vocabulary.
+ * Single source of truth for Croft's domain vocabulary.
  *
  * The API, the CLI, the OpenAPI spec and the UI all import from here, so a new
  * task type is added in exactly one place — plus a one-line migration to widen
@@ -109,13 +109,13 @@ export const createTaskSchema = taskFields
      */
     assignee: assigneeField.optional(),
     /**
-     * File a bug or spike with no body on purpose — `cairn add --force-empty`.
+     * File a bug or spike with no body on purpose — `croft add --force-empty`.
      * The escape hatch has to be something the caller says, never a default.
      */
     forceEmpty: z.boolean().optional(),
   })
   /**
-   * The bug/spike body rule, where every caller meets it (CAIRN-291).
+   * The bug/spike body rule, where every caller meets it (CROFT-291).
    *
    * It lived only in the CLI, and there it worked: none filed empty since it
    * shipped, against 71 before. The API accepted an empty description, so the
@@ -130,7 +130,7 @@ export const createTaskSchema = taskFields
       message:
         `A ${value.type} needs a description of at least ${MIN_BODY_CHARS} characters: what happens, ` +
         'what you expected, and how to see it. If the title really is the whole story, send forceEmpty: true ' +
-        '(cairn add --force-empty).',
+        '(croft add --force-empty).',
     })
   })
 

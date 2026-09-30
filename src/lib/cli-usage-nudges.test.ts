@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 
 /**
- * The nudges CAIRN-294 added to the verbs agents actually type: `add` claims
+ * The nudges CROFT-294 added to the verbs agents actually type: `add` claims
  * for a runtime, `done` says what it recorded and when nobody could see the
  * work, `note` points a dead end at --kind attempt, and the briefing carries
  * the rules. Each asserts what reached the wire as well as what was said,
@@ -40,18 +40,18 @@ const serve = (reply: Reply, seen: Seen[]) =>
     server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${(server.address() as { port: number }).port}`))
   })
 
-const RUNTIME_MARKERS = /^(CLAUDECODE|CLAUDE_CODE_|CODEX_|OPENCLAW_|CAIRN_AGENT$|CAIRN_SESSION_ID$)/
+const RUNTIME_MARKERS = /^(CLAUDECODE|CLAUDE_CODE_|CODEX_|OPENCLAW_|CROFT_AGENT$|CROFT_SESSION_ID$)/
 
 const run = async (args: string[], base: string, agent?: string) => {
-  const home = await mkdtemp(join(tmpdir(), 'cairn-nudge-'))
+  const home = await mkdtemp(join(tmpdir(), 'croft-nudge-'))
   directories.push(home)
   // The suite itself usually runs inside Claude Code, so the runtime markers
   // it inherits would make every case an agent case.
   const env = { ...process.env }
   for (const name of Object.keys(env)) if (RUNTIME_MARKERS.test(name)) delete env[name]
   return new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
-    const child = spawn('node', ['cli/cairn.mjs', ...args], {
-      env: { ...env, HOME: home, CAIRN_BASE_URL: base, CAIRN_API_KEY: 'test-key', ...(agent ? { CAIRN_AGENT: agent } : {}) },
+    const child = spawn('node', ['cli/croft.mjs', ...args], {
+      env: { ...env, HOME: home, CROFT_BASE_URL: base, CROFT_API_KEY: 'test-key', ...(agent ? { CROFT_AGENT: agent } : {}) },
     })
     let stdout = ''
     let stderr = ''
@@ -74,7 +74,7 @@ const addServer = ({ similar = [] as unknown[], held = [] as unknown[] } = {}): 
 
 const claims = (seen: Seen[]) => seen.filter((s) => s.method === 'POST' && s.path.endsWith('/claim'))
 
-describe('cairn add, for an agent runtime', () => {
+describe('croft add, for an agent runtime', () => {
   it('claims what it files', async () => {
     const seen: Seen[] = []
     const base = await serve(addServer(), seen)
@@ -141,7 +141,7 @@ describe('cairn add, for an agent runtime', () => {
   })
 })
 
-describe('cairn add, for a person', () => {
+describe('croft add, for a person', () => {
   it('files without claiming, exactly as before', async () => {
     const seen: Seen[] = []
     const base = await serve(addServer(), seen)
@@ -174,7 +174,7 @@ const CLOSE_ONLY = [
   { event: 'created', data: {} },
 ]
 
-describe('cairn done', () => {
+describe('croft done', () => {
   it('says it recorded fixed when --kind was omitted, and still sends fixed', async () => {
     const seen: Seen[] = []
     const base = await serve(closeServer([{ event: 'claimed', data: {} }]), seen)
@@ -212,12 +212,12 @@ describe('cairn done', () => {
     }
   })
 
-  /** CAIRN-323: the close is the last moment anyone asks what the work taught. */
+  /** CROFT-323: the close is the last moment anyone asks what the work taught. */
   it('asks an agent whether the task taught anything, with the command to record it', async () => {
     const base = await serve(closeServer([{ event: 'claimed', data: {} }]), [])
     const { stderr } = await run(['done', 'ACME-7', '--resolution', 'shipped', '--kind', 'fixed'], base, 'codex')
     expect(stderr).toContain('Did ACME-7 establish anything the next agent should know')
-    expect(stderr).toContain('cairn learn "<title>" --project ACME --task ACME-7 --body -')
+    expect(stderr).toContain('croft learn "<title>" --project ACME --task ACME-7 --body -')
   })
 
   it('does not ask when something was already learned on the task, or it was a duplicate', async () => {
@@ -241,7 +241,7 @@ describe('cairn done', () => {
   })
 })
 
-describe('cairn note', () => {
+describe('croft note', () => {
   const noteServer: Reply = () => ({ id: 'n', kind: 'note' })
 
   it('points a dead end at --kind attempt without changing what is stored', async () => {
@@ -283,7 +283,7 @@ describe('the briefing', () => {
   it('carries the working rules in a few hundred bytes', async () => {
     const base = await serve(() => briefing, [])
     const { stdout } = await run(['context', '--project', 'ACME'], base)
-    const start = stdout.indexOf('Start with: cairn check')
+    const start = stdout.indexOf('Start with: croft check')
     expect(start).toBeGreaterThan(-1)
     const rules = stdout.slice(start).trim()
     expect(Buffer.byteLength(rules)).toBeLessThanOrEqual(300)
@@ -302,7 +302,7 @@ describe('the briefing', () => {
     const file = { path: 'src/a.ts', tasks: [{ ref: 'ACME-7', status: 'doing', title: 'x' }], knowledge: [], sessions: [] }
     const base = await serve(() => ({ ...briefing, file }), [])
     const { stdout } = await run(['context', '--file', 'src/a.ts'], base)
-    expect(stdout).toContain('Cairn knows about src/a.ts')
+    expect(stdout).toContain('Croft knows about src/a.ts')
     expect(stdout).not.toContain('Start with')
   })
 })
@@ -313,7 +313,7 @@ describe('the briefing', () => {
  * it, so these assert what reached the wire and that the answer names a person
  * in one line rather than five.
  */
-describe('the assignee (CAIRN-310)', () => {
+describe('the assignee (CROFT-310)', () => {
   const alice = { id: 'u-1', email: 'alice@acme.io', name: 'Alice', active: true }
 
   it('is left to the server when add does not name one, and printed by name', async () => {
@@ -428,7 +428,7 @@ describe('the assignee (CAIRN-310)', () => {
       'Assigned to you, nobody on it:\n' +
         '  ACME-7  todo  Wire the relay  [urgent]\n' +
         '  ACME-8  backlog  Write the runbook\n' +
-        '  +4 more -- cairn next --assignee me\n',
+        '  +4 more -- croft next --assignee me\n',
     )
   })
 

@@ -1,5 +1,5 @@
 -- ===========================================================================
--- Cairn — initial schema
+-- Croft — initial schema
 --
 -- Design notes:
 --   * `owner_user_id` on `projects` is the single RLS anchor. Everything else
@@ -317,5 +317,5 @@ end $$;
 create trigger tasks_assign_number before insert on tasks
   for each row execute function assign_task_number();
 
--- Cairn has no browser-to-database path. Session and API-key authorization is
+-- Croft has no browser-to-database path. Session and API-key authorization is
 -- enforced by server handlers on the private database network.

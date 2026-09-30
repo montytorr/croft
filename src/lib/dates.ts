@@ -10,7 +10,7 @@
  * So every formatter here pins the zone explicitly, and anything that depends
  * on "now" is deferred to after mount rather than guessed at on the server.
  */
-export const DISPLAY_TZ = process.env.NEXT_PUBLIC_CAIRN_TZ || 'Europe/Paris'
+export const DISPLAY_TZ = process.env.NEXT_PUBLIC_CROFT_TZ || 'Europe/Paris'
 
 const fmt = (options: Intl.DateTimeFormatOptions) =>
   new Intl.DateTimeFormat('en-GB', { timeZone: DISPLAY_TZ, ...options })

@@ -606,7 +606,7 @@ const VitalsPage = async ({
               <p className="text-fg-subtle text-[0.6875rem] leading-relaxed">
                 Counts cover the last {window}, against the week before it, scaled to the same
                 length — a count alone says nothing. There is deliberately no ranking of agents:
-                Cairn is their working memory, and a visible score would be something to optimise.
+                Croft is their working memory, and a visible score would be something to optimise.
               </p>
             </>
           ) : null}

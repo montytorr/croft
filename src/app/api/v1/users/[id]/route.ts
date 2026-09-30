@@ -31,7 +31,7 @@ const deactivateUserSchema = z.object({
 })
 
 /**
- * `reassignTo` names who takes over the user's open tasks (CAIRN-310). The
+ * `reassignTo` names who takes over the user's open tasks (CROFT-310). The
  * handler wrapper reads no body on DELETE, so it is read here, and the query
  * string is accepted too for a client that cannot send a body on a DELETE.
  */

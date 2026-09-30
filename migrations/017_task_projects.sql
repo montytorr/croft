@@ -15,7 +15,7 @@
 --
 -- Worth recording because it is already true and nobody has used it: parent_id
 -- is a plain task FK with no same-project constraint, so sub-tasks can already
--- live in different projects. An epic in CAIRN with children in HM and AT
+-- live in different projects. An epic in CROFT with children in HM and AT
 -- works today. What was missing is only that nothing shows which project a
 -- child is in.
 -- ===========================================================================

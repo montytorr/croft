@@ -7,8 +7,8 @@
  */
 
 /**
- * git@github.com:montytorr/cairn.git, https://github.com/montytorr/cairn.git
- * and https://user:token@github.com/montytorr/cairn/ are one repository.
+ * git@github.com:montytorr/croft.git, https://github.com/montytorr/croft.git
+ * and https://user:token@github.com/montytorr/croft/ are one repository.
  *
  * Normalising on the server keeps the rule in one place, so the CLI, the MCP
  * facade and an import all reach the same row. Everything stripped here is
@@ -35,7 +35,7 @@ export const normaliseRemote = (raw: string): string => {
 
   return (
     withoutTransport
-      // Before `.git`, not after: `…/cairn.git/` has both, and stripping them
+      // Before `.git`, not after: `…/croft.git/` has both, and stripping them
       // in the other order left the suffix behind, so one repository got two
       // identities depending on a trailing slash.
       .replace(/\/+$/, '')

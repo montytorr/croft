@@ -8,10 +8,10 @@ import { spawn } from 'node:child_process'
 /**
  * KNOWN_FLAGS is one list for every verb, which is what makes it cheap and
  * what makes it blind: it catches a flag nothing reads, never a flag one verb
- * reads and another does not. `cairn relearn <slug> --global` parsed, printed
+ * reads and another does not. `croft relearn <slug> --global` parsed, printed
  * the entry with its old scope still on it and exited 0 — three lines below
  * the comment explaining why a silently dropped flag is unacceptable
- * (CAIRN-262).
+ * (CROFT-262).
  *
  * The guard is not a per-verb table. `flags` is a proxy that records what the
  * running command actually looked at, so the reads are the registry: exact,
@@ -43,11 +43,11 @@ const serve = (seen: { body?: Record<string, unknown>; method?: string; url?: st
   })
 
 const run = async (args: string[], base: string) => {
-  const home = await mkdtemp(join(tmpdir(), 'cairn-ignored-'))
+  const home = await mkdtemp(join(tmpdir(), 'croft-ignored-'))
   directories.push(home)
   return new Promise<{ code: number | null; stderr: string; stdout: string }>((resolve, reject) => {
-    const child = spawn('node', ['cli/cairn.mjs', ...args], {
-      env: { ...process.env, HOME: home, CAIRN_BASE_URL: base, CAIRN_API_KEY: 'test-key' },
+    const child = spawn('node', ['cli/croft.mjs', ...args], {
+      env: { ...process.env, HOME: home, CROFT_BASE_URL: base, CROFT_API_KEY: 'test-key' },
     })
     let stdout = ''
     let stderr = ''
@@ -144,7 +144,7 @@ describe('relearn --global', () => {
   })
 
   /**
-   * CAIRN-295. A PATCH touches only the side it is given, so moving a fact from
+   * CROFT-295. A PATCH touches only the side it is given, so moving a fact from
    * a project to an entity has to clear the project explicitly. `--entity X`
    * alone adds and keeps the project, which is right; `none` is the clear.
    */
@@ -192,7 +192,7 @@ describe('relearn --global', () => {
   it('is offered by the help text, which is the contract people read', async () => {
     const base = await serve({})
     const { stdout } = await run(['help'], base)
-    const relearn = stdout.split('\n').findIndex((l) => l.includes('cairn relearn'))
+    const relearn = stdout.split('\n').findIndex((l) => l.includes('croft relearn'))
 
     expect(relearn).toBeGreaterThan(-1)
     expect(stdout.split('\n').slice(relearn, relearn + 2).join(' ')).toContain('--global')
@@ -240,7 +240,7 @@ describe('documented invocations stay silent', () => {
   ]
 
   it.each(invocations.map((args) => [args.join(' '), args] as const))(
-    'cairn %s',
+    'croft %s',
     async (_label, args) => {
       const base = await serve({})
       const { stderr } = await run([...args], base)

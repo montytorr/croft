@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * Scores `cairn check` against tests/fixtures/search-eval.json.
+ * Scores `croft check` against tests/fixtures/search-eval.json.
  *
- * WHY THIS EXISTS. The fixture was created by CAIRN-247 to stop retrieval
+ * WHY THIS EXISTS. The fixture was created by CROFT-247 to stop retrieval
  * changes being guessed at, and for one release it could not do that job: it
  * recorded the queries and the expected refs but not the INVOCATION, and the
- * invocation decides the answer. `cairn check "<q>"`, `--project CAIRN` and
+ * invocation decides the answer. `croft check "<q>"`, `--project CROFT` and
  * `--kinds knowledge` return three different orderings of the same store, so
  * two people re-scoring the same file got different numbers and neither was
- * wrong. That is CAIRN-259.
+ * wrong. That is CROFT-259.
  *
  * So the scope is read from the file, never re-derived by whoever is running
  * it, and the run records what produced the numbers — the server build, the
@@ -24,7 +24,7 @@
  *   node scripts/score-search-eval.mjs                 score, print the report
  *   node scripts/score-search-eval.mjs --write         also rewrite `baseline`
  *   node scripts/score-search-eval.mjs --case en-07    one case, with its rows
- *   node scripts/score-search-eval.mjs --cli ./cli/cairn.mjs
+ *   node scripts/score-search-eval.mjs --cli ./cli/croft.mjs
  */
 import { execFile } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
@@ -41,14 +41,14 @@ const flag = (name) => {
 }
 const has = (name) => argv.includes(`--${name}`)
 
-const CLI = flag('cli') ?? 'cairn'
+const CLI = flag('cli') ?? 'croft'
 const ONLY = flag('case')
 /**
- * Which function is under test. `all` is search_all, the path `cairn check`
+ * Which function is under test. `all` is search_all, the path `croft check`
  * takes and the one the recorded baseline measures. `tasks` is search_tasks —
  * a different function with its own ranking, which the web UI and
- * `cairn check --tasks` use, and which migration 055 deliberately did not
- * touch (CAIRN-260). Scoring it means dropping the cases whose answer is a
+ * `croft check --tasks` use, and which migration 055 deliberately did not
+ * touch (CROFT-260). Scoring it means dropping the cases whose answer is a
  * knowledge slug or a session, because that arm can never return one: a miss
  * there would measure the filter, not the ranking.
  */
@@ -67,8 +67,8 @@ const invocation = (kase) => {
   return args
 }
 
-const cairn = async (args) => {
-  // `cairn` on PATH is a copy that may itself be stale (CAIRN-261), so the
+const croft = async (args) => {
+  // `croft` on PATH is a copy that may itself be stale (CROFT-261), so the
   // version it reports is recorded beside the numbers rather than assumed.
   const node = CLI.endsWith('.mjs') ? ['node', [CLI, ...args]] : [CLI, args]
   const { stdout } = await run(node[0], node[1], { maxBuffer: 16 * 1024 * 1024 })
@@ -117,11 +117,11 @@ const summarise = (scored) => ({
  */
 const provenance = async () => {
   const [health, projects] = await Promise.all([
-    fetch(`${process.env.CAIRN_BASE_URL ?? baseUrlFromEnvFile()}/api/v1/health`)
+    fetch(`${process.env.CROFT_BASE_URL ?? baseUrlFromEnvFile()}/api/v1/health`)
       .then((r) => r.json())
       .then((p) => p.data)
       .catch(() => null),
-    cairn(['projects', '--json']).catch(() => null),
+    croft(['projects', '--json']).catch(() => null),
   ])
   const rows = projects?.results ?? projects ?? []
   return {
@@ -140,8 +140,8 @@ const provenance = async () => {
 
 const baseUrlFromEnvFile = () => {
   try {
-    const env = readFileSync(`${process.env.HOME}/.cairn/env`, 'utf8')
-    return env.match(/^CAIRN_BASE_URL=(.*)$/m)?.[1]?.trim() ?? 'http://localhost:3000'
+    const env = readFileSync(`${process.env.HOME}/.croft/env`, 'utf8')
+    return env.match(/^CROFT_BASE_URL=(.*)$/m)?.[1]?.trim() ?? 'http://localhost:3000'
   } catch {
     return 'http://localhost:3000'
   }
@@ -167,7 +167,7 @@ const main = async () => {
     const args = invocation(kase)
     let response
     try {
-      response = await cairn(args)
+      response = await croft(args)
     } catch (error) {
       process.stderr.write(`${kase.id}: ${error.message}\n`)
       process.exit(1)

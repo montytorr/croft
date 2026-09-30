@@ -1,11 +1,11 @@
 -- Is the memory earning its keep?
 --
--- Kept apart from cairn_work_shape rather than folded into it: that function
+-- Kept apart from croft_work_shape rather than folded into it: that function
 -- answers what happened to the work, this one answers whether anybody consulted
 -- what was already known. One more round trip is cheaper than a hundred-line
 -- function nobody dares change.
 
-create or replace function cairn_memory_use(p_owner uuid, p_hours int default 24)
+create or replace function croft_memory_use(p_owner uuid, p_hours int default 24)
 returns jsonb
 language sql
 stable

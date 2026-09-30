@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# Cairn — example deployment.
+# Croft — example deployment.
 #
 # Copy to docker-compose.yml (or docker-compose.override.yml, which is
 # gitignored) and adjust. Nothing host-specific belongs in this file.
@@ -9,8 +9,8 @@
 # Caddy if you use those instead.
 #
 # Required environment:
-#   CAIRN_DOMAIN         hostname to serve on, e.g. cairn.example.com
-#   CAIRN_PROXY_NETWORK  existing external Docker network your proxy is on
+#   CROFT_DOMAIN         hostname to serve on, e.g. croft.example.com
+#   CROFT_PROXY_NETWORK  existing external Docker network your proxy is on
 # ---------------------------------------------------------------------------
 
 services:
@@ -24,13 +24,13 @@ services:
     networks:
       - database
 
-  cairn:
+  croft:
     build:
       context: .
       target: runner
       args:
         GIT_SHA: ${GIT_SHA:-unknown}
-    container_name: cairn
+    container_name: croft
     restart: unless-stopped
 
     # Secrets come from a gitignored env file, never from this compose file.
@@ -67,12 +67,12 @@ services:
     volumes:
       # The only path the app writes to. It must be owned by uid 1001 (the
       # `nextjs` user above) BEFORE the first start:
-      #   sudo mkdir -p /srv/cairn/attachments
-      #   sudo chown -R 1001:1001 /srv/cairn/attachments
+      #   sudo mkdir -p /srv/croft/attachments
+      #   sudo chown -R 1001:1001 /srv/croft/attachments
       # A root-owned directory here is readable, so the app boots and reports
       # healthy; it fails only later, when someone attaches a file and the
       # per-project mkdir returns EACCES.
-      - /srv/cairn/attachments:/data/attachments
+      - /srv/croft/attachments:/data/attachments
     cap_drop:
       - ALL
     security_opt:
@@ -91,22 +91,22 @@ services:
 
     labels:
       - 'traefik.enable=true'
-      - 'traefik.docker.network=${CAIRN_PROXY_NETWORK}'
-      - 'traefik.http.routers.cairn.rule=Host(`${CAIRN_DOMAIN}`)'
-      - 'traefik.http.routers.cairn.entrypoints=websecure'
-      - 'traefik.http.routers.cairn.tls.certresolver=letsencrypt'
-      - 'traefik.http.services.cairn.loadbalancer.server.port=3000'
-      - 'traefik.http.routers.cairn.middlewares=cairn-headers'
-      - 'traefik.http.middlewares.cairn-headers.headers.stsSeconds=31536000'
-      - 'traefik.http.middlewares.cairn-headers.headers.stsIncludeSubdomains=true'
-      - 'traefik.http.middlewares.cairn-headers.headers.stsPreload=true'
-      - 'traefik.http.middlewares.cairn-headers.headers.frameDeny=true'
-      - 'traefik.http.middlewares.cairn-headers.headers.contentTypeNosniff=true'
+      - 'traefik.docker.network=${CROFT_PROXY_NETWORK}'
+      - 'traefik.http.routers.croft.rule=Host(`${CROFT_DOMAIN}`)'
+      - 'traefik.http.routers.croft.entrypoints=websecure'
+      - 'traefik.http.routers.croft.tls.certresolver=letsencrypt'
+      - 'traefik.http.services.croft.loadbalancer.server.port=3000'
+      - 'traefik.http.routers.croft.middlewares=croft-headers'
+      - 'traefik.http.middlewares.croft-headers.headers.stsSeconds=31536000'
+      - 'traefik.http.middlewares.croft-headers.headers.stsIncludeSubdomains=true'
+      - 'traefik.http.middlewares.croft-headers.headers.stsPreload=true'
+      - 'traefik.http.middlewares.croft-headers.headers.frameDeny=true'
+      - 'traefik.http.middlewares.croft-headers.headers.contentTypeNosniff=true'
 
 networks:
   proxy:
-    name: ${CAIRN_PROXY_NETWORK}
+    name: ${CROFT_PROXY_NETWORK}
     external: true
   database:
-    name: ${CAIRN_DATABASE_NETWORK:-cairn-data}
+    name: ${CROFT_DATABASE_NETWORK:-croft-data}
     external: true

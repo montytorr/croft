@@ -102,7 +102,7 @@ const Row = ({ row, terms }: { row: SearchAllRow; terms: string[] }) => {
         )}
       </div>
 
-      {/* What opening it costs, in the same units `cairn check` prints. A
+      {/* What opening it costs, in the same units `croft check` prints. A
           bare "~19" read as a minus sign and a mystery number. */}
       {row.body_bytes > 0 && (
         <span

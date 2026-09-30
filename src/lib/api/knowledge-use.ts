@@ -1,9 +1,9 @@
 import { pool } from '@/lib/db/client'
 
 /**
- * How often each fact is recalled (CAIRN-270), from what 053 already records:
+ * How often each fact is recalled (CROFT-270), from what 053 already records:
  * searches that returned it and direct reads that fetched it. Not counted: the
- * session briefing and `cairn recall`, which record nothing — every surface
+ * session briefing and `croft recall`, which record nothing — every surface
  * showing these numbers has to say so, or an entry the briefing shows daily
  * reads as dead.
  */
@@ -11,7 +11,7 @@ import { pool } from '@/lib/db/client'
 export const RECALL_WINDOW_DAYS = 30
 
 export const COUNTED =
-  'counts check/know searches that returned it and direct reads; the session briefing and cairn recall are not recorded'
+  'counts check/know searches that returned it and direct reads; the session briefing and croft recall are not recorded'
 
 export type RecallCount = {
   returned: number
@@ -107,7 +107,7 @@ export type UnusedWindow = {
  * An entry younger than the window is left out, which is right one at a time
  * and wrong for the whole store: 30 days after an import every entry is still
  * inside the window, the answer is an empty list, and an empty list reads as
- * "everything is being used" (CAIRN-289 — a 10-day window showed 46).
+ * "everything is being used" (CROFT-289 — a 10-day window showed 46).
  */
 export const unusedWindow = async (days: number): Promise<UnusedWindow> => {
   const { rows } = await pool().query(

@@ -15,7 +15,7 @@
 -- would be churn without information.
 -- ===========================================================================
 
-create or replace function cairn_pulse(p_owner uuid, p_project text default null)
+create or replace function croft_pulse(p_owner uuid, p_project text default null)
 returns text
 language sql
 stable
@@ -52,8 +52,8 @@ as $$
   from scoped_tasks;
 $$;
 
-revoke all on function cairn_pulse from public;
+revoke all on function croft_pulse from public;
 
-comment on function cairn_pulse is
+comment on function croft_pulse is
   'One string that changes whenever anything this owner can see changes. Read '
   'by the SSE stream every few seconds, so it must stay index-cheap.';

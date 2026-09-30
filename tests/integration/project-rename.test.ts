@@ -6,7 +6,7 @@ import { resolveTask } from '@/lib/api/tasks'
 import type { Actor } from '@/lib/api/auth'
 
 /**
- * A key rename, against the installed SQL (CAIRN-264).
+ * A key rename, against the installed SQL (CROFT-264).
  *
  * 057 edits two functions in place — `project_rename_key` and `activity_feed`
  * — by transforming what `pg_get_functiondef` returns rather than re-copying

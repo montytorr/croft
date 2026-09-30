@@ -8,7 +8,7 @@ import { linkedFiles } from './knowledge'
  * migration to native PostgreSQL landed, and they went on reading exactly like
  * a fact confirmed this morning. `verified_at` existed and nothing used it.
  *
- * Cairn already holds the evidence: `file_touches` maps paths to the sessions
+ * Croft already holds the evidence: `file_touches` maps paths to the sessions
  * and tasks that touched them, so for any fact that names files it can ask how
  * much has moved underneath it since it was last confirmed.
  *
@@ -38,10 +38,10 @@ export const filesNamedIn = (body: string): string[] => {
   for (const match of body.matchAll(/`([^`\n]+)`/g)) {
     const candidate = (match[1] ?? '').trim()
     // A path, not a snippet: a slash, no spaces, and a real extension. Without
-    // the extension test `cairn check` and `owner/repo` both read as files.
+    // the extension test `croft check` and `owner/repo` both read as files.
     //
     // The leading ~ and / matter: the one real path in this store's own
-    // knowledge is `~/.cairn/projects.json`, and an earlier version of this
+    // knowledge is `~/.croft/projects.json`, and an earlier version of this
     // regex rejected it — which would have made the whole feature inert while
     // looking like it worked.
     if (!/^(?:(?:~|\.\.?)?(?:\/[\w.@-]+)+|[\w.@-]+(?:\/[\w.@-]+)+)$/.test(candidate)) continue
@@ -197,7 +197,7 @@ export const stalenessFor = async (
       ...new Set([
         ...filesNamedIn(entry.body ?? ''),
         ...(sourceFiles.get(entry.id) ?? []),
-        // Stored links (CAIRN-269): the same two sources normalised, plus any
+        // Stored links (CROFT-269): the same two sources normalised, plus any
         // file named explicitly with `--files`.
         ...(linked.get(entry.id) ?? []),
       ]),

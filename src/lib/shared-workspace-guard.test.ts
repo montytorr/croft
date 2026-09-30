@@ -49,10 +49,10 @@ describe('shared workspace boundaries', () => {
       'activity_feed',
       'list_labels',
       'rename_label',
-      'cairn_pulse',
-      'cairn_work_shape',
-      'cairn_memory_use',
-      'cairn_vitals',
+      'croft_pulse',
+      'croft_work_shape',
+      'croft_memory_use',
+      'croft_vitals',
     ]) {
       expect(migration, `shared migration omits ${name}`).toContain(`'${name}'`)
     }
@@ -68,7 +68,7 @@ describe('shared workspace boundaries', () => {
 
     for (const statement of [
       'update tasks t',
-      'set actor_id = cairn_qualify_legacy_actor(t.actor_type',
+      'set actor_id = croft_qualify_legacy_actor(t.actor_type',
       'claimed_by = case',
       'resolved_by = case',
       'update task_notes n',

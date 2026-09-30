@@ -11,10 +11,10 @@ export const dynamic = 'force-dynamic'
  * healthy throughout two days of recording nothing.
  *
  * The second half of that question was answerable and unasked here. Everything
- * that writes knowledge into Cairn is an agent, and every number about whether
+ * that writes knowledge into Croft is an agent, and every number about whether
  * agents consult it reached exactly one reader: a person who opened the Vitals
  * page in a browser. So `memory` rides along with the counts — same window,
- * same call — for the same reason knowledge/gaps exists. See CAIRN-254.
+ * same call — for the same reason knowledge/gaps exists. See CROFT-254.
  */
 export const GET = route({
   handler: async ({ actor, url }) => {

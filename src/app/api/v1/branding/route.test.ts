@@ -10,13 +10,13 @@ vi.mock('@/lib/db/client', () => ({
   admin: () => ({ from: () => ({ upsert: mocks.upsert }) }),
 }))
 vi.mock('@/lib/branding', () => ({
-  DEFAULT_NAME: 'Cairn',
-  getBranding: async () => ({ name: 'Dispofi Cairn', accent: '#01519b', version: '1', palette: null }),
+  DEFAULT_NAME: 'Croft',
+  getBranding: async () => ({ name: 'Dispofi Croft', accent: '#01519b', version: '1', palette: null }),
   invalidateBranding: mocks.invalidate,
 }))
 import { PUT } from './route'
 
-const ORIGIN = 'https://cairn.example.test'
+const ORIGIN = 'https://croft.example.test'
 const put = (body: object) => PUT(new Request(`${ORIGIN}/api/v1/branding`, {
   method: 'PUT',
   headers: { origin: ORIGIN, 'content-type': 'application/json' },
@@ -36,16 +36,16 @@ describe('PUT /api/v1/branding', () => {
   })
 
   it('saves a name and accent for an administrator', async () => {
-    const response = await put({ name: 'Dispofi Cairn', accent: '#01519B' })
+    const response = await put({ name: 'Dispofi Croft', accent: '#01519B' })
     expect(response.status).toBe(200)
     const [row, options] = mocks.upsert.mock.calls[0]!
-    expect(row).toMatchObject({ id: true, name: 'Dispofi Cairn', accent: '#01519b', updated_by: 'u1' })
+    expect(row).toMatchObject({ id: true, name: 'Dispofi Croft', accent: '#01519b', updated_by: 'u1' })
     expect(options).toEqual({ onConflict: 'id' })
     expect(mocks.invalidate).toHaveBeenCalled()
   })
 
   it('stores the stock name as no name', async () => {
-    await put({ name: 'Cairn', accent: null })
+    await put({ name: 'Croft', accent: null })
     expect(mocks.upsert.mock.calls[0]![0]).toMatchObject({ name: null, accent: null })
   })
 

@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 
 /**
- * Knowledge history from the terminal (CAIRN-266): `--reason` reaches the
+ * Knowledge history from the terminal (CROFT-266): `--reason` reaches the
  * PATCH on both verbs that produce a revision, and `know --history` credits
  * each version to the edit that produced it rather than the one that ended it.
  * That second point is an off-by-one waiting to happen, because a revision row
@@ -39,11 +39,11 @@ const serve = (seen: Seen, data: unknown) =>
   })
 
 const run = async (args: string[], base: string) => {
-  const home = await mkdtemp(join(tmpdir(), 'cairn-history-'))
+  const home = await mkdtemp(join(tmpdir(), 'croft-history-'))
   directories.push(home)
   return new Promise<{ code: number | null; stdout: string }>((resolve, reject) => {
-    const child = spawn('node', ['cli/cairn.mjs', ...args], {
-      env: { ...process.env, HOME: home, CAIRN_BASE_URL: base, CAIRN_API_KEY: 'test-key' },
+    const child = spawn('node', ['cli/croft.mjs', ...args], {
+      env: { ...process.env, HOME: home, CROFT_BASE_URL: base, CROFT_API_KEY: 'test-key' },
     })
     let stdout = ''
     child.stdout.on('data', (c) => { stdout += c })
@@ -100,7 +100,7 @@ describe('know --history', () => {
   })
 })
 
-describe('know --unused (CAIRN-270)', () => {
+describe('know --unused (CROFT-270)', () => {
   it('asks for the window, prints never for an entry with no record, and says what is not counted', async () => {
     const seen: Seen = {}
     const base = await serve(seen, {
@@ -109,11 +109,11 @@ describe('know --unused (CAIRN-270)', () => {
       counted: 'the session briefing is not recorded',
       results: [{ slug: 'old-fact', title: 'Old fact', createdAt: '2026-06-01T00:00:00.000Z', lastRecalled: null }],
     })
-    const home = await mkdtemp(join(tmpdir(), 'cairn-unused-'))
+    const home = await mkdtemp(join(tmpdir(), 'croft-unused-'))
     directories.push(home)
     const { stdout, stderr } = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-      const child = spawn('node', ['cli/cairn.mjs', 'know', '--unused', '--days', '45'], {
-        env: { ...process.env, HOME: home, CAIRN_BASE_URL: base, CAIRN_API_KEY: 'test-key' },
+      const child = spawn('node', ['cli/croft.mjs', 'know', '--unused', '--days', '45'], {
+        env: { ...process.env, HOME: home, CROFT_BASE_URL: base, CROFT_API_KEY: 'test-key' },
       })
       let out = ''
       let err = ''

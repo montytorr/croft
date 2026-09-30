@@ -113,7 +113,7 @@ export const buildDigest = async (task: Record<string, unknown>) => {
     children: childCount ? { total: childCount, closed: childClosed ?? 0 } : null,
 
     // Where other tasks named this one, decisions and findings first
-    // (CAIRN-267). The case it exists for: a closure elsewhere that says "do
+    // (CROFT-267). The case it exists for: a closure elsewhere that says "do
     // not read this as permission for <this task>", which nothing here
     // mentioned before.
     mentionedIn: mentioned.mentions.map((m) => ({

@@ -29,7 +29,7 @@ const POST = route({
 
 const send = (body: unknown) =>
   POST(
-    new Request('https://cairn.example.test/api/v1/knowledge', {
+    new Request('https://croft.example.test/api/v1/knowledge', {
       method: 'POST',
       headers: { authorization: 'Bearer test', 'content-type': 'application/json' },
       body: JSON.stringify(body),
@@ -37,7 +37,7 @@ const send = (body: unknown) =>
     { params: Promise.resolve({}) },
   )
 
-describe('route secretFields (CAIRN-285)', () => {
+describe('route secretFields (CROFT-285)', () => {
   beforeEach(() => {
     mocks.authenticate.mockReset().mockResolvedValue(actor)
     handler.mockClear()

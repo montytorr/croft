@@ -1,7 +1,7 @@
 import { listAgentKeys, type AgentKey } from './agent-keys'
 import { revokeUserKey } from './users'
 
-/** One of the signed-in person's own keys (CAIRN-315): the same shape an administrator sees. */
+/** One of the signed-in person's own keys (CROFT-315): the same shape an administrator sees. */
 export type OwnKey = AgentKey
 
 export const listOwnKeys = (userId: string): Promise<OwnKey[]> => listAgentKeys(userId)

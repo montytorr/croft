@@ -93,7 +93,7 @@ export const takeTask = async (
  * A note is an annotation, and annotating is most of what reading a backlog
  * is. A checkpoint is not: it says "here is where I got to", which nobody
  * writes about work they are not doing. So the inference moved to the one
- * signal that carries it unambiguously, and `cairn note` says plainly when a
+ * signal that carries it unambiguously, and `croft note` says plainly when a
  * task is unclaimed instead of quietly deciding for you.
  *
  * Three limits, unchanged:

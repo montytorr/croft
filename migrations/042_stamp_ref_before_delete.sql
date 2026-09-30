@@ -11,7 +11,7 @@
 -- moment it can be applied is before the row disappears.
 -- ===========================================================================
 
-create or replace function cairn_stamp_ref(p_task uuid, p_ref text)
+create or replace function croft_stamp_ref(p_task uuid, p_ref text)
 returns void
 language sql
 as $$
@@ -21,6 +21,6 @@ as $$
      and data->>'ref' is distinct from p_ref;
 $$;
 
-comment on function cairn_stamp_ref is
+comment on function croft_stamp_ref is
   'Writes the task ref into every one of its activity rows, so they stay '
   'readable after the task is deleted and they detach from it.';

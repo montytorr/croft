@@ -38,7 +38,7 @@ export const GET = route({
 
     // What each project used to be called. A key change was listed nowhere, so
     // someone holding AC-113 had no way to find that AC is now HOL short of
-    // trying the ref (CAIRN-264). Last in each row, so a TSV reader keyed on
+    // trying the ref (CROFT-264). Last in each row, so a TSV reader keyed on
     // the columns it already knows is not disturbed.
     const former = await formerKeysByProject(projects.map((p) => p.id))
     return ok(projects.map((p) => ({ ...p, former_keys: former.get(p.id) ?? [] })))

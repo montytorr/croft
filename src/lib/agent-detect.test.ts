@@ -15,7 +15,7 @@ import { describe, expect, it } from 'vitest'
  * misattribution, pointing the other way.
  */
 const detect = (env: Record<string, string | undefined>) => {
-  if (env.CAIRN_AGENT) return env.CAIRN_AGENT.trim().toLowerCase()
+  if (env.CROFT_AGENT) return env.CROFT_AGENT.trim().toLowerCase()
   if (env.CLAUDECODE === '1' || env.CLAUDE_CODE_ENTRYPOINT) return 'claude-code'
   const codexHome = env.CODEX_HOME ?? ''
   if (/openclaw/i.test(codexHome)) return 'openclaw'
@@ -56,8 +56,8 @@ describe('detecting the runtime', () => {
     expect(detect({ CODEX_HOME: '/opt/codex-home' })).toBe('codex')
   })
 
-  it('lets an explicit CAIRN_AGENT win over everything', () => {
-    expect(detect({ CAIRN_AGENT: 'maintenance', CODEX_MANAGED_BY_NPM: '1' })).toBe('maintenance')
+  it('lets an explicit CROFT_AGENT win over everything', () => {
+    expect(detect({ CROFT_AGENT: 'maintenance', CODEX_MANAGED_BY_NPM: '1' })).toBe('maintenance')
   })
 
   it('still knows Claude Code', () => {

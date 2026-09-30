@@ -3,7 +3,7 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ---------------------------------------------------------------------------
-   Cairn — design tokens, modelled on Linear.
+   Croft — design tokens, modelled on Linear.
 
    Dark-first, because that is the reference and where a tool like this is
    actually used. The ground is a cool near-black rather than a warm one:
@@ -93,7 +93,7 @@
 
   --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
 
-  /* Motion. One vocabulary for the whole product (CAIRN-308).
+  /* Motion. One vocabulary for the whole product (CROFT-308).
      --ease-out is the settle: fast off the mark, long soft landing — what a
      stone does when it comes to rest on the stack. --ease-spring overshoots a
      hair, for the few things that should feel placed (the sidebar marker, a
@@ -104,7 +104,7 @@
   --dur-2: 200ms;
   --dur-3: 320ms;
 
-  /* Material: flat (CAIRN-308, second direction — the user chose flat over
+  /* Material: flat (CROFT-308, second direction — the user chose flat over
      the lit, grained, glowing version). Solid surfaces and hairlines; depth
      only where something genuinely floats (menus, dialogs, toasts). The
      variables stay so nothing that names them breaks; they are neutral. */
@@ -193,7 +193,7 @@
   --color-accent-subtle:  var(--accent-subtle);
   /* Registered so `ring-ring/40` is a class at all. It was not, so every
      focus ring written that way — the buttons', the project filter's —
-     silently rendered nothing (found in CAIRN-308). */
+     silently rendered nothing (found in CROFT-308). */
   --color-ring:           var(--ring);
   --color-danger:         var(--danger);
   --color-danger-subtle:  var(--danger-subtle);
@@ -215,12 +215,12 @@
   --radius-lg: 8px;
   --radius-sm: 4px;
 
-  /* Cairn Cloud's three stacks, so the app and the site that sells it are one
-     family (CAIRN-307). Only Inter Tight is downloaded (fonts.ts); the other
+  /* Croft Cloud's three stacks, so the app and the site that sells it are one
+     family (CROFT-307). Only Inter Tight is downloaded (fonts.ts); the other
      two are the platform's own. Registered here because Tailwind v4 emits a
      utility only for a key it knows — an unregistered `font-display` once
      rendered as the body face with the family downloaded for nothing
-     (CAIRN-258). */
+     (CROFT-258). */
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
   --font-display: var(--font-inter-tight), 'Inter Tight', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -290,7 +290,7 @@
 
 @layer utilities {
   /* ---------------------------------------------------------------------------
-     Shell (CAIRN-308) — flat.
+     Shell (CROFT-308) — flat.
 
      Solid grounds, one hairline between regions, no light effects. Premium is
      carried by alignment, spacing and restraint, not by glow: the first pass
@@ -340,7 +340,7 @@
   }
 
   /* ---------------------------------------------------------------------------
-     Motion (CAIRN-308). Entrances only: nothing loops except what reports
+     Motion (CROFT-308). Entrances only: nothing loops except what reports
      something live, and every one of these stands still under reduced motion
      (the global rule at the end of this file).
      ------------------------------------------------------------------------ */
@@ -374,7 +374,7 @@
      after it ends would leave a `transform` on the element for ever, making
      it a stacking context and the containing block of every fixed dialog and
      popover inside it — a row's label menu under the next row, a dialog
-     trapped in a 36px row (found in review, CAIRN-308). */
+     trapped in a 36px row (found in review, CROFT-308). */
   .enter-page { animation: enter-fade var(--dur-2) var(--ease-out) backwards; }
   .enter-fade { animation: enter-fade var(--dur-2) var(--ease-out) backwards; }
   .enter-rise { animation: enter-rise var(--dur-3) var(--ease-out) backwards; }
@@ -414,7 +414,7 @@
   /* A dot that is reporting something live. */
   .live-dot { animation: live-ring 2.4s var(--ease-out) infinite; border-radius: 999px; }
 
-  /* A heading, set as Cairn Cloud sets its own: with `font-display`, a book
+  /* A heading, set as Croft Cloud sets its own: with `font-display`, a book
      weight between regular and medium, tracked in, and balanced so a
      two-line heading never leaves one word alone on the second. The face
      stays on the registered `font-display` key, which theme-keys.test.ts

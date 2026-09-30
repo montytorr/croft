@@ -4,7 +4,7 @@ import type { MemoryUse } from '@/lib/api/vitals'
 
 /**
  * The memory panel is the only place a human sees whether agents recall what
- * Cairn holds. Migration 053 started recording the half of that question that
+ * Croft holds. Migration 053 started recording the half of that question that
  * matters most — facts fetched by NAME rather than searched for, and the names
  * that matched nothing — and for a while the page displayed none of it.
  *

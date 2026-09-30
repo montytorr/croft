@@ -1,7 +1,7 @@
 -- ===========================================================================
 -- Which project a repository is, rather than which project a path is.
 --
--- The briefing resolved a working directory through ~/.cairn/projects.json, a
+-- The briefing resolved a working directory through ~/.croft/projects.json, a
 -- per-machine map keyed on an absolute path. A path is where one machine keeps
 -- a checkout; it changes under a second clone, a `mv` and a `git worktree`,
 -- none of which change the repository. A worktree of this very repo resolved

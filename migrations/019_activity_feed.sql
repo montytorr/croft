@@ -1,8 +1,8 @@
 -- ===========================================================================
 -- 019: activity_feed — one timeline of everything that happened
 --
--- Cairn records six kinds of event and every one of them is reachable only
--- from the thing it belongs to. That answers "what is the state of CAIRN-64"
+-- Croft records six kinds of event and every one of them is reachable only
+-- from the thing it belongs to. That answers "what is the state of CROFT-64"
 -- and never answers "what did they all do today", which is the question a
 -- person actually has after a day of agents working.
 --

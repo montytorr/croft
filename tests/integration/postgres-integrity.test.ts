@@ -136,7 +136,7 @@ describe('shared workspace RPCs', () => {
     )
     expect(activity.rows.some((row) => row.actor === 'Codex · Member')).toBe(true)
 
-    const vitals = await pool().query(`select cairn_vitals($1, 24) as value`, [memberId])
+    const vitals = await pool().query(`select croft_vitals($1, 24) as value`, [memberId])
     expect(Number(vitals.rows[0].value.tasks.opened)).toBeGreaterThanOrEqual(2)
   })
 
@@ -147,10 +147,10 @@ describe('shared workspace RPCs', () => {
       'activity_feed',
       'list_labels',
       'rename_label',
-      'cairn_pulse',
-      'cairn_work_shape',
-      'cairn_memory_use',
-      'cairn_vitals',
+      'croft_pulse',
+      'croft_work_shape',
+      'croft_memory_use',
+      'croft_vitals',
     ]
     const definitions = await pool().query<{ proname: string; definition: string }>(
       `select p.proname, pg_get_functiondef(p.oid) as definition
@@ -324,7 +324,7 @@ describe('atomic knowledge writes', () => {
 describe('N-1 migration compatibility', () => {
   it('upgrades an existing pre-043 database without breaking old writes', async () => {
     const adminUrl = new URL(databaseUrl)
-    const dbName = `cairn_n1_${randomUUID().replaceAll('-', '')}`
+    const dbName = `croft_n1_${randomUUID().replaceAll('-', '')}`
     const admin = new Client({ connectionString: adminUrl.toString() })
     await admin.connect()
     await admin.query(`create database "${dbName}"`)
@@ -360,7 +360,7 @@ describe('N-1 migration compatibility', () => {
 
   it('preserves legacy identities and qualifies every historical attribution surface', async () => {
     const adminUrl = new URL(databaseUrl)
-    const dbName = `cairn_users_${randomUUID().replaceAll('-', '')}`
+    const dbName = `croft_users_${randomUUID().replaceAll('-', '')}`
     const admin = new Client({ connectionString: adminUrl.toString() })
     await admin.connect()
     await admin.query(`create database "${dbName}"`)

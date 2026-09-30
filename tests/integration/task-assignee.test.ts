@@ -5,7 +5,7 @@ import { TASK_LIST_FIELDS } from '@/lib/api/tasks'
 import { withAssignees } from '@/lib/api/people'
 
 /**
- * Every task has a human who owns it (CAIRN-310), and that holds for every
+ * Every task has a human who owns it (CROFT-310), and that holds for every
  * writer, not only the route that names one.
  */
 

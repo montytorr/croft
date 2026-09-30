@@ -144,7 +144,7 @@ const TaskPage = async ({
   )
   const formerRefs = formerRefsOf(renames, task)
 
-  // The Cairn ref, never the imported one. Preferring external_ref showed a
+  // The Croft ref, never the imported one. Preferring external_ref showed a
   // migrated task as LEGACY-1234 — an identifier that resolves nowhere in this
   // system, on the page whose whole job is to tell you what you are looking at.
   const ref = `${task.project.key}-${task.number}`

@@ -1,4 +1,4 @@
--- Every task has a human assignee (CAIRN-310).
+-- Every task has a human assignee (CROFT-310).
 --
 -- Since the workspace became shared, a task recorded who created it
 -- (`actor_id`, a frozen label) and which agent is executing it (`claimed_by`),

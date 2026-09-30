@@ -1,7 +1,7 @@
 /**
- * Secret-shaped strings, refused before they are written (CAIRN-285).
+ * Secret-shaped strings, refused before they are written (CROFT-285).
  *
- * Everything Cairn stores is handed back to every agent that asks: `check`
+ * Everything Croft stores is handed back to every agent that asks: `check`
  * and `know` return knowledge verbatim, notes and resolutions come back with
  * `show`, and whatever an agent reads is copied into its transcript. So a
  * credential written once is not stored in one place — it is replayed into
@@ -213,6 +213,6 @@ export const findSecret = (
 
 export const secretRefusal = (hit: SecretHit & { field: string }): string =>
   `Refused: ${hit.field} line ${hit.line} looks like it contains ${hit.label}. ` +
-  'Cairn hands what it stores to every agent that asks, so a credential written here is ' +
+  'Croft hands what it stores to every agent that asks, so a credential written here is ' +
   'replayed into every session that reads it. Write where the secret lives instead ' +
   '(an env var name, a vault path), and rotate it if it was real.'

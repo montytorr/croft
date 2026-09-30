@@ -108,7 +108,7 @@ describe('who reconcile covers', () => {
   })
 
   // The scheduled job ran as maintenance, which holds nothing, and so it
-  // logged `#0` every 30 minutes from 2026-09-12 onwards (CAIRN-284).
+  // logged `#0` every 30 minutes from 2026-09-12 onwards (CROFT-284).
   it('releases other agents’ quiet claims when run as maintenance', async () => {
     db.tasks = [claim(385, 'claude-code · Monty'), claim(405, 'openclaw · Monty', { status: 'in-review' })]
     const result = await reconcileClaims(agent('maintenance'))
@@ -152,10 +152,10 @@ describe('what counts as a sign of life', () => {
     checkpoint_at: hoursAgo(0.1),
   }
 
-  // OD-101, HOL-122 and CAIRN-273 were checkpointed "still held" by a
-  // session sweep every 30 minutes and could never go quiet (CAIRN-283).
+  // OD-101, HOL-122 and CROFT-273 were checkpointed "still held" by a
+  // session sweep every 30 minutes and could never go quiet (CROFT-283).
   it('ignores the automatic "still held" checkpoint', () => {
-    const at = lastSignOfLife({ ...quiet, checkpoint_summary: untouchedCheckpoint(['CAIRN-277']) }, null)
+    const at = lastSignOfLife({ ...quiet, checkpoint_summary: untouchedCheckpoint(['CROFT-277']) }, null)
     expect(at).toBe(new Date(quiet.claimed_at).getTime())
   })
 

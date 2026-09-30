@@ -12,7 +12,7 @@ import {
 
 /**
  * A `[[reference]]` is a promise: follow it and you land on the fact. 70 of
- * them in the store resolve to nothing, and 44 of those point at a fact Cairn
+ * them in the store resolve to nothing, and 44 of those point at a fact Croft
  * already holds under another slug — so the problem is not unwritten knowledge,
  * it is a name recalled slightly wrong and nothing on the way in that looked.
  *
@@ -57,7 +57,7 @@ describe('references inside inline code are not references', () => {
   })
 
   it('still ignores a fenced block, which was never the regression', () => {
-    const body = ['Prose [[real-one]].', '```', 'cairn know [[an-example]]', '```'].join('\n')
+    const body = ['Prose [[real-one]].', '```', 'croft know [[an-example]]', '```'].join('\n')
 
     expect(referencesIn(body)).toEqual(['real-one'])
   })

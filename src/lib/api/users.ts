@@ -18,7 +18,7 @@ export type AdminUser = {
   updatedAt: string
   keyCount: number
   activeKeyCount: number
-  /** Tasks not done or cancelled with this user as the assignee (CAIRN-310). */
+  /** Tasks not done or cancelled with this user as the assignee (CROFT-310). */
   openTaskCount: number
 }
 
@@ -55,7 +55,7 @@ const groupUser = `
            u.created_at, u.updated_at`
 
 const lockAdminInvariant = async (client: PoolClient) => {
-  await client.query("select pg_advisory_xact_lock(hashtext('cairn:active-admin'))")
+  await client.query("select pg_advisory_xact_lock(hashtext('croft:active-admin'))")
 }
 
 const activeAdminCount = async (client: PoolClient) => {
@@ -196,7 +196,7 @@ const reassignOpenTasks = async (
 
 /**
  * Disables a user, and hands their open tasks to `reassignTo` in the same
- * transaction (CAIRN-310). A disabled assignee is an owner nobody can reach,
+ * transaction (CROFT-310). A disabled assignee is an owner nobody can reach,
  * so a user who still owns open work is refused until the caller names who
  * takes it over — silently orphaning it is the failure this exists to stop.
  *
@@ -305,7 +305,7 @@ const createKeyOn = async (client: PoolClient, userId: string, input: { agentNam
  * Mints one key for an active user.
  *
  * Takes an optional `client` so a caller already inside a transaction (the
- * device-pairing poll, CAIRN-314, mints several keys in the same transaction
+ * device-pairing poll, CROFT-314, mints several keys in the same transaction
  * that consumes the approved request) can share it rather than nesting a
  * second `transaction()` inside the first, which would deadlock on the
  * connection pool. Without one, this opens its own — the behaviour every
@@ -325,7 +325,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
  * `revoked_at` stamp alone — `authenticate` checks it on every request, with
  * no cache in between, so the key stops working on its very next call.
  *
- * Shared by the administrator route and the self-service one (CAIRN-315), so
+ * Shared by the administrator route and the self-service one (CROFT-315), so
  * the two can never disagree about what revoking means.
  */
 export const revokeUserKey = async (userId: string, keyId: string) => {

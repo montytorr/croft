@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The inject-without-being-queried half of Cairn's memory.
+ * The inject-without-being-queried half of Croft's memory.
  *
  * Reads a hook payload on stdin and prints the runtime's context response.
  * Claude Code and Codex share a wire format. Hermes Agent by Nous Research
@@ -18,23 +18,23 @@
  */
 import { spawn } from 'node:child_process'
 
-const TIMEOUT_MS = Number(process.env.CAIRN_HOOK_TIMEOUT_MS ?? 4000)
-const CLI = process.env.CAIRN_CLI ?? 'cairn'
+const TIMEOUT_MS = Number(process.env.CROFT_HOOK_TIMEOUT_MS ?? 4000)
+const CLI = process.env.CROFT_CLI ?? 'croft'
 
 /**
  * Trig, if this machine has it, gets ONE line.
  *
- * Trig is the sibling product: Cairn is what we did, Trig is what exists. It
+ * Trig is the sibling product: Croft is what we did, Trig is what exists. It
  * deliberately has no session hook of its own, because two briefings competing
  * for the top of every session is how both get skimmed. But an agent that
- * never hears the map exists will never ask it anything, so Cairn — which owns
+ * never hears the map exists will never ask it anything, so Croft — which owns
  * the opening — names it once and gets out of the way.
  *
  * Silent when Trig is absent, unconfigured or unreachable. Rule 2 above:
  * never speak when there is nothing to say.
  */
 const TRIG_CLI = process.env.TRIG_CLI ?? 'trig'
-const TRIG_TIMEOUT_MS = Number(process.env.CAIRN_TRIG_TIMEOUT_MS ?? 1500)
+const TRIG_TIMEOUT_MS = Number(process.env.CROFT_TRIG_TIMEOUT_MS ?? 1500)
 
 const readStdin = async () => {
   let raw = ''
@@ -46,7 +46,7 @@ const readStdin = async () => {
   }
 }
 
-/** The CLI's "several instances, and nothing says which" (cli/cairn.mjs). */
+/** The CLI's "several instances, and nothing says which" (cli/croft.mjs). */
 const UNDECIDED_EXIT = 10
 
 /**
@@ -122,7 +122,7 @@ const main = async () => {
   // `agent.shell_hooks._serialize_payload` and posted it on GitHub #64, which
   // is the only way this could be settled — every test here writes a fake
   // `hermes` binary, so it can prove the installer matches OUR MODEL of Hermes
-  // and never that the model matches Hermes (CAIRN-243).
+  // and never that the model matches Hermes (CROFT-243).
   //
   // The top-level read stays as a fallback. It is not the layout this build
   // emits, and it costs one `??`. If it is in neither, we cannot tell "not the
@@ -132,7 +132,7 @@ const main = async () => {
   if (event === 'pre_llm_call') {
     const isFirstTurn = payload.extra?.is_first_turn ?? payload.is_first_turn
     if (isFirstTurn === undefined) {
-      process.stderr.write('cairn: pre_llm_call payload carries no is_first_turn, in extra or at top level — no briefing will ever be injected\n')
+      process.stderr.write('croft: pre_llm_call payload carries no is_first_turn, in extra or at top level — no briefing will ever be injected\n')
       return
     }
     if (isFirstTurn !== true) return
@@ -147,8 +147,8 @@ const main = async () => {
     args.push('--file', path)
   }
 
-  const [cairnText, trig] = await Promise.all([run(args), trigLine()])
-  const text = `${cairnText.trim()}${trig}`.trim()
+  const [croftText, trig] = await Promise.all([run(args), trigLine()])
+  const text = `${croftText.trim()}${trig}`.trim()
   if (!text) return
 
   if (event === 'pre_llm_call') {

@@ -78,7 +78,7 @@ describe('assess', () => {
   })
 
   it('counts work that was closed with no trace that anyone was on it', () => {
-    // CAIRN-135 measured 36% and nothing has recomputed it since.
+    // CROFT-135 measured 36% and nothing has recomputed it since.
     const v = healthy({ tasks: { opened: 4, closed: 8, stalled: 1, held: 2, closedWithoutTrace: 3 } })
     const f = assess(v).find((x) => x.code === 'closed-without-trace')
     expect(f?.severity).toBe('warning')
@@ -106,7 +106,7 @@ describe('assess', () => {
   })
 
   it('no longer says the tasks it counts were never claimed', () => {
-    // The wording is the bug CAIRN-251 filed: "Nothing recorded that anyone was
+    // The wording is the bug CROFT-251 filed: "Nothing recorded that anyone was
     // working them" was false of nine of the ten tasks it was printed about,
     // which had moved to in-review hours earlier with commits against them.
     const v = healthy({ tasks: { opened: 4, closed: 8, stalled: 1, held: 2, closedWithoutTrace: 3 } })
@@ -206,7 +206,7 @@ describe('the summariser failing silently', () => {
 })
 
 /**
- * The blind spots CAIRN-282 found, each reading green while it failed. The
+ * The blind spots CROFT-282 found, each reading green while it failed. The
  * signals come from migration 065; a healthy set is bent one way per test.
  */
 const NOW = Date.parse('2026-09-25T12:00:00Z')

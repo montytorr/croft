@@ -5,7 +5,7 @@ import { createKnowledge, knowledgeRevisions, updateKnowledge } from '@/lib/api/
 import type { Actor } from '@/lib/api/auth'
 
 /**
- * A correction keeps what it corrected (CAIRN-266).
+ * A correction keeps what it corrected (CROFT-266).
  *
  * The revision is written inside the edit's transaction from a row read `for
  * update`, and the feed reads it through an in-place edit of `activity_feed`.

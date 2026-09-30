@@ -21,12 +21,12 @@ Be decent. Concretely, in this repository that means:
 ## Scope
 
 Applies anywhere this project is represented — the repository, its issues and pull
-requests, and any space where someone is speaking for Cairn.
+requests, and any space where someone is speaking for Croft.
 
 ## Enforcement
 
 Report anything that needs attention to the maintainer through GitHub — a private
-[security advisory](https://github.com/montytorr/cairn/security/advisories/new) works for
+[security advisory](https://github.com/montytorr/croft/security/advisories/new) works for
 anything sensitive, and reaches only the maintainer.
 
 Reports are handled privately. Responses range from a request to change behaviour, to

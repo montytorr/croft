@@ -1,6 +1,6 @@
 # Contributing
 
-Cairn is a personal tool published in the open. Issues and PRs are welcome; the
+Croft is a personal tool published in the open. Issues and PRs are welcome; the
 maintainer's own use is what drives the roadmap, so a feature may be declined simply
 because it is not needed here.
 
@@ -8,7 +8,7 @@ because it is not needed here.
 
 See [`README.md`](./README.md#self-hosting). You need Node 22+, Docker and PostgreSQL 17+.
 
-Cairn used to run on Supabase and no longer does — the runtime moved to the native
+Croft used to run on Supabase and no longer does — the runtime moved to the native
 PostgreSQL driver, and `migrations/` used to be `supabase/migrations/`. If you find a
 reference to Supabase that reads as a requirement rather than as history, it is stale and
 a PR fixing it is welcome.
@@ -29,7 +29,7 @@ npm run test:integration
 CI runs every one of those, plus a check that `AGENTS.md` stays under 7900 bytes — agents
 read that file every session, so its size is a real cost. It currently sits a couple of
 bytes under, so adding a line there means cutting one: guidance with room to grow belongs
-in [`skills/cairn/SKILL.md`](./skills/cairn/SKILL.md) instead.
+in [`skills/croft/SKILL.md`](./skills/croft/SKILL.md) instead.
 
 The integration suite runs in a job of its own because it migrates a clean PostgreSQL
 first, which is the point of it: `tests/integration/` is the only execution-level proof
@@ -99,7 +99,7 @@ see [`LICENSE-MIT-HISTORY`](./LICENSE-MIT-HISTORY).
 You read the licence that was in the repository when you wrote the patch, and we are not
 going to claim you agreed to one that arrived afterwards. If you would rather your
 contribution were under the current licence instead, say so on the pull request and it
-will be recorded there. This is not hypothetical: [#43](https://github.com/montytorr/cairn/pull/43)
+will be recorded there. This is not hypothetical: [#43](https://github.com/montytorr/croft/pull/43)
 was opened twenty-one minutes before the licence changed, which is how we found that a
 date and a tag were two different lines and neither one covered an open branch.
 
@@ -130,21 +130,21 @@ node scripts/release.mjs 0.6.0 --confirm  # bumps both versions, closes the chan
 
 It exists because the procedure lived in whoever remembered it, and it has two version
 strings to keep in step — `package.json`, which the server reports, and the constant in
-`cli/cairn.mjs`, which a copied CLI reports. It refuses to start if those two already
+`cli/croft.mjs`, which a copied CLI reports. It refuses to start if those two already
 disagree, or if `[Unreleased]` is empty.
 
 **It does not push.** Pushing a tag is a release, and that stays a decision: review the
-commit, then push it and the tag yourself. Until the tag is pushed, `cairn setup` at the new
+commit, then push it and the tag yourself. Until the tag is pushed, `croft setup` at the new
 version cannot download its release files (`v<version>` on GitHub); `install.sh` takes the
 CLI from the latest *published GitHub release*, so it moves on only once that exists.
 
 The CLI carries its own version number because it is copied onto machines rather than
 installed from a registry — there is no package.json beside the copy in `/usr/local/bin`.
 That makes it exactly the kind of constant that goes stale silently, so a test pins it,
-and `cairn --version` asks the server as well and says when the two disagree.
+and `croft --version` asks the server as well and says when the two disagree.
 
-`cairn --version` is also the one command an agent has no reason to run, so every API
-response carries the release as an **`x-cairn-version`** header — `src/lib/api/response.ts`
+`croft --version` is also the one command an agent has no reason to run, so every API
+response carries the release as an **`x-croft-version`** header — `src/lib/api/response.ts`
 sets it on `ok()` and `fail()` alike. The CLI compares it against its own constant once per
 process and warns on **stderr**, never stdout, because callers parse stdout. That turns a
 stale copy from something found by accident into something that announces itself on the

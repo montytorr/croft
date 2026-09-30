@@ -1,13 +1,13 @@
 {
-  "name": "cairn",
-  "version": "0.12.1",
+  "name": "croft",
+  "version": "0.1.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/montytorr/cairn.git"
+    "url": "git+https://github.com/montytorr/croft.git"
   },
-  "homepage": "https://github.com/montytorr/cairn#readme",
+  "homepage": "https://github.com/montytorr/croft#readme",
   "bugs": {
-    "url": "https://github.com/montytorr/cairn/issues"
+    "url": "https://github.com/montytorr/croft/issues"
   },
   "keywords": [
     "agents",

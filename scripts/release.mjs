@@ -4,9 +4,9 @@
  *
  * This exists because the process lived in whoever remembered it, and it has
  * two version strings to keep in step by hand — package.json, which the server
- * reports, and the constant in cli/cairn.mjs, which a copied CLI reports.
+ * reports, and the constant in cli/croft.mjs, which a copied CLI reports.
  * Forgetting the second one is the dangerous half: every stale install then
- * agrees with a server that has moved on, and `cairn --version`, the one
+ * agrees with a server that has moved on, and `croft --version`, the one
  * mechanism for noticing drift, says all is well.
  *
  * Usage: node scripts/release.mjs <version> [--confirm]
@@ -37,9 +37,9 @@ const pkgRaw = readFileSync('package.json', 'utf8')
 const current = JSON.parse(pkgRaw).version
 if (current === version) die(`package.json is already ${version}`)
 
-const cliRaw = readFileSync('cli/cairn.mjs', 'utf8')
+const cliRaw = readFileSync('cli/croft.mjs', 'utf8')
 if (!new RegExp(`^const VERSION = '${current}'`, 'm').test(cliRaw)) {
-  die(`cli/cairn.mjs does not say ${current} — the two are already out of step, fix that first`)
+  die(`cli/croft.mjs does not say ${current} — the two are already out of step, fix that first`)
 }
 
 const nextPkg = pkgRaw.replace(`"version": "${current}"`, `"version": "${version}"`)
@@ -82,7 +82,7 @@ const commits = execFileSync('git', ['rev-list', `v${current}..HEAD`, '--count']
 
 process.stdout.write(
   `${current} -> ${version}\n` +
-    `  package.json, cli/cairn.mjs VERSION\n` +
+    `  package.json, cli/croft.mjs VERSION\n` +
     `  CHANGELOG [Unreleased] -> [${version}] — ${today} (${entries} entries)\n` +
     `  ${commits} commits since v${current}\n`,
 )
@@ -93,10 +93,10 @@ if (!CONFIRM) {
 }
 
 writeFileSync('package.json', nextPkg)
-writeFileSync('cli/cairn.mjs', nextCli)
+writeFileSync('cli/croft.mjs', nextCli)
 writeFileSync('CHANGELOG.md', nextChangelog)
 
-execFileSync('git', ['add', 'package.json', 'cli/cairn.mjs', 'CHANGELOG.md'])
+execFileSync('git', ['add', 'package.json', 'cli/croft.mjs', 'CHANGELOG.md'])
 execFileSync('git', ['commit', '-m', `release ${version}`])
 execFileSync('git', ['tag', '-a', `v${version}`, '--cleanup=verbatim', '-F', '-'], { input: tagMessage })
 

@@ -104,7 +104,7 @@ describe('054 replaces the predicate 051 actually installed', () => {
     // transformation since. There must be no create-or-replace of the function
     // in this file at all.
     expect(evidence).toContain('pg_get_functiondef(fn)')
-    expect(evidence.toLowerCase()).not.toContain('create or replace function cairn_vitals')
+    expect(evidence.toLowerCase()).not.toContain('create or replace function croft_vitals')
   })
 
   it('is re-runnable', () => {
@@ -127,7 +127,7 @@ describe('the predicate counts work nobody could see, not work nobody claimed', 
   })
 
   it('treats a status move, a commit, a push and a test run as evidence', () => {
-    // The ten tasks CAIRN-251 classified: none was the bare created->done
+    // The ten tasks CROFT-251 classified: none was the bare created->done
     // shape, nine had moved to in-review hours earlier, several carried
     // commits and test runs. None of them was invisible.
     for (const event of ['claimed', 'checkpointed', 'git_commit', 'git_push', 'run_result']) {

@@ -1,11 +1,11 @@
 -- ===========================================================================
 -- 054: the closure finding counts work nobody could SEE, not work nobody claimed
 --
--- 051 shipped a reader for the number CAIRN-135 measured once and never
+-- 051 shipped a reader for the number CROFT-135 measured once and never
 -- recomputed. The number is sound; the population it counts is not, and the
 -- finding's own sentence is now false of it.
 --
--- CAIRN-251 reproduced it independently, by paging /api/v1/activity back to
+-- CROFT-251 reproduced it independently, by paging /api/v1/activity back to
 -- the feed origin (4,228 events) and applying 051's predicate by hand: 10 of
 -- 41 closes in a 24h window, against vitals reporting 11 of 42 at the same
 -- moment. Classifying all ten by what happened between created and resolved:
@@ -21,7 +21,7 @@
 -- TWO DEFECTS, both in the CTE below.
 --
 -- 1. HUMAN CLOSES WERE COUNTED. Humans are documented as never claiming
---    (skills/cairn/SKILL.md, AGENTS.md) and shouldClaimByWorking in
+--    (skills/croft/SKILL.md, AGENTS.md) and shouldClaimByWorking in
 --    src/lib/api/claim.ts returns false for a non-agent BY DESIGN: "Humans
 --    coordinate by talking, and a person leaving a comment does not mean they
 --    have picked the work up." 051 selected `from own_tasks t` with no actor
@@ -31,14 +31,14 @@
 --    for the same reason 050 gave. Two findings in one report, one of them
 --    excluding people and the other not.
 --
--- 2. THE DOCUMENTED SWEEP WAS COUNTED AS FAILURE. skills/cairn/SKILL.md tells
+-- 2. THE DOCUMENTED SWEEP WAS COUNTED AS FAILURE. skills/croft/SKILL.md tells
 --    an agent triaging a backlog to file ONE task for the sweep, claim that,
 --    "and work the rest without claiming them" — because claiming thirty-one
 --    tasks falsely asserts thirty-one pieces of in-flight work. Doing exactly
 --    what the skill says produced thirty unclaimed closes, indistinguishable
 --    in the metric from the failure the metric exists to catch.
 --
--- THE DECISION, which is the whole of CAIRN-251: is the question "was this
+-- THE DECISION, which is the whole of CROFT-251: is the question "was this
 -- claimed", or "was there any evidence of work by anyone at any point"? The
 -- second. The finding exists to catch work that was INVISIBLE WHILE IT WAS
 -- HAPPENING, and a task that moved to in-review with commits against it was
@@ -61,9 +61,9 @@
 -- would have left a number whose meaning silently depended on the migration
 -- level of the database underneath it.
 --
--- NOT a hint on `cairn done`. CAIRN-211 considered and refused it — "a
+-- NOT a hint on `croft done`. CROFT-211 considered and refused it — "a
 -- per-call nag is not actionable, and trains people to ignore the line" — and
--- CAIRN-135's resolution called restating the rule "the third version of the
+-- CROFT-135's resolution called restating the rule "the third version of the
 -- same non-fix". Both still hold, and neither was the thing that was wrong.
 --
 -- TRANSFORMED, NOT RE-COPIED, and asserted rather than trusted. See 051, and
@@ -87,16 +87,16 @@ begin
   select p.oid into fn
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
-   where n.nspname = 'public' and p.proname = 'cairn_vitals';
+   where n.nspname = 'public' and p.proname = 'croft_vitals';
 
   if fn is null then
-    raise exception 'cairn_vitals is not installed';
+    raise exception 'croft_vitals is not installed';
   end if;
 
   definition := pg_get_functiondef(fn);
 
   if definition like '%closedWithoutTrace%' then
-    raise notice 'cairn_vitals already counts closes with no trace; nothing to do';
+    raise notice 'croft_vitals already counts closes with no trace; nothing to do';
     return;
   end if;
 
@@ -148,20 +148,20 @@ begin
     '  )';
 
   if strpos(definition, old_cte) = 0 then
-    raise exception 'cairn_vitals: the closure_stats CTE installed by 051 is not in this definition; refusing to guess what to replace';
+    raise exception 'croft_vitals: the closure_stats CTE installed by 051 is not in this definition; refusing to guess what to replace';
   end if;
 
   updated := replace(definition, old_cte, new_cte);
 
   if updated = definition then
-    raise exception 'cairn_vitals: the closure_stats CTE was found and not replaced';
+    raise exception 'croft_vitals: the closure_stats CTE was found and not replaced';
   end if;
 
   old_key := E'''closedUnclaimed'', c.closed_unclaimed';
   new_key := E'''closedWithoutTrace'', c.closed_without_trace';
 
   if strpos(updated, old_key) = 0 then
-    raise exception 'cairn_vitals: the closedUnclaimed payload key from 051 is not in this definition';
+    raise exception 'croft_vitals: the closedUnclaimed payload key from 051 is not in this definition';
   end if;
 
   updated := replace(updated, old_key, new_key);
@@ -173,7 +173,7 @@ begin
      or updated not like '%closedWithoutTrace%'
      or updated not like '%closed_without_trace%'
      or updated not like '%closure_stats c;%' then
-    raise exception 'cairn_vitals: rewrite left the old count behind, or lost the new one';
+    raise exception 'croft_vitals: rewrite left the old count behind, or lost the new one';
   end if;
 
   execute updated;

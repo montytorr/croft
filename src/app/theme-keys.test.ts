@@ -8,7 +8,7 @@ import { join } from 'node:path'
  * an unregistered one fails by doing nothing at all: the class is not emitted,
  * the element keeps whatever it inherited, and the page looks like a design
  * decision. `font-display` survived that way on two headings while the font it
- * names was downloaded on every page for nothing (CAIRN-258).
+ * names was downloaded on every page for nothing (CROFT-258).
  *
  * So the check is not "is --font-display registered" — that is the instance.
  * It is that every font utility the interface actually uses has a key behind

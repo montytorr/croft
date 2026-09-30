@@ -1,7 +1,7 @@
 -- ===========================================================================
 -- 057: a project rename says who did it, what it became, and shows in the feed
 --
--- Found renaming AC -> HOL and ACC -> HOLC on 2026-09-22 (CAIRN-264). Old
+-- Found renaming AC -> HOL and ACC -> HOLC on 2026-09-22 (CROFT-264). Old
 -- refs went on resolving, which 031 was for, but nothing said the rename had
 -- happened, and the two places that recorded it each held half the story:
 --
@@ -18,7 +18,7 @@
 -- rewritten in 047 for the shared workspace; `activity_feed` has been through
 -- 019, 028, 029, 034, 041 and 048. Re-copying either from its last file would
 -- silently revert whatever happened in between — 050 did exactly that to
--- cairn_vitals and brought back owner predicates 048 had removed. So both are
+-- croft_vitals and brought back owner predicates 048 had removed. So both are
 -- read from the catalogue as installed, edited in the one place that matters,
 -- and refused loudly if that place is not there. A re-run is a no-op.
 -- ===========================================================================

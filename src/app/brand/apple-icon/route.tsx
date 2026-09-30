@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 
 /**
  * iOS ignores SVG favicons and wants a raster for the home screen, so the same
- * cairn is drawn again at 180px rather than shipped as a binary — and drawn
+ * croft is drawn again at 180px rather than shipped as a binary — and drawn
  * per request, in the instance's accent.
  */
 const GROUND = '#08090a'

@@ -276,7 +276,7 @@ const Row = ({
           <PriorityIcon priority={priority} />
         </QuickSelect>
 
-        {/* The Cairn ref, never the imported one.
+        {/* The Croft ref, never the imported one.
             This showed `external_ref` in preference, so a task migrated from
             Linear displayed LEGACY-1234 — an identifier that looks like a ref,
             does not resolve anywhere in this system, and truncated to
@@ -318,7 +318,7 @@ const Row = ({
         <span className="text-fg min-w-0 flex-1 truncate text-[0.8125rem]">{task.title}</span>
 
         {/* Filed in another project and linked here. Without saying so, a row
-            reading CAIRN-83 in the HM list reads as a bug rather than as work
+            reading CROFT-83 in the HM list reads as a bug rather than as work
             that genuinely spans both. */}
         {task.guest && (
           <span

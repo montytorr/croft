@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils'
 
 /**
- * One empty state for the whole product (CAIRN-308). There were fourteen,
+ * One empty state for the whole product (CROFT-308). There were fourteen,
  * each a line of grey text in its own padding, so an empty list looked like a
  * page that had failed to load.
  *

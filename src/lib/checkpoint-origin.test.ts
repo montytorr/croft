@@ -7,7 +7,7 @@ describe('checkpoint origin', () => {
 
   it('recognises both automatic kinds from the text the hook writes', () => {
     expect(isAutoCheckpoint(workedCheckpoint('Did it.'))).toBe(true)
-    expect(isAutoCheckpoint(untouchedCheckpoint(['CAIRN-277']))).toBe(true)
+    expect(isAutoCheckpoint(untouchedCheckpoint(['CROFT-277']))).toBe(true)
     expect(isAutoCheckpoint(written)).toBe(false)
     expect(isAutoCheckpoint(null)).toBe(false)
   })
@@ -22,7 +22,7 @@ describe('checkpoint origin', () => {
   // Five human resolutions were literally "Still held, not progressed…", and
   // three "Next: …": the dialog offered them and people confirmed.
   it('never offers automatic text as a resolution', () => {
-    expect(resolutionSuggestion(untouchedCheckpoint(['CAIRN-277']))).toBeNull()
+    expect(resolutionSuggestion(untouchedCheckpoint(['CROFT-277']))).toBeNull()
     expect(resolutionSuggestion(workedCheckpoint('Next: Provide conversation transcript'))).toBeNull()
     expect(resolutionSuggestion(written)).toBe(written)
     expect(resolutionSuggestion(null)).toBeNull()

@@ -5,7 +5,7 @@ import { stonesSvg } from '@/lib/brand-mark'
 export const dynamic = 'force-dynamic'
 
 /**
- * The favicon: the three stones in the instance's accent, so two Cairns open
+ * The favicon: the three stones in the instance's accent, so two Crofts open
  * side by side are two different tabs. The dark variant, because the stones
  * always sit on the dark tile.
  */

@@ -41,7 +41,7 @@ const actor = {
 
 const patch = (slug: string, body: unknown) =>
   PATCH(
-    new Request(`https://cairn.example.test/api/v1/knowledge/${slug}`, {
+    new Request(`https://croft.example.test/api/v1/knowledge/${slug}`, {
       method: 'PATCH',
       // Bearer, so the browser-origin guard takes its short-circuit branch.
       headers: { 'content-type': 'application/json', authorization: 'Bearer test-key' },

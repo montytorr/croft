@@ -14,9 +14,9 @@ const sorted = (titles: string[]) =>
 
 describe('project ordering', () => {
   it('ignores case, which is the whole bug', () => {
-    expect(sorted(['n8n', 'Cairn', 'invoice-api', 'Acme Portal'])).toEqual([
+    expect(sorted(['n8n', 'Croft', 'invoice-api', 'Acme Portal'])).toEqual([
       'Acme Portal',
-      'Cairn',
+      'Croft',
       'invoice-api',
       'n8n',
     ])

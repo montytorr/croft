@@ -22,7 +22,7 @@ export const metadata: Metadata = { title: 'Knowledge map' }
  * tasks — so this draws the one structure that has a shape worth seeing.
  *
  * As navigation it would be decoration; the references have been clickable
- * since CAIRN-192 and one click beats hunting a dot. What earns it is the
+ * since CROFT-192 and one click beats hunting a dot. What earns it is the
  * other half: a quarter of the corpus is joined to nothing, it falls into
  * nineteen separate islands, and dozens of references point at entries nobody
  * ever wrote. None of that appears in a list, because a list shows what is

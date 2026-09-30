@@ -14,7 +14,7 @@ describe('openapi spec', () => {
 
   it('is OpenAPI 3.1', () => {
     expect(spec.openapi).toBe('3.1.0')
-    expect(spec.info.title).toBe('Cairn API')
+    expect(spec.info.title).toBe('Croft API')
   })
 
   it('documents every route group the CLI depends on', () => {

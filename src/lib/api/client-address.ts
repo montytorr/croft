@@ -7,12 +7,12 @@
  * hops. Reading the first entry — which is what this used to do — lets any
  * client pick its own address, and with it its own rate-limit bucket.
  *
- * CAIRN_TRUSTED_PROXY_HOPS is how many proxies in front of the app append to
+ * CROFT_TRUSTED_PROXY_HOPS is how many proxies in front of the app append to
  * the header (default 1: Traefik, an ALB, App Runner's front end). With no
  * header at all there is no proxy, and no address to go on.
  */
 export const clientAddress = (headers: Headers): string => {
-  const hops = Math.max(1, Number(process.env.CAIRN_TRUSTED_PROXY_HOPS) || 1)
+  const hops = Math.max(1, Number(process.env.CROFT_TRUSTED_PROXY_HOPS) || 1)
   const chain = (headers.get('x-forwarded-for') ?? '')
     .split(',')
     .map((part) => part.trim())

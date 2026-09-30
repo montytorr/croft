@@ -28,7 +28,7 @@ export const UsersManager = ({ users, currentUserId }: { users: AdminUser[]; cur
   const [keys, setKeys] = useState<Record<string, UserKey[]>>({})
   const [freshKey, setFreshKey] = useState<{ userId: string; key: string } | null>(null)
   const [copied, setCopied] = useState(false)
-  // Whose open tasks are being handed over, and to whom (CAIRN-310).
+  // Whose open tasks are being handed over, and to whom (CROFT-310).
   const [handover, setHandover] = useState<{ userId: string; to: string } | null>(null)
 
   const successorsFor = (user: AdminUser) => users.filter((candidate) => candidate.active && candidate.id !== user.id)

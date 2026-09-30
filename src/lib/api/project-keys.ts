@@ -7,9 +7,9 @@ import { admin } from '@/lib/db/client'
  * messages, PR titles and other agents' notes, all of which are immutable. A
  * rename cannot reach them, so the former key is kept and keeps resolving.
  *
- * Resolving is half of it. The other half is SAYING so (CAIRN-264): AC was
- * renamed HOL, `cairn show AC-113` returned HOL-113 with no explanation, and
- * `cairn next --project AC` answered "nothing open" for a project with open
+ * Resolving is half of it. The other half is SAYING so (CROFT-264): AC was
+ * renamed HOL, `croft show AC-113` returned HOL-113 with no explanation, and
+ * `croft next --project AC` answered "nothing open" for a project with open
  * work. An agent holding the old key could not tell it had reached the same
  * thing, or that it had reached nothing because of a rename. So every lookup
  * that goes through a retired key returns a `KeyRename` beside its answer,

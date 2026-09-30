@@ -32,7 +32,7 @@ export const AppSidebar = ({
   <>
     <div className="flex h-[2.75rem] shrink-0 items-center gap-2 px-3">
       {/* The instance, not the person: who is signed in is the menu at the
-          foot of this column, and two Cairns open side by side have to be
+          foot of this column, and two Crofts open side by side have to be
           told apart at a glance. */}
       <Link
         href="/"

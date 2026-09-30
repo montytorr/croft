@@ -1,7 +1,7 @@
 -- ===========================================================================
 -- 014: sessions — the episodic record, written without being asked
 --
--- Cairn holds open loops and durable answers. What it has never held is "what
+-- Croft holds open loops and durable answers. What it has never held is "what
 -- happened in that conversation last Tuesday", and until now the honest answer
 -- was to send people to claude-mem for it.
 --
@@ -66,7 +66,7 @@ comment on table sessions is
   'One row per agent session, written at session end. Episodic: what was asked, '
   'what was learned, where it was left. Idempotent on (platform_source, external_id).';
 comment on column sessions.next_steps is
-  'Read back verbatim by `cairn context` when the next session opens in the same '
+  'Read back verbatim by `croft context` when the next session opens in the same '
   'directory. This is the handoff between two sessions that never met.';
 
 -- knowledge.source_session_id was declared in 013 without a reference, because

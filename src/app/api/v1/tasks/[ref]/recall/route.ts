@@ -10,7 +10,7 @@ const bounded = (raw: string | null, fallback: number) =>
 
 /**
  * The decisions and knowledge that bear on this task, each with why it was
- * picked (CAIRN-268). What `cairn recall <ref>` prints.
+ * picked (CROFT-268). What `croft recall <ref>` prints.
  */
 export const GET = route<{ ref: string }>({
   handler: async ({ actor, params, url }) => {

@@ -42,7 +42,7 @@ export const POST = route<{ ref: string }, z.infer<typeof checkpointBody>>({
       return fail('conflict', 'Queued checkpoint has no ownership/checkpoint generation; replay refused.')
     }
     const mutationId = parsedMutation.success ? parsedMutation.data : randomUUID()
-    const queuedHeader = req.headers.get('x-cairn-queued-at')
+    const queuedHeader = req.headers.get('x-croft-queued-at')
     const queuedAt = queuedHeader && !Number.isNaN(Date.parse(queuedHeader))
       ? new Date(queuedHeader).toISOString()
       : new Date().toISOString()

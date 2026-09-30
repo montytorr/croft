@@ -7,11 +7,11 @@ import { execFileSync, spawn } from 'node:child_process'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 /**
- * Which instance a command goes to when it does not say (CAIRN-297): a ref's
+ * Which instance a command goes to when it does not say (CROFT-297): a ref's
  * project key, the directory's route, the session's answer, the default — and
  * otherwise nothing at all, with an instruction to ask.
  */
-const cli = join(process.cwd(), 'cli', 'cairn.mjs')
+const cli = join(process.cwd(), 'cli', 'croft.mjs')
 
 type Seen = { auth?: string; path?: string; body?: string }[]
 
@@ -69,14 +69,14 @@ describe('routing a command to its instance', () => {
       const merged: Record<string, string | undefined> = {
         ...process.env,
         HOME: home,
-        CAIRN_AGENT: 'claude-code',
-        CAIRN_DEADLINE_MS: '2000',
+        CROFT_AGENT: 'claude-code',
+        CROFT_DEADLINE_MS: '2000',
         NO_PROXY: '127.0.0.1,localhost',
         HTTP_PROXY: '',
         HTTPS_PROXY: '',
         ALL_PROXY: '',
       }
-      for (const k of ['CAIRN_BASE_URL', 'CAIRN_API_KEY', 'CAIRN_INSTANCE', 'CAIRN_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'CODEX_THREAD_ID']) delete merged[k]
+      for (const k of ['CROFT_BASE_URL', 'CROFT_API_KEY', 'CROFT_INSTANCE', 'CROFT_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'CODEX_THREAD_ID']) delete merged[k]
       Object.assign(merged, env)
       const child = spawn(process.execPath, [cli, ...args], { cwd, env: merged as NodeJS.ProcessEnv, stdio: ['ignore', 'pipe', 'pipe'] })
       let stdout = ''
@@ -87,23 +87,23 @@ describe('routing a command to its instance', () => {
     })
 
   const configure = async (extra: object = {}) => {
-    await writeFile(join(home, '.cairn', 'instances.json'), JSON.stringify({
+    await writeFile(join(home, '.croft', 'instances.json'), JSON.stringify({
       version: 1,
       instances: { personal: { url: a }, work: { url: b } },
       unclassified: { mode: 'ask' },
       ...extra,
     }))
     for (const [name, key] of [['personal', 'crn_personal'], ['work', 'crn_work']] as const) {
-      await mkdir(join(home, '.cairn', 'instances', name), { recursive: true })
-      await writeFile(join(home, '.cairn', 'instances', name, 'env'), `CAIRN_API_KEY_CLAUDE_CODE=${key}\n`)
+      await mkdir(join(home, '.croft', 'instances', name), { recursive: true })
+      await writeFile(join(home, '.croft', 'instances', name, 'env'), `CROFT_API_KEY_CLAUDE_CODE=${key}\n`)
     }
   }
 
   const where = () => ({ personal: seenA.length, work: seenB.length })
 
   beforeEach(async () => {
-    home = await realpath(await mkdtemp(join(tmpdir(), 'cairn-routing-')))
-    await mkdir(join(home, '.cairn'), { recursive: true })
+    home = await realpath(await mkdtemp(join(tmpdir(), 'croft-routing-')))
+    await mkdir(join(home, '.croft'), { recursive: true })
     seenA.length = 0
     seenB.length = 0
     const first = await serve(seenA, ['HOME'])
@@ -176,7 +176,7 @@ describe('routing a command to its instance', () => {
 
     const asked = await run(home, ['note', 'ACME-1', 'x'])
     expect(asked.code).toBe(10)
-    expect(asked.stderr).toContain('cairn route add <instance>             this directory')
+    expect(asked.stderr).toContain('croft route add <instance>             this directory')
     expect(asked.stderr).not.toContain('--folder')
   })
 
@@ -222,7 +222,7 @@ describe('routing a command to its instance', () => {
   it('falls back to asking when both instances have the project key', async () => {
     await configure()
     for (const name of ['personal', 'work']) {
-      await writeFile(join(home, '.cairn', 'instances', name, 'project-keys.json'), JSON.stringify({ keys: ['SHARED'] }))
+      await writeFile(join(home, '.croft', 'instances', name, 'project-keys.json'), JSON.stringify({ keys: ['SHARED'] }))
     }
     const result = await run(home, ['note', 'SHARED-1', 'x'])
     expect(result.code).toBe(10)
@@ -232,11 +232,11 @@ describe('routing a command to its instance', () => {
   it('refuses ambiguous project ownership even when a default is configured', async () => {
     await configure({ unclassified: { mode: 'default', instance: 'personal' } })
     for (const name of ['personal', 'work']) {
-      await writeFile(join(home, '.cairn', 'instances', name, 'project-keys.json'), JSON.stringify({ at: new Date().toISOString(), keys: ['SHARED'] }))
+      await writeFile(join(home, '.croft', 'instances', name, 'project-keys.json'), JSON.stringify({ at: new Date().toISOString(), keys: ['SHARED'] }))
     }
     const result = await run(home, ['note', 'SHARED-1', 'x'])
     expect(result.code).toBe(10)
-    expect(result.stderr).toContain('claimed by multiple Cairn instances')
+    expect(result.stderr).toContain('claimed by multiple Croft instances')
     expect(where()).toEqual({ personal: 0, work: 0 })
   })
 
@@ -252,10 +252,10 @@ describe('routing a command to its instance', () => {
     // `work`'s cache is old AND, before the refresh this test is about, wrong
     // — as if the project had moved there since work was last asked. `work`'s
     // fake server (unlike its cache) has always said it owns WORK.
-    await writeFile(join(home, '.cairn', 'instances', 'work', 'project-keys.json'), JSON.stringify({
+    await writeFile(join(home, '.croft', 'instances', 'work', 'project-keys.json'), JSON.stringify({
       at: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString(), keys: [],
     }))
-    await writeFile(join(home, '.cairn', 'instances', 'personal', 'project-keys.json'), JSON.stringify({
+    await writeFile(join(home, '.croft', 'instances', 'personal', 'project-keys.json'), JSON.stringify({
       at: new Date().toISOString(), keys: ['HOME'],
     }))
 
@@ -266,7 +266,7 @@ describe('routing a command to its instance', () => {
     expect(where()).toEqual({ personal: 0, work: 1 })
 
     const refreshed = JSON.parse(
-      await readFile(join(home, '.cairn', 'instances', 'work', 'project-keys.json'), 'utf8'),
+      await readFile(join(home, '.croft', 'instances', 'work', 'project-keys.json'), 'utf8'),
     )
     expect(refreshed.keys).toContain('WORK')
   })
@@ -277,7 +277,7 @@ describe('routing a command to its instance', () => {
       unclassified: { mode: 'default', instance: 'personal' },
       instances: { personal: { url: a }, work: { url: unreachable } },
     })
-    await writeFile(join(home, '.cairn', 'instances', 'work', 'project-keys.json'), JSON.stringify({
+    await writeFile(join(home, '.croft', 'instances', 'work', 'project-keys.json'), JSON.stringify({
       at: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString(), keys: ['WORK'],
     }))
     const result = await run(home, ['note', 'WORK-3', 'x'])
@@ -287,7 +287,7 @@ describe('routing a command to its instance', () => {
     expect(where()).toEqual({ personal: 0, work: 0 })
   })
 
-  it('routes to a fresh owner when an unrelated instance is genuinely unreachable (CAIRN-316)', async () => {
+  it('routes to a fresh owner when an unrelated instance is genuinely unreachable (CROFT-316)', async () => {
     // A WAF or a VPN that is actually down must not block ordinary work a
     // reachable instance plainly owns — only a ref THAT instance's own
     // last-known cache actually claims would be a problem, and neither of
@@ -298,12 +298,12 @@ describe('routing a command to its instance', () => {
       unclassified: { mode: 'default', instance: 'personal' },
       instances: { personal: { url: a }, work: { url: unreachable } },
     })
-    await writeFile(join(home, '.cairn', 'instances', 'personal', 'project-keys.json'), JSON.stringify({
+    await writeFile(join(home, '.croft', 'instances', 'personal', 'project-keys.json'), JSON.stringify({
       at: new Date().toISOString(), keys: ['WORK'],
     }))
     for (const cache of [undefined, '{invalid json']) {
       if (cache !== undefined) {
-        await writeFile(join(home, '.cairn', 'instances', 'work', 'project-keys.json'), cache)
+        await writeFile(join(home, '.croft', 'instances', 'work', 'project-keys.json'), cache)
       }
       const result = await run(home, ['note', 'WORK-3', 'x'])
       expect(result.code).toBe(0)
@@ -334,7 +334,7 @@ describe('routing a command to its instance', () => {
   // The ref's own owner being stale is still refused when it cannot be
   // reached to confirm it still owns the ref — see 'refuses stale project
   // ownership when the owner cannot be reached to reconfirm it', above.
-  // Unchanged by CAIRN-316; what changed is only that a *reachable* stale
+  // Unchanged by CROFT-316; what changed is only that a *reachable* stale
   // owner now gets a chance to answer first (the test just above that one).
 
   it('routes nested task delete by its ref before making either request', async () => {
@@ -371,9 +371,9 @@ describe('routing a command to its instance', () => {
     await configure()
     const repo = join(home, 'client')
     await mkdir(repo)
-    await mkdir(join(home, '.cairn', 'unrouted'), { recursive: true })
+    await mkdir(join(home, '.croft', 'unrouted'), { recursive: true })
     const args = ['session', 'end', '--id', 'parked-1', '--platform', 'claude', '--cwd', repo, '--tool-calls', '3']
-    await writeFile(join(home, '.cairn', 'unrouted', 'parked-1.json'), JSON.stringify({
+    await writeFile(join(home, '.croft', 'unrouted', 'parked-1.json'), JSON.stringify({
       t: new Date().toISOString(), sessionId: 'parked-1', cwd: repo, platform: 'claude', agent: 'claude-code', args,
     }))
 
@@ -384,7 +384,7 @@ describe('routing a command to its instance', () => {
     const saved = await run(repo, ['route', 'add', 'work'])
     expect(saved.code).toBe(0)
     expect(saved.stdout).toContain('sent 1 session(s)')
-    expect(existsSync(join(home, '.cairn', 'unrouted', 'parked-1.json'))).toBe(false)
+    expect(existsSync(join(home, '.croft', 'unrouted', 'parked-1.json'))).toBe(false)
     expect(seenB).toHaveLength(1)
     expect(seenB[0]?.body).toContain('parked-1')
     expect(JSON.parse(seenB[0]?.body ?? '{}').checkpointHeld).toBe(false)
@@ -445,22 +445,22 @@ describe('routing a command to its instance', () => {
     const dir = join(home, 'd')
     await mkdir(dir)
     await run(dir, ['route', 'add', 'work'])
-    expect(JSON.parse(await readFile(join(home, '.cairn', 'instances.json'), 'utf8')).note).toBe('hand-written')
+    expect(JSON.parse(await readFile(join(home, '.croft', 'instances.json'), 'utf8')).note).toBe('hand-written')
   })
 
   const park = async (cwd: string, args: string[]) => {
-    await mkdir(join(home, '.cairn', 'unrouted'), { recursive: true })
-    await writeFile(join(home, '.cairn', 'unrouted', 'p.json'), JSON.stringify({
+    await mkdir(join(home, '.croft', 'unrouted'), { recursive: true })
+    await writeFile(join(home, '.croft', 'unrouted', 'p.json'), JSON.stringify({
       t: new Date().toISOString(), sessionId: 'p', cwd, platform: 'claude', agent: 'claude-code', args,
     }))
   }
 
-  it('sends parked sessions even with a CAIRN_API_KEY left in the shell', async () => {
+  it('sends parked sessions even with a CROFT_API_KEY left in the shell', async () => {
     await configure()
     const repo = join(home, 'c')
     await mkdir(repo)
     await park(repo, ['session', 'end', '--id', 'p', '--platform', 'claude', '--cwd', repo])
-    const saved = await run(repo, ['route', 'add', 'work'], { CAIRN_API_KEY: 'crn_leftover' })
+    const saved = await run(repo, ['route', 'add', 'work'], { CROFT_API_KEY: 'crn_leftover' })
     expect(saved.stdout).toContain('sent 1 session(s)')
     expect(seenB.map((r) => r.auth)).toEqual(['Bearer crn_work'])
   })
@@ -473,7 +473,7 @@ describe('routing a command to its instance', () => {
     const saved = await run(repo, ['route', 'add', 'work'])
     expect(saved.stdout).toContain('could not be sent yet')
     expect(saved.stdout).toContain('unknown flag --no-such-flag')
-    expect(existsSync(join(home, '.cairn', 'unrouted', 'p.json'))).toBe(true)
+    expect(existsSync(join(home, '.croft', 'unrouted', 'p.json'))).toBe(true)
   })
 
   it('shows the route and why, lists routes, and never prints a key', async () => {
@@ -490,6 +490,6 @@ describe('routing a command to its instance', () => {
     const list = await run(home, ['route', 'list'])
     expect(list.stdout).toContain('~/r')
     for (const out of [shown.stdout, byDefault.stdout, list.stdout]) expect(out).not.toContain('crn_')
-    expect(await readFile(join(home, '.cairn', 'instances.json'), 'utf8')).toContain('"match": "exact"')
+    expect(await readFile(join(home, '.croft', 'instances.json'), 'utf8')).toContain('"match": "exact"')
   })
 })

@@ -13,7 +13,7 @@ import { issuedUnderFormerKey, lookupFormerKey, type KeyRename } from './project
  *
  * That was answered for years by trying the precise query first and widening
  * only when it came back thin, which is the shape `search_tasks` still has.
- * CAIRN-247 measured what it cost in `search_all`: an AND over every content
+ * CROFT-247 measured what it cost in `search_all`: an AND over every content
  * word of a 9-13 word question matched the expected row 3 times in 22 live
  * searches, and the rows it DID match — long descriptions that happen to
  * contain every word somewhere — were enough to switch the widened arm off.
@@ -72,7 +72,7 @@ export type SearchRow = {
   rank: number
   coverage: number
   widened: boolean
-  /** Set only when the query was a ref through a retired key (CAIRN-264). */
+  /** Set only when the query was a ref through a retired key (CROFT-264). */
   requested_ref?: string
   renamed_from?: KeyRename
 }
@@ -89,15 +89,15 @@ export type SearchRow = {
 /**
  * A ref is an exact address, not a phrase to match.
  *
- * Searching `CAIRN-131` returned CAIRN-105 — the task whose resolution
- * mentions it — and never 131 itself; searching `CAIRN-106` returned nothing at
+ * Searching `CROFT-131` returned CROFT-105 — the task whose resolution
+ * mentions it — and never 131 itself; searching `CROFT-106` returned nothing at
  * all. The ref is a project key plus a number, and the key lives in another
  * table, so no generated column on `tasks` can reach it and the vector has
  * never contained it.
  *
  * That matters more here than it looks. A ref is designed to escape into
  * commits, notes and transcripts precisely so it can be pasted back, and
- * `cairn check` is the verb every agent is told to run first. Pasting one in
+ * `croft check` is the verb every agent is told to run first. Pasting one in
  * got you everything that mentions it and never the thing you asked for.
  *
  * So a ref-shaped query is resolved directly and put first, and the full-text
@@ -113,7 +113,7 @@ const REF_QUERY = /^\s*([A-Za-z][A-Za-z0-9]{1,9})-(\d{1,6})\s*$/
  * the key is the thing they already know and do not repeat. It returned twenty
  * rows of prose that happen to contain those digits, and not the task.
  *
- * Without a project it is genuinely ambiguous: CAIRN-131, OD-131 and HM-131 can
+ * Without a project it is genuinely ambiguous: CROFT-131, OD-131 and HM-131 can
  * all exist. All of them are returned rather than one being guessed at, each
  * carrying its own ref, and capped — someone searching `404` or `500` wants the
  * error, and a handful of same-numbered tasks ahead of it is a nudge where
@@ -240,7 +240,7 @@ const asSearchAllRow = (task: ExactTask): SearchAllRow => ({
  * two of someone's tasks out of twenty hits rather than twenty of theirs. A
  * larger pool keeps the order — the precise head is capped by p_min_precise,
  * not p_limit, so the first rows are the same rows — and the filter stays
- * here rather than in a fourth rewrite of the function's text (CAIRN-310).
+ * here rather than in a fourth rewrite of the function's text (CROFT-310).
  */
 const ASSIGNEE_POOL = 200
 
@@ -289,7 +289,7 @@ const rankTasks = async (
   const rows = (data ?? []) as SearchRow[]
 
   // Same rule on the task-only path, which is what the UI uses the moment a
-  // type or status filter is set — and what `cairn check --tasks` uses.
+  // type or status filter is set — and what `croft check --tasks` uses.
   const byRef = await taskByRef(userId, q)
   const addressed = byRef ? [byRef] : await tasksByNumber(userId, q, filters.project)
   if (addressed.length === 0) return { rows, widened: rows.some((r) => r.widened) }
@@ -334,7 +334,7 @@ const rankTasks = async (
  * The unified index: tasks, work-log notes, knowledge and sessions.
  *
  * `search_tasks` above is kept because the UI and the duplicate probe both
- * want tasks and only tasks. This is what `cairn check` calls, because the
+ * want tasks and only tasks. This is what `croft check` calls, because the
  * agent asking "has this been done or debugged" does not care which table the
  * answer happens to live in — and for two years the answer most likely to
  * exist, a work-log note, was the one table nothing searched.
@@ -404,7 +404,7 @@ export const searchAll = async (
    * run: nearly every search returns some loose row, and a flag that is almost
    * always true would have quietly turned the widening rate on the Vitals page
    * — whose own caption is "a search that widened is one the precise question
-   * could not answer" — into a constant, and `cairn check`'s "treat this
+   * could not answer" — into a constant, and `croft check`'s "treat this
    * subject as new" warning into noise printed over correct answers.
    *
    * What the flag is for is unchanged, so it is derived from the thing that

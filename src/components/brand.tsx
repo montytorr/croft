@@ -5,12 +5,12 @@ import { cn } from '@/lib/utils'
 
 /**
  * What this instance is called, from the root layout down to anything that
- * names it. Two Cairns open side by side — a personal one and a work one —
+ * names it. Two Crofts open side by side — a personal one and a work one —
  * were two identical tabs and two identical sidebars.
  */
 export type Brand = { name: string }
 
-const BrandContext = createContext<Brand>({ name: 'Cairn' })
+const BrandContext = createContext<Brand>({ name: 'Croft' })
 
 export const BrandProvider = ({ brand, children }: { brand: Brand; children: React.ReactNode }) => (
   <BrandContext.Provider value={brand}>{children}</BrandContext.Provider>
@@ -21,7 +21,7 @@ export const useBrand = () => useContext(BrandContext)
 /**
  * The mark: three stones on the dark tile, exactly as the favicon draws them.
  * The stones take --brand-mark, which the instance's accent sets, so each
- * Cairn's mark is the same cairn in its own colour.
+ * Croft's mark is the same croft in its own colour.
  */
 export const BrandMark = ({ size = 20, className }: { size?: number; className?: string }) => (
   <svg viewBox="0 0 32 32" width={size} height={size} aria-hidden className={cn('shrink-0', className)}>

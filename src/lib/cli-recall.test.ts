@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 
 /**
- * `cairn recall` and the summary `cairn claim` prints (CAIRN-268). The claim
+ * `croft recall` and the summary `croft claim` prints (CROFT-268). The claim
  * half matters more: it is what reaches an agent that never thought to ask, so
  * it must appear when something bears on the task, stay silent when nothing
  * does, and never turn a successful claim into a failure.
@@ -56,11 +56,11 @@ const serve = (recallBody: unknown) =>
   })
 
 const run = async (args: string[], base: string) => {
-  const home = await mkdtemp(join(tmpdir(), 'cairn-recall-'))
+  const home = await mkdtemp(join(tmpdir(), 'croft-recall-'))
   directories.push(home)
   return new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
-    const child = spawn('node', ['cli/cairn.mjs', ...args], {
-      env: { ...process.env, HOME: home, CAIRN_BASE_URL: base, CAIRN_API_KEY: 'test-key' },
+    const child = spawn('node', ['cli/croft.mjs', ...args], {
+      env: { ...process.env, HOME: home, CROFT_BASE_URL: base, CROFT_API_KEY: 'test-key' },
     })
     let stdout = ''
     let stderr = ''
@@ -71,7 +71,7 @@ const run = async (args: string[], base: string) => {
   })
 }
 
-describe('cairn recall', () => {
+describe('croft recall', () => {
   it('prints each line with why it was picked, and what the limit cut', async () => {
     const { code, stdout } = await run(['recall', 'BB-333'], await serve(recall))
     expect(code).toBe(0)
@@ -79,15 +79,15 @@ describe('cairn recall', () => {
     expect(stdout).toContain('CONFLICT with BB-333')
     expect(stdout).toContain('warm-cookies-are-ip-bound  [stale]')
     expect(stdout).toContain('learned on BB-343')
-    expect(stdout).toContain('2 more decision(s) — cairn recall BB-333 --limit 30')
+    expect(stdout).toContain('2 more decision(s) — croft recall BB-333 --limit 30')
   })
 })
 
-describe('cairn claim', () => {
+describe('croft claim', () => {
   it('says what bears on the task it just claimed', async () => {
     const { code, stderr } = await run(['claim', 'BB-333'], await serve(recall))
     expect(code).toBe(0)
-    expect(stderr).toContain('bears on this — cairn recall BB-333:')
+    expect(stderr).toContain('bears on this — croft recall BB-333:')
     expect(stderr).toContain('BB-343 finding (names this task): CONFLICT with BB-333')
     expect(stderr).toContain('knowledge: warm-cookies-are-ip-bound [stale]')
   })

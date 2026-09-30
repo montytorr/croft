@@ -1,7 +1,7 @@
 import { pool } from '@/lib/db/client'
 
 /**
- * Where else a task was named (CAIRN-267).
+ * Where else a task was named (CROFT-267).
  *
  * `task_mentions` is filled by triggers from every note, comment, description
  * and resolution that writes a resolvable ref; this reads it backwards. The

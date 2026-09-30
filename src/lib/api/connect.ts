@@ -5,7 +5,7 @@ import { hashesMatch } from './keys'
 import { createUserKey } from './users'
 
 /**
- * Browser pairing for a machine's own agents (CAIRN-314), OAuth 2.0
+ * Browser pairing for a machine's own agents (CROFT-314), OAuth 2.0
  * device-authorization-grant shaped: a CLI with no browser of its own asks
  * for a pairing, shows the person a short code, and polls while they approve
  * it on a device that does have one. Only an administrator could mint keys

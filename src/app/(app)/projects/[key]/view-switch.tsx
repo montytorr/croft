@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import type { TaskListItem } from '@/lib/data'
 import { viewCookieName, type ProjectView } from '@/lib/project-view'
 
-const LEGACY_STORAGE_KEY = (projectKey: string) => `cairn:view:${projectKey}`
+const LEGACY_STORAGE_KEY = (projectKey: string) => `croft:view:${projectKey}`
 
 // Secure wherever the page itself is served over HTTPS; plain http is only
 // ever local development, where a Secure cookie would never be stored.

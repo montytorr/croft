@@ -10,7 +10,7 @@ const taskHref = (ref: string) =>
   `/projects/${ref.slice(0, ref.lastIndexOf('-'))}/tasks/${ref.slice(ref.lastIndexOf('-') + 1)}`
 
 /**
- * Where other tasks named this one (CAIRN-267), decisions and findings first.
+ * Where other tasks named this one (CROFT-267), decisions and findings first.
  * Absent when there are none: an empty "mentioned nowhere" section says
  * nothing a reader needs.
  */

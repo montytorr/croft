@@ -4,17 +4,17 @@ import { resolveProjectKeys } from './entity-projects'
 
 describe('resolveProjectKeys', () => {
   /**
-   * CAIRN-239: the patch path used whatever the lookup returned, so a key
+   * CROFT-239: the patch path used whatever the lookup returned, so a key
    * matching no project quietly vanished and `--project NOSUCH` reported
    * success with `added: 0`.
    */
   it('names the keys that match no project', async () => {
-    const { result } = await withFakePool(() => resolveProjectKeys(['cairn', 'nosuch']), [
-      { id: 'id-cairn', key: 'CAIRN' },
+    const { result } = await withFakePool(() => resolveProjectKeys(['croft', 'nosuch']), [
+      { id: 'id-croft', key: 'CROFT' },
     ])
 
     expect(result.missing).toEqual(['NOSUCH'])
-    expect(result.ids).toEqual(['id-cairn'])
+    expect(result.ids).toEqual(['id-croft'])
     expect(result.error).toBeNull()
   })
 
@@ -26,33 +26,33 @@ describe('resolveProjectKeys', () => {
   })
 
   it('resolves every key when they all exist', async () => {
-    const { result } = await withFakePool(() => resolveProjectKeys(['cairn', 'trig']), [
+    const { result } = await withFakePool(() => resolveProjectKeys(['croft', 'trig']), [
       { id: 'id-trig', key: 'TRIG' },
-      { id: 'id-cairn', key: 'CAIRN' },
+      { id: 'id-croft', key: 'CROFT' },
     ])
 
     expect(result.missing).toEqual([])
     // Ordered by what the caller asked for, not by what Postgres happened to
     // return, so `added: n` lines up with the request.
-    expect(result.ids).toEqual(['id-cairn', 'id-trig'])
+    expect(result.ids).toEqual(['id-croft', 'id-trig'])
   })
 
   it('de-duplicates a key repeated in one request', async () => {
     const { result, parameters } = await withFakePool(
-      () => resolveProjectKeys(['cairn', 'CAIRN']),
-      [{ id: 'id-cairn', key: 'CAIRN' }],
+      () => resolveProjectKeys(['croft', 'CROFT']),
+      [{ id: 'id-croft', key: 'CROFT' }],
     )
 
-    expect(result.ids).toEqual(['id-cairn'])
+    expect(result.ids).toEqual(['id-croft'])
     // One bound parameter, not two: the repeat never reached Postgres.
-    expect(parameters[0]).toEqual(['CAIRN'])
+    expect(parameters[0]).toEqual(['CROFT'])
   })
 
   it('surfaces a query failure instead of reading it as "no such project"', async () => {
     // Dropping the error made a database outage look exactly like a typo.
-    const scope = globalThis as typeof globalThis & { __cairnPool?: unknown }
-    const prior = scope.__cairnPool
-    scope.__cairnPool = {
+    const scope = globalThis as typeof globalThis & { __croftPool?: unknown }
+    const prior = scope.__croftPool
+    scope.__croftPool = {
       connect: async () => ({
         query: async () => {
           throw Object.assign(new Error('connection terminated'), { code: '08006' })
@@ -62,12 +62,12 @@ describe('resolveProjectKeys', () => {
     }
 
     try {
-      const result = await resolveProjectKeys(['cairn'])
+      const result = await resolveProjectKeys(['croft'])
       expect(result.error).toBe('connection terminated')
       expect(result.missing).toEqual([])
       expect(result.ids).toEqual([])
     } finally {
-      scope.__cairnPool = prior
+      scope.__croftPool = prior
     }
   })
 

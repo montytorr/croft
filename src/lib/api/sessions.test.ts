@@ -15,7 +15,7 @@ import {
  * login failures, carried a summary of a UI refactor.
  *
  * That failure is silent: a wrong checkpoint reads exactly like a right one,
- * and `cairn context` hands it to the next agent as fact. Hence tests.
+ * and `croft context` hands it to the next agent as fact. Hence tests.
  */
 describe('checkpointing held tasks', () => {
   const held = [
@@ -80,22 +80,22 @@ describe('checkpointing held tasks', () => {
  * This used to select on `claimed_by` alone, which is an actorLabel shared by
  * every Claude Code session on the machine. Three knowledge-map tasks ended up
  * carrying a progress report about merging an unrelated pull request, because
- * the identity matched and nothing else was consulted. CAIRN-182 fixed the
+ * the identity matched and nothing else was consulted. CROFT-182 fixed the
  * version of this that stamped tasks the session never touched; this is the
  * same wrong summary arriving through identity rather than through the file
  * list.
  */
 describe('heldByThisSession', () => {
   const held = [
-    { ref: 'CAIRN-209', claimed_session: 'other-session' },
-    { ref: 'CAIRN-231', claimed_session: 'this-session' },
-    { ref: 'CAIRN-100', claimed_session: null },
+    { ref: 'CROFT-209', claimed_session: 'other-session' },
+    { ref: 'CROFT-231', claimed_session: 'this-session' },
+    { ref: 'CROFT-100', claimed_session: null },
   ]
 
   it('leaves another session\u2019s held tasks alone', () => {
     expect(heldByThisSession(held, 'this-session').map((t) => t.ref)).toEqual([
-      'CAIRN-231',
-      'CAIRN-100',
+      'CROFT-231',
+      'CROFT-100',
     ])
   })
 
@@ -103,7 +103,7 @@ describe('heldByThisSession', () => {
     // Claimed before the column existed, or by a runtime that cannot name
     // itself. Excluding it would quietly stop checkpointing work genuinely
     // held — a silent regression traded for a silent bug.
-    expect(heldByThisSession(held, 'this-session').some((t) => t.ref === 'CAIRN-100')).toBe(true)
+    expect(heldByThisSession(held, 'this-session').some((t) => t.ref === 'CROFT-100')).toBe(true)
   })
 
   it('changes nothing for a caller that cannot name its session', () => {
@@ -112,7 +112,7 @@ describe('heldByThisSession', () => {
 })
 
 /**
- * CAIRN-283: on 2026-09-25 71 tasks carried "Still held, not progressed…" and
+ * CROFT-283: on 2026-09-25 71 tasks carried "Still held, not progressed…" and
  * 28 had had a real checkpoint before it. BB-385's handoff was replaced with a
  * line about a different session's work. Each rule below is one way that
  * happened, and none of them reports itself.
@@ -132,8 +132,8 @@ describe('planAutoCheckpoints', () => {
   const handoff = 'Fleet-global MEV auth cooldown implemented + 18/18 guard suite, uncommitted.'
 
   it('never writes over a written checkpoint on a task the session only held', () => {
-    expect(plan([task(385, null, handoff)], 'this', ['CAIRN-277'])).toEqual([])
-    expect(plan([task(385, 'this', handoff)], 'this', ['CAIRN-277'])).toEqual([])
+    expect(plan([task(385, null, handoff)], 'this', ['CROFT-277'])).toEqual([])
+    expect(plan([task(385, 'this', handoff)], 'this', ['CROFT-277'])).toEqual([])
   })
 
   it('does not replace an earlier automatic checkpoint with a "not progressed" line', () => {
@@ -141,8 +141,8 @@ describe('planAutoCheckpoints', () => {
   })
 
   it('writes the "still held" line only where there is no checkpoint at all', () => {
-    expect(plan([task(1, null)], 'this', ['CAIRN-277'])).toEqual([
-      { ref: 'BB-1', worked: false, text: untouchedCheckpoint(['CAIRN-277']) },
+    expect(plan([task(1, null)], 'this', ['CROFT-277'])).toEqual([
+      { ref: 'BB-1', worked: false, text: untouchedCheckpoint(['CROFT-277']) },
     ])
   })
 
@@ -173,7 +173,7 @@ describe('planAutoCheckpoints', () => {
   })
 })
 
-describe('session prose and secrets (CAIRN-322)', () => {
+describe('session prose and secrets (CROFT-322)', () => {
   const token = ['ghp', '_', 'aB3dE5gH7jK9mN1pQ2rS4tU6vW8xY0zaB3dE5'].join('')
   const base = { externalId: 'x', platformSource: 'claude' as const, ongoing: false, files: [], taskRefs: [], checkpointHeld: true }
 

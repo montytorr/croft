@@ -3,9 +3,9 @@ import { AlertTriangle, HelpCircle } from 'lucide-react'
 import { assess, cachedVitals } from '@/lib/api/vitals'
 
 /**
- * The one place Cairn admits it has stopped working.
+ * The one place Croft admits it has stopped working.
  *
- * `cairn vitals` can tell that sessions are no longer being recorded, and said
+ * `croft vitals` can tell that sessions are no longer being recorded, and said
  * so into a task note — which only reaches somebody who already suspected
  * something and went looking. An alarm whose only reader is the person who
  * already knows is not an alarm.
@@ -25,7 +25,7 @@ export const HealthBanner = async ({ userId }: { userId: string }) => {
     // The health check failing is not a reason to fail the page it sits on,
     // and not a reason to say nothing either. This used to return null, so a
     // broken vitals read rendered exactly like a healthy one — the one state
-    // a health banner must never be able to confuse. See CAIRN-288.
+    // a health banner must never be able to confuse. See CROFT-288.
     console.error('[health-banner] could not read vitals', error instanceof Error ? error.message : error)
     return (
       <Link
@@ -34,7 +34,7 @@ export const HealthBanner = async ({ userId }: { userId: string }) => {
       >
         <HelpCircle size={12} className="text-fg-subtle shrink-0" aria-hidden />
         <p className="text-fg-muted min-w-0 text-[0.71875rem]">
-          Vitals unavailable — Cairn cannot currently tell whether it is working.
+          Vitals unavailable — Croft cannot currently tell whether it is working.
         </p>
       </Link>
     )

@@ -52,7 +52,7 @@ const noFilters: BoardFilters = {
 }
 
 const projects: BoardProject[] = [
-  { id: 'p1', key: 'CAI', title: 'Cairn' },
+  { id: 'p1', key: 'CAI', title: 'Croft' },
   { id: 'p2', key: 'SWV', title: 'Suvie' },
 ]
 
@@ -208,12 +208,12 @@ describe('laneValueOf', () => {
 
 describe('supra-project tasks', () => {
   it('matches a project filter through a secondary link, not just its home', () => {
-    const guest = { ...task({ id: 'g' }), project_key: 'CAIRN', project_keys: ['CAIRN', 'HM'] }
+    const guest = { ...task({ id: 'g' }), project_key: 'CROFT', project_keys: ['CROFT', 'HM'] }
     expect(matchesFilters(guest, { ...noFilters, projects: ['HM'] })).toBe(true)
   })
 
   it('still groups it under the project that owns its ref', () => {
-    const guest = { ...task({ id: 'g' }), project_key: 'CAIRN', project_keys: ['CAIRN', 'HM'] }
-    expect(groupValue(guest, 'project')).toBe('CAIRN')
+    const guest = { ...task({ id: 'g' }), project_key: 'CROFT', project_keys: ['CROFT', 'HM'] }
+    expect(groupValue(guest, 'project')).toBe('CROFT')
   })
 })

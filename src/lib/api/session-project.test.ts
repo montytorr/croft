@@ -42,35 +42,35 @@ import { upsertSession } from './sessions'
 /** Absolute fixture paths, built so no real home directory is spelled out. */
 const p = (...parts: string[]) => ['', ...parts].join('/')
 const MAC_HM = p('Users', 'dev', 'hm')
-const SERVER_CAIRN = p('home', 'dev', 'cairn')
+const SERVER_CROFT = p('home', 'dev', 'croft')
 
 const actor = { userId: 'u', actorId: null, userDisplayName: 'dev' } as unknown as Actor
 const upsert = (input: Record<string, unknown>) =>
   upsertSession(actor, sessionUpsert.parse({ externalId: 'x', checkpointHeld: false, ...input }))
 
 /**
- * CAIRN-286: 389 of 389 live sessions had no project, because the server only
+ * CROFT-286: 389 of 389 live sessions had no project, because the server only
  * ever used a key the caller sent and no caller sent one. It now follows the
- * same order `cairn context` does: the key, the remote, then the directory.
+ * same order `croft context` does: the key, the remote, then the directory.
  */
 describe('which project a recorded session belongs to', () => {
   beforeEach(() => {
     state.written = []
-    state.repos = { 'git@github.com:montytorr/cairn.git': 'CAIRN' }
+    state.repos = { 'git@github.com:montytorr/croft.git': 'CROFT' }
     state.cwds = { [MAC_HM]: 'HM' }
-    state.names = { [SERVER_CAIRN]: 'CAIRN', [MAC_HM]: 'NOPE' }
+    state.names = { [SERVER_CROFT]: 'CROFT', [MAC_HM]: 'NOPE' }
     state.failLookups = false
   })
 
   it('uses the key the caller sent', async () => {
-    await upsert({ project: 'DC', repo: 'git@github.com:montytorr/cairn.git', cwd: '/x' })
+    await upsert({ project: 'DC', repo: 'git@github.com:montytorr/croft.git', cwd: '/x' })
     expect(state.written[0]?.project_id).toBe('id-DC')
   })
 
   it('falls back to the remote when the key is unknown or absent', async () => {
-    await upsert({ project: 'GONE', repo: 'git@github.com:montytorr/cairn.git' })
-    await upsert({ repo: 'git@github.com:montytorr/cairn.git' })
-    expect(state.written.map((r) => r.project_id)).toEqual(['id-CAIRN', 'id-CAIRN'])
+    await upsert({ project: 'GONE', repo: 'git@github.com:montytorr/croft.git' })
+    await upsert({ repo: 'git@github.com:montytorr/croft.git' })
+    expect(state.written.map((r) => r.project_id)).toEqual(['id-CROFT', 'id-CROFT'])
   })
 
   it('then to sessions already attributed in the same directory', async () => {
@@ -79,13 +79,13 @@ describe('which project a recorded session belongs to', () => {
   })
 
   it('then to the checkout name, for an older CLI that sends only a cwd', async () => {
-    await upsert({ cwd: SERVER_CAIRN })
-    expect(state.written[0]?.project_id).toBe('id-CAIRN')
+    await upsert({ cwd: SERVER_CROFT })
+    expect(state.written[0]?.project_id).toBe('id-CROFT')
   })
 
   it('records the session unattributed rather than failing when a lookup breaks', async () => {
     state.failLookups = true
-    await upsert({ repo: 'git@github.com:montytorr/cairn.git', cwd: SERVER_CAIRN })
+    await upsert({ repo: 'git@github.com:montytorr/croft.git', cwd: SERVER_CROFT })
     expect(state.written[0]?.project_id).toBeNull()
   })
 

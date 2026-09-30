@@ -1,9 +1,9 @@
 -- ===========================================================================
--- 061: how often each fact is actually recalled (CAIRN-270)
+-- 061: how often each fact is actually recalled (CROFT-270)
 --
 -- 053 started recording which entries a search returned (`returned_slugs`)
 -- and every direct read by slug (`knowledge_reads`). Both are summed into
--- totals by cairn_memory_use, and nothing ever read them per entry — so the
+-- totals by croft_memory_use, and nothing ever read them per entry — so the
 -- question that finds dead or badly titled facts, "which of these has nobody
 -- been given in a month", was answerable from data already on disk and asked
 -- by nothing.
@@ -13,7 +13,7 @@
 --   returned  a check/know search listed the entry (search_events)
 --   read      the entry was fetched by name — CLI, MCP or browser
 --             (knowledge_reads, hits only; a miss names no entry)
--- NOT counted: the session briefing's knowledge list and `cairn recall`. Neither
+-- NOT counted: the session briefing's knowledge list and `croft recall`. Neither
 -- records what it showed, so an entry the briefing surfaces daily can read as
 -- unused here. That is said wherever the number is shown.
 --
@@ -61,7 +61,7 @@ as $$
 $$;
 
 comment on function knowledge_recall_counts(timestamptz, uuid[]) is
-  'Per entry since p_since: how many searches returned it, how many direct reads fetched it, and when it was last recalled either way. The session briefing and cairn recall are not counted — they record nothing.';
+  'Per entry since p_since: how many searches returned it, how many direct reads fetched it, and when it was last recalled either way. The session briefing and croft recall are not counted — they record nothing.';
 
 create index if not exists search_events_created_idx on search_events (created_at desc);
 create index if not exists knowledge_reads_created_idx on knowledge_reads (created_at desc) where hit;

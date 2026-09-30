@@ -13,7 +13,7 @@ import { ROW, ROW_LABEL } from './styles'
  * Work that spans repos is filed once, in whichever project leads it, and
  * linked into the others — so it keeps a single ref and a single resolution
  * instead of being duplicated and half-closed in three places. Until now this
- * was `cairn update --also-project` and nothing else; a person could see the
+ * was `croft update --also-project` and nothing else; a person could see the
  * effect on a project list but had no way to cause it.
  */
 export const AlsoIn = ({

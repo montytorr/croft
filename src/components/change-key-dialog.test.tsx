@@ -43,7 +43,7 @@ describe('ChangeKeyDialog', () => {
       root.render(
         <ChangeKeyDialog
           project={project}
-          liveKeys={['HOL', 'HOLC', 'CAIRN']}
+          liveKeys={['HOL', 'HOLC', 'CROFT']}
           retired={retired}
           onClose={() => {}}
           onChanged={onChanged}

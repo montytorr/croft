@@ -4,14 +4,14 @@ import { readFileSync } from 'node:fs'
 /**
  * The content hash of the CLI this deployment was built from.
  *
- * WHY THE VERSION WAS NOT ENOUGH. CAIRN-246 put the release version on every
+ * WHY THE VERSION WAS NOT ENOUGH. CROFT-246 put the release version on every
  * response so a stale CLI could notice without being asked, and it works
  * exactly as designed — which turned out to be almost never. Releases are
  * cut by hand and 133 commits fitted inside v0.5.1, so nearly all real drift
  * is INTRA-version: both sides said 0.5.1 while the Mac's copy was missing
  * `--allow-dangling` on relearn and the whole vitals memory block, and no
  * warning was possible. A version says which release a copy belongs to; it
- * cannot say whether it is that release's current file (CAIRN-261).
+ * cannot say whether it is that release's current file (CROFT-261).
  *
  * A CONTENT HASH CAN, and it is the one identifier a copied file can compute
  * about itself. A CLI does not know which commit it came from — it is a
@@ -53,17 +53,17 @@ export const CLI_FINGERPRINT: string | null = (() => {
     // Not built by the Dockerfile. Fall through and hash the source.
   }
   try {
-    return digest(readFileSync('cli/cairn.mjs'))
+    return digest(readFileSync('cli/croft.mjs'))
   } catch {
     return null
   }
 })()
 
-export const CLI_HEADER = 'x-cairn-cli'
+export const CLI_HEADER = 'x-croft-cli'
 
 /**
  * When this image was built, so a CLI that disagrees with the fingerprint can
- * tell which side is newer (CAIRN-290).
+ * tell which side is newer (CROFT-290).
  *
  * A hash says two files differ and nothing about their order, and a copied
  * CLI has no commit to compare. It does have an mtime — the moment the sync
@@ -81,7 +81,7 @@ export const BUILT_AT: string | null = (() => {
   }
 })()
 
-export const BUILT_AT_HEADER = 'x-cairn-built-at'
+export const BUILT_AT_HEADER = 'x-croft-built-at'
 
 /** Exported for the Dockerfile's generator and for the test that pins them together. */
 export const fingerprintOf = (contents: Buffer | string) => digest(contents)

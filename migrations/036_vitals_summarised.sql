@@ -15,7 +15,7 @@
 -- Only the session_stats CTE and the payload change. Otherwise 022 verbatim.
 -- ===========================================================================
 
-create or replace function cairn_vitals(p_owner uuid, p_hours int default 24)
+create or replace function croft_vitals(p_owner uuid, p_hours int default 24)
 returns jsonb
 language sql
 stable

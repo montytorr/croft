@@ -5,16 +5,16 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 /**
- * CAIRN-323: on Stop, ask the agent once per session to `cairn learn`, and
+ * CROFT-323: on Stop, ask the agent once per session to `croft learn`, and
  * only after a turn that did work. A block keeps the agent going for one more
  * reply the person waits for, so every "never" below is a reply saved.
  */
-const HOOK = join(process.cwd(), 'hooks', 'cairn-learn-nudge.mjs')
+const HOOK = join(process.cwd(), 'hooks', 'croft-learn-nudge.mjs')
 
 let dir: string
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'cairn-nudge-'))
+  dir = mkdtempSync(join(tmpdir(), 'croft-nudge-'))
 })
 
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
@@ -60,9 +60,9 @@ describe('the learn nudge', () => {
     const path = transcript([prompt('Fix the login redirect'), tool('Edit', { file_path: '/a.ts' }), said('Done.')])
     const first = await run({ session_id: 's1', transcript_path: path })
     expect(blocked(first)).toBe(true)
-    expect(JSON.parse(first).reason).toMatch(/cairn learn/)
+    expect(JSON.parse(first).reason).toMatch(/croft learn/)
     expect(await run({ session_id: 's1', transcript_path: path })).toBe('')
-    expect(Object.keys(JSON.parse(readFileSync(join(dir, '.cairn', 'nudged.json'), 'utf8')))).toEqual(['s1'])
+    expect(Object.keys(JSON.parse(readFileSync(join(dir, '.croft', 'nudged.json'), 'utf8')))).toEqual(['s1'])
   })
 
   it('asks after a commit, in a Codex rollout too', async () => {
@@ -87,14 +87,14 @@ describe('the learn nudge', () => {
     expect(await run({ session_id: 's3', transcript_path: path, stop_hook_active: true })).toBe('')
   })
 
-  it('never asks a session that already ran cairn learn, however the words appear elsewhere', async () => {
-    const briefing = { type: 'user', isMeta: true, message: { role: 'user', content: "Facts still true next month: 'cairn learn' with a scope." } }
-    const lookedAtHelp = transcript([briefing, prompt('Fix it'), tool('Bash', { command: 'cairn learn --help' }), tool('Edit', { file_path: '/a.ts' })])
+  it('never asks a session that already ran croft learn, however the words appear elsewhere', async () => {
+    const briefing = { type: 'user', isMeta: true, message: { role: 'user', content: "Facts still true next month: 'croft learn' with a scope." } }
+    const lookedAtHelp = transcript([briefing, prompt('Fix it'), tool('Bash', { command: 'croft learn --help' }), tool('Edit', { file_path: '/a.ts' })])
     expect(blocked(await run({ session_id: 's4', transcript_path: lookedAtHelp }))).toBe(true)
 
     const learned = transcript([
       prompt('Fix it'),
-      tool('Bash', { command: 'cd /repo && cairn learn "Deferred FKs go after the backfill" --project CAIRN --body -' }),
+      tool('Bash', { command: 'cd /repo && croft learn "Deferred FKs go after the backfill" --project CROFT --body -' }),
       prompt('Now the other one'),
       tool('Edit', { file_path: '/b.ts' }),
     ])
@@ -103,8 +103,8 @@ describe('the learn nudge', () => {
 
   it('stays out of summariser runs, and off when switched off', async () => {
     const path = transcript([prompt('Fix it'), tool('Edit', { file_path: '/a.ts' })])
-    expect(await run({ session_id: 's6', transcript_path: path }, { CAIRN_SUMMARISER: '1' })).toBe('')
-    expect(await run({ session_id: 's6', transcript_path: path }, { CAIRN_LEARN_NUDGE: '0' })).toBe('')
+    expect(await run({ session_id: 's6', transcript_path: path }, { CROFT_SUMMARISER: '1' })).toBe('')
+    expect(await run({ session_id: 's6', transcript_path: path }, { CROFT_LEARN_NUDGE: '0' })).toBe('')
   })
 
   it('says nothing when the payload names no transcript', async () => {

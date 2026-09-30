@@ -4,15 +4,15 @@ import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { spawn } from 'node:child_process'
-import handler, { FILE_NAME, RULE } from '../../hooks/openclaw/cairn-briefing/handler'
+import handler, { FILE_NAME, RULE } from '../../hooks/openclaw/croft-briefing/handler'
 
 /**
- * CAIRN-292: OpenClaw's briefing hook reached 0 of 406 sessions because it
+ * CROFT-292: OpenClaw's briefing hook reached 0 of 406 sessions because it
  * lived where OpenClaw never looks, and the installer's advice pointed at
  * exactly that kind of place. The hook now ships from the repo and the
  * installer links it with OpenClaw's own command. Both halves are exercised
  * the way they run: the installer spawned against a fake `openclaw`, the
- * handler handed a bootstrap event against a fake `cairn`.
+ * handler handed a bootstrap event against a fake `croft`.
  */
 
 const REPO = resolve(__dirname, '../..')
@@ -72,7 +72,7 @@ if (args[0] === 'hooks' && args[1] === 'install' && args[2] === '--link') {
   const internal = (cfg.hooks.internal = cfg.hooks.internal || {})
   internal.enabled = true
   internal.load = { extraDirs: [...new Set([...((internal.load || {}).extraDirs || []), args[3]])] }
-  internal.entries = { ...(internal.entries || {}), 'cairn-briefing': { enabled: true } }
+  internal.entries = { ...(internal.entries || {}), 'croft-briefing': { enabled: true } }
   fs.writeFileSync(file, JSON.stringify(cfg))
   process.stdout.write('Linked hook path\\n')
   process.exit(0)
@@ -86,11 +86,11 @@ process.exit(64)
 /**
  * `gateway` gives the account an OpenClaw config, which is what the account
  * that runs the gateway has. Without one the installer must not link at all
- * (CAIRN-296): `openclaw` on PATH is not the same as running a gateway.
+ * (CROFT-296): `openclaw` on PATH is not the same as running a gateway.
  */
 const setup = async ({ gateway = true }: { gateway?: boolean } = {}) => {
-  const home = await temp('cairn-openclaw-home-')
-  const bin = await temp('cairn-openclaw-bin-')
+  const home = await temp('croft-openclaw-home-')
+  const bin = await temp('croft-openclaw-bin-')
   await fakeOpenclaw(bin)
   if (gateway) {
     await mkdir(join(home, '.openclaw'), { recursive: true })
@@ -102,7 +102,7 @@ const setup = async ({ gateway = true }: { gateway?: boolean } = {}) => {
     existsSync(log)
       ? (await readFile(log, 'utf8')).trim().split('\n').filter(Boolean).map((l) => JSON.parse(l) as string[])
       : []
-  const hookDir = join(home, '.cairn/hooks/openclaw/cairn-briefing')
+  const hookDir = join(home, '.croft/hooks/openclaw/croft-briefing')
   return { home, env, calls, hookDir }
 }
 
@@ -177,7 +177,7 @@ describe('the installer links the OpenClaw briefing hook', () => {
     expect(await calls()).toEqual([['hooks', 'install', '--link', hookDir, '--force']])
     for (const file of ['HOOK.md', 'handler.ts']) {
       expect(await readFile(join(hookDir, file), 'utf8')).toBe(
-        await readFile(join(REPO, 'hooks/openclaw/cairn-briefing', file), 'utf8'),
+        await readFile(join(REPO, 'hooks/openclaw/croft-briefing', file), 'utf8'),
       )
     }
     expect(first.stdout).toContain('restart the gateway')
@@ -231,7 +231,7 @@ describe('the installer links the OpenClaw briefing hook', () => {
 
   it('skips cleanly where OpenClaw is not installed', async () => {
     const { env, hookDir } = await setup()
-    const out = await run([], { ...env, CAIRN_OPENCLAW_BIN: 'openclaw-not-installed' })
+    const out = await run([], { ...env, CROFT_OPENCLAW_BIN: 'openclaw-not-installed' })
     expect(out.code, out.stderr).toBe(0)
     expect(out.stdout).toContain('openclaw: not on PATH — skipped')
     expect(existsSync(hookDir)).toBe(false)
@@ -239,12 +239,12 @@ describe('the installer links the OpenClaw briefing hook', () => {
 })
 
 describe('the OpenClaw briefing hook', () => {
-  const fakeCairn = async (script: string) => {
-    const bin = await temp('cairn-openclaw-cli-')
-    const path = join(bin, 'cairn')
+  const fakeCroft = async (script: string) => {
+    const bin = await temp('croft-openclaw-cli-')
+    const path = join(bin, 'croft')
     await writeFile(path, `#!/usr/bin/env node\n${script}\n`)
     await chmod(path, 0o755)
-    process.env.CAIRN_CLI = path
+    process.env.CROFT_CLI = path
     return path
   }
 
@@ -255,10 +255,10 @@ describe('the OpenClaw briefing hook', () => {
   })
 
   it('injects the rule and the live briefing for the workspace, as openclaw', async () => {
-    const workspace = await temp('cairn-openclaw-ws-')
-    delete process.env.CAIRN_AGENT
-    await fakeCairn(
-      `process.stdout.write('## Cairn [ACME]\\nargs=' + process.argv.slice(2).join(' ') + '\\nagent=' + process.env.CAIRN_AGENT + '\\ncwd=' + process.cwd())`,
+    const workspace = await temp('croft-openclaw-ws-')
+    delete process.env.CROFT_AGENT
+    await fakeCroft(
+      `process.stdout.write('## Croft [ACME]\\nargs=' + process.argv.slice(2).join(' ') + '\\nagent=' + process.env.CROFT_AGENT + '\\ncwd=' + process.cwd())`,
     )
     const soul = { name: 'SOUL.md', path: join(workspace, 'SOUL.md'), content: 'x', missing: false }
     const event = bootstrap(workspace, [soul])
@@ -266,18 +266,18 @@ describe('the OpenClaw briefing hook', () => {
 
     const files = event.context.bootstrapFiles as { name: string; path: string; content: string; missing: boolean }[]
     expect(files[0]).toBe(soul)
-    const cairn = files.find((f) => f.name === FILE_NAME)
-    expect(cairn?.missing).toBe(false)
-    expect(cairn?.path).toBe(join(workspace, FILE_NAME))
-    expect(cairn?.content.startsWith(RULE)).toBe(true)
-    expect(cairn?.content).toContain(`args=context --cwd ${workspace}`)
-    expect(cairn?.content).toContain('agent=openclaw')
-    expect(cairn?.content).toContain('## Cairn [ACME]')
+    const croft = files.find((f) => f.name === FILE_NAME)
+    expect(croft?.missing).toBe(false)
+    expect(croft?.path).toBe(join(workspace, FILE_NAME))
+    expect(croft?.content.startsWith(RULE)).toBe(true)
+    expect(croft?.content).toContain(`args=context --cwd ${workspace}`)
+    expect(croft?.content).toContain('agent=openclaw')
+    expect(croft?.content).toContain('## Croft [ACME]')
   })
 
   it('replaces its own file rather than stacking a second one', async () => {
-    const workspace = await temp('cairn-openclaw-ws-')
-    await fakeCairn(`process.stdout.write('live')`)
+    const workspace = await temp('croft-openclaw-ws-')
+    await fakeCroft(`process.stdout.write('live')`)
     const stale = { name: FILE_NAME, path: join(workspace, FILE_NAME), content: 'old', missing: false }
     const event = bootstrap(workspace, [stale])
     await handler(event)
@@ -287,13 +287,13 @@ describe('the OpenClaw briefing hook', () => {
   })
 
   it('fails open to the rule alone when the CLI errors, is missing, or is slow', async () => {
-    const workspace = await temp('cairn-openclaw-ws-')
+    const workspace = await temp('croft-openclaw-ws-')
     for (const setupCli of [
-      () => fakeCairn(`process.stderr.write('no key'); process.exit(3)`),
-      async () => { process.env.CAIRN_CLI = join(workspace, 'no-such-cairn') },
+      () => fakeCroft(`process.stderr.write('no key'); process.exit(3)`),
+      async () => { process.env.CROFT_CLI = join(workspace, 'no-such-croft') },
       async () => {
-        process.env.CAIRN_HOOK_TIMEOUT_MS = '200'
-        await fakeCairn(`setTimeout(() => process.stdout.write('late'), 5000)`)
+        process.env.CROFT_HOOK_TIMEOUT_MS = '200'
+        await fakeCroft(`setTimeout(() => process.stdout.write('late'), 5000)`)
       },
     ]) {
       await setupCli()
@@ -308,9 +308,9 @@ describe('the OpenClaw briefing hook', () => {
   })
 
   it('ignores every other event, and a bootstrap it cannot mutate', async () => {
-    const workspace = await temp('cairn-openclaw-ws-')
+    const workspace = await temp('croft-openclaw-ws-')
     const marker = join(workspace, 'ran')
-    await fakeCairn(`require('node:fs').writeFileSync(${JSON.stringify(marker)}, '1')`)
+    await fakeCroft(`require('node:fs').writeFileSync(${JSON.stringify(marker)}, '1')`)
     const command = { type: 'command', action: 'new', context: { workspaceDir: workspace, bootstrapFiles: [] as unknown[] } }
     await handler(command)
     expect(command.context.bootstrapFiles).toEqual([])
@@ -320,29 +320,29 @@ describe('the OpenClaw briefing hook', () => {
 
   it('keeps the rule short, and in step with the lifecycle the skill teaches', async () => {
     expect(Buffer.byteLength(RULE)).toBeLessThan(1200)
-    for (const needle of ['cairn check', 'claim', '--kind attempt', 'checkpoint', 'in-review', 'verified', '--global']) {
+    for (const needle of ['croft check', 'claim', '--kind attempt', 'checkpoint', 'in-review', 'verified', '--global']) {
       expect(RULE).toContain(needle)
     }
-    const hookMd = await readFile(join(REPO, 'hooks/openclaw/cairn-briefing/HOOK.md'), 'utf8')
-    expect(hookMd).toMatch(/^---\nname: cairn-briefing\n/)
+    const hookMd = await readFile(join(REPO, 'hooks/openclaw/croft-briefing/HOOK.md'), 'utf8')
+    expect(hookMd).toMatch(/^---\nname: croft-briefing\n/)
     expect(hookMd).toContain('"events": ["agent:bootstrap"]')
   })
 })
 
 describe('the skill and the agent guide', () => {
   it('fit the budgets that decide whether they are read', async () => {
-    const skill = await readFile(join(REPO, 'skills/cairn/SKILL.md'))
+    const skill = await readFile(join(REPO, 'skills/croft/SKILL.md'))
     expect(skill.byteLength).toBeLessThanOrEqual(15_000)
     // The lifecycle has to be in what a partial read reaches.
     const head = skill.toString('utf8').split('\n').slice(0, 62).join('\n')
     expect(head).toMatch(/claims\s+by default/)
-    for (const needle of ['cairn check', 'Exit 9', '--kind attempt', 'checkpoint', 'in-review', '`verified`', 'one claimed task per sweep', 'When not to file']) {
+    for (const needle of ['croft check', 'Exit 9', '--kind attempt', 'checkpoint', 'in-review', '`verified`', 'one claimed task per sweep', 'When not to file']) {
       expect(head).toContain(needle)
     }
   })
 
   it('do not promise what the code does not do', async () => {
-    for (const file of ['skills/cairn/SKILL.md', 'AGENTS.md']) {
+    for (const file of ['skills/croft/SKILL.md', 'AGENTS.md']) {
       const text = await readFile(join(REPO, file), 'utf8')
       expect(text, file).toContain('verified')
       expect(text, file).not.toMatch(/Any task you were still holding gets checkpointed/)

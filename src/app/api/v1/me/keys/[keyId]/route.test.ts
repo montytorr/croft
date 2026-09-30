@@ -11,7 +11,7 @@ vi.mock('@/lib/api/users', async (importOriginal) => {
 import { UserAdminError } from '@/lib/api/users'
 import { DELETE } from './route'
 
-const ORIGIN = 'https://cairn.example.test'
+const ORIGIN = 'https://croft.example.test'
 const KEY_ID = '11111111-2222-4333-8444-555555555555'
 
 const del = (keyId = KEY_ID, origin = ORIGIN) =>

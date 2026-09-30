@@ -10,7 +10,7 @@
  * Printing is the default on purpose: a script that writes into
  * /etc/systemd/system the moment it is run is a script nobody should run.
  *
- * This is OPTIONAL. Cairn deploys perfectly well from a hosted runner, or by
+ * This is OPTIONAL. Croft deploys perfectly well from a hosted runner, or by
  * hand. It matters when you deploy onto the same box the runner lives on,
  * because then the runner is part of your infrastructure rather than a detail
  * of your CI provider — and it used to exist only on that box.
@@ -60,13 +60,13 @@ import { dirname, join } from 'node:path'
 const env = (name, fallback) => process.env[name] ?? fallback
 
 /** Where `actions-runner` was unpacked and `config.sh` was run. */
-const RUNNER_DIR = env('CAIRN_RUNNER_DIR', '')
+const RUNNER_DIR = env('CROFT_RUNNER_DIR', '')
 /** The unprivileged account the runner runs as. Never root. */
-const RUNNER_USER = env('CAIRN_RUNNER_USER', 'runner')
+const RUNNER_USER = env('CROFT_RUNNER_USER', 'runner')
 /** Unit name, so a box with several runners can keep them apart. */
-const SERVICE = env('CAIRN_RUNNER_SERVICE', 'cairn-runner')
+const SERVICE = env('CROFT_RUNNER_SERVICE', 'croft-runner')
 /** How long the tree gets to exit before SIGKILL. */
-const STOP_TIMEOUT = env('CAIRN_RUNNER_STOP_TIMEOUT', '5min')
+const STOP_TIMEOUT = env('CROFT_RUNNER_STOP_TIMEOUT', '5min')
 
 const UNIT_PATH = `/etc/systemd/system/${SERVICE}.service`
 const DROP_IN_DIR = `${UNIT_PATH}.d`
@@ -75,7 +75,7 @@ const DROP_IN_PATH = join(DROP_IN_DIR, 'killmode.conf')
 const MANAGED = `# Managed by scripts/install-runner-service.mjs — edits will be overwritten.`
 
 /**
- * Only ever empty when printing: --install refuses without CAIRN_RUNNER_DIR.
+ * Only ever empty when printing: --install refuses without CROFT_RUNNER_DIR.
  * Printing a unit with the path silently blank would read as a valid unit that
  * happens to be wrong, which is worse than an obvious placeholder.
  */
@@ -129,7 +129,7 @@ const requireRoot = (action) => {
   if (process.getuid?.() === 0) return
   console.error(`${action} writes to /etc/systemd/system, so it needs root.\n`)
   console.error(`  sudo -E node scripts/install-runner-service.mjs --${action}\n`)
-  console.error('-E keeps the CAIRN_RUNNER_* variables, which sudo drops by default.')
+  console.error('-E keeps the CROFT_RUNNER_* variables, which sudo drops by default.')
   process.exit(1)
 }
 
@@ -145,8 +145,8 @@ const install = () => {
   requireRoot('install')
 
   if (!RUNNER_DIR) {
-    console.error('Set CAIRN_RUNNER_DIR to the directory where config.sh was run.\n')
-    console.error('  sudo -E CAIRN_RUNNER_DIR=/path/to/actions-runner \\')
+    console.error('Set CROFT_RUNNER_DIR to the directory where config.sh was run.\n')
+    console.error('  sudo -E CROFT_RUNNER_DIR=/path/to/actions-runner \\')
     console.error('    node scripts/install-runner-service.mjs --install')
     process.exit(1)
   }
@@ -208,7 +208,7 @@ const remove = () => {
 }
 
 const print = () => {
-  const where = RUNNER_DIR || '<set CAIRN_RUNNER_DIR>'
+  const where = RUNNER_DIR || '<set CROFT_RUNNER_DIR>'
   console.log(`Would write ${UNIT_PATH}, for a runner in ${where} running as ${RUNNER_USER}:\n`)
   console.log(unit())
   console.log(`If a unit already exists that this installer did not write, it writes`)

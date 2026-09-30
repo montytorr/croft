@@ -46,7 +46,7 @@ export type TaskRow = Record<string, unknown> & { id: string }
  *
  * `renamed` is set when the ref's key is one the project used to have: the
  * task is the right one, and the caller is owed an explanation of why its ref
- * looks different (CAIRN-264). `neverIssued` is the other half of the same
+ * looks different (CROFT-264). `neverIssued` is the other half of the same
  * rule — the key is retired, a task with that number exists under the live
  * key, but it was created after the rename, so the old ref never named it.
  */
@@ -91,7 +91,7 @@ export const resolveTask = async (
   // A PostgREST error is NOT "no such task" — maybeSingle() reports zero rows
   // as data: null with no error. Swallowing it here is how adding a second
   // tasks->projects path (task_projects, file_touches) turned every lookup in
-  // the product into "No task CAIRN-64." for a PGRST201 ambiguity that named
+  // the product into "No task CROFT-64." for a PGRST201 ambiguity that named
   // its own fix in the response body.
   if (error) throw new Error(`task lookup failed: ${error.message}`)
   if (data) return { task: data as unknown as TaskRow, renamed: null, requestedRef }
@@ -153,7 +153,7 @@ const embeddedProject = (row: Record<string, unknown>) => {
  * Refuses a write to a task whose HOME project is archived (security review
  * F1).
  *
- * Archiving is what moving a project to another Cairn instance leaves behind
+ * Archiving is what moving a project to another Croft instance leaves behind
  * here: a frozen copy. Nothing stopped a CLI still routed to this instance by
  * a stale cache from closing, noting, or claiming a task in that copy — reads
  * worked, and so, silently, did every write. This is the one place that
@@ -184,10 +184,10 @@ export const refuseArchived = (task: TaskRow) => {
 
   return fail(
     'conflict',
-    `${ref} lives in ${key}, which is archived — most likely because it moved to another Cairn ` +
+    `${ref} lives in ${key}, which is archived — most likely because it moved to another Croft ` +
       `instance and this is the copy left behind. If it moved, point the CLI at the other one ` +
       `with --instance <the other instance>. To write here instead, restore ${key} first: ` +
-      `\`cairn project restore ${project.key ?? key}\`.`,
+      `\`croft project restore ${project.key ?? key}\`.`,
     { project: project.key ?? null, projectStatus: 'archived' },
   )
 }

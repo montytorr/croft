@@ -17,7 +17,7 @@ const listQuery = z.object({
   label: z.string().optional(),
   /**
    * Held by the caller. The server answers this, because only the server knows
-   * who is asking — the CLI used to guess from a CAIRN_AGENT environment
+   * who is asking — the CLI used to guess from a CROFT_AGENT environment
    * variable and sent an empty string when it was unset, which asked for tasks
    * held by nobody and got an answer that looked like an answer.
    */
@@ -44,9 +44,9 @@ const listQuery = z.object({
 
 export const GET = route<{ id: string }>({
   handler: async ({ actor, params, url }) => {
-    // By uuid, live key, or a key the project used to have. `cairn list
+    // By uuid, live key, or a key the project used to have. `croft list
     // --project AC` said "No project AC." about a project that had only been
-    // renamed; it now lists HOL and says so in `renamed_from` (CAIRN-264).
+    // renamed; it now lists HOL and says so in `renamed_from` (CROFT-264).
     const resolved = await resolveProject(params.id)
     if (!resolved) return fail('not_found', `No project ${params.id}.`)
     const { project, renamed } = resolved
@@ -94,7 +94,7 @@ export const GET = route<{ id: string }>({
        *
        * A claim with no session is still the caller's: it predates the column
        * or came from a runtime that cannot name itself, and "cannot tell" must
-       * not become "not yours" — the same rule the release guard and `cairn
+       * not become "not yours" — the same rule the release guard and `croft
        * next` follow.
        *
        * Interpolated into the expression rather than parameterised because the
@@ -135,15 +135,15 @@ export const POST = route<{ id: string }, z.infer<typeof createTaskSchema>>({
     if (project.status === 'archived') {
       return fail(
         'conflict',
-        `${project.key} is archived — most likely because it moved to another Cairn instance and ` +
+        `${project.key} is archived — most likely because it moved to another Croft instance and ` +
           `this is the copy left behind. If it moved, point the CLI at the other one with ` +
           `--instance <the other instance>. To file work here instead, restore ${project.key} first: ` +
-          `\`cairn project restore ${project.key}\`.`,
+          `\`croft project restore ${project.key}\`.`,
         { project: project.key, projectStatus: 'archived' },
       )
     }
 
-    const unreadable = refuseUnreadableBody(actor, body.description, `cairn add "<title>" --project ${project.key} --body -`)
+    const unreadable = refuseUnreadableBody(actor, body.description, `croft add "<title>" --project ${project.key} --body -`)
     if (unreadable) return unreadable
 
     // A new task has no id yet, so it cannot be its own ancestor — the cycle

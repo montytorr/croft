@@ -4,16 +4,16 @@ import { stalenessFor } from './staleness'
 import { excerptAround } from './mentions'
 
 /**
- * What Cairn already knows that bears on one task (CAIRN-268).
+ * What Croft already knows that bears on one task (CROFT-268).
  *
  * `check` answers "has this subject been worked on" from a phrase. This starts
  * from a task and answers the question an agent has when it picks one up:
  * which decisions constrain it, and which facts apply. Two sources, one read:
  *
  *   decisions  resolutions, decision and finding notes on tasks related to
- *              this one — by a ref written either way (CAIRN-267), by parent,
+ *              this one — by a ref written either way (CROFT-267), by parent,
  *              child or dependency, or by a similar title
- *   knowledge  facts linked to the files this task touched (CAIRN-269),
+ *   knowledge  facts linked to the files this task touched (CROFT-269),
  *              learned on this task or a related one, or matching its terms
  *
  * Every line says why it was picked. A recall that cannot justify a line is a

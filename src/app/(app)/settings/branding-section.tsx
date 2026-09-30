@@ -76,14 +76,14 @@ const Preview = ({
  */
 export const BrandingSection = ({ initial }: { initial: BrandingValue }) => {
   const router = useRouter()
-  const [name, setName] = useState(initial.name === 'Cairn' ? '' : initial.name)
+  const [name, setName] = useState(initial.name === 'Croft' ? '' : initial.name)
   const [accent, setAccent] = useState(initial.accent ?? '')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
 
   const valid = accent === '' || HEX.test(accent)
   const palette = useMemo(() => (accent && HEX.test(accent) ? paletteFor(accent) : null), [accent])
-  const shownName = name.trim() || 'Cairn'
+  const shownName = name.trim() || 'Croft'
 
   const save = async (reset = false) => {
     setBusy(true)
@@ -111,8 +111,8 @@ export const BrandingSection = ({ initial }: { initial: BrandingValue }) => {
       description={
         <>
           What this instance is called and its colour, for everyone who signs in: the sidebar, tab titles,
-          the login page, the favicon and link previews. The mark stays the cairn, drawn in the accent, so
-          someone who uses more than one Cairn can tell at a glance which one this is.
+          the login page, the favicon and link previews. The mark stays the croft, drawn in the accent, so
+          someone who uses more than one Croft can tell at a glance which one this is.
         </>
       }
       footer={
@@ -147,7 +147,7 @@ export const BrandingSection = ({ initial }: { initial: BrandingValue }) => {
           <Input
             value={name}
             maxLength={60}
-            placeholder="Cairn"
+            placeholder="Croft"
             onChange={(e) => setName(e.target.value)}
             className="max-w-xs"
           />

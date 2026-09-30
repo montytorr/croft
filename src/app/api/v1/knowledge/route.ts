@@ -21,7 +21,7 @@ const listQuery = z.object({
   label: z.string().max(40).optional(),
   superseded: z.coerce.boolean().default(false),
   limit: z.coerce.number().int().min(1).max(200).default(50),
-  /** Instead of a list: current entries nobody was given in this many days (CAIRN-270). */
+  /** Instead of a list: current entries nobody was given in this many days (CROFT-270). */
   unused: z.coerce.number().int().min(1).max(365).optional(),
 })
 
@@ -49,7 +49,7 @@ export const GET = route({
     // Naming an unknown project is the caller's mistake, not a server fault.
     // Left to the shared handler it became "Something went wrong." and was
     // logged as unhandled — which is how a typo would have read as a bug in
-    // Cairn. POST below has always reported its own message; this matches it.
+    // Croft. POST below has always reported its own message; this matches it.
     let rows
     try {
       rows = await listKnowledge(actor.userId, {
@@ -105,7 +105,7 @@ export const GET = route({
  * diagnostic nobody is obliged to run. 70 of them accumulated that way.
  *
  * What the refusal has to carry is the near miss. 44 of those 70 point at a
- * fact Cairn already holds under a different slug — `capsolver-akamai-bug`
+ * fact Croft already holds under a different slug — `capsolver-akamai-bug`
  * where `capsolver-akamai-script-bug` exists — so the useful half of the
  * answer is not "that does not exist" but "that exists, spelt this way".
  */
@@ -113,12 +113,12 @@ const referenceCheck = async (body: string, slug: string) =>
   checkReferences({ body, slug, known: await knownSlugs() })
 
 /**
- * Entries that already say something about the same thing (CAIRN-289).
+ * Entries that already say something about the same thing (CROFT-289).
  *
  * `clawdius-server` described per-project Supabase stacks while
  * `active-clawdius-applications-use-two-native-postgresql-17-containers` said
  * the opposite; neither linked the other, because nothing at write time asked
- * whether the store already held a claim on the subject. `cairn add` has
+ * whether the store already held a claim on the subject. `croft add` has
  * always warned about similar existing work before filing a task; this is
  * the same question for a fact, asked after the write so it can never block
  * one. The precise arm only — at least half the title's distinctive terms —

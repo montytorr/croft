@@ -35,7 +35,7 @@ const actor = {
 }
 
 const read = (slug: string, headers: Record<string, string> = {}) =>
-  GET(new Request(`https://cairn.example.test/api/v1/knowledge/${slug}`, { headers }), {
+  GET(new Request(`https://croft.example.test/api/v1/knowledge/${slug}`, { headers }), {
     params: Promise.resolve({ slug }),
   })
 
@@ -47,7 +47,7 @@ const entry = {
 }
 
 /**
- * `cairn know <slug>` is the single path that most directly answers "do agents
+ * `croft know <slug>` is the single path that most directly answers "do agents
  * call knowledge when they need it", and it read and returned with no record of
  * having happened. recordSearch fired only from /api/v1/search.
  */
@@ -74,7 +74,7 @@ describe('GET /api/v1/knowledge/[slug] recall telemetry', () => {
 
   /**
    * The miss is the valuable one: an agent asking for a slug believed that fact
-   * existed, so a 404 here is a dangling reference (CAIRN-253) caught as it is
+   * existed, so a 404 here is a dangling reference (CROFT-253) caught as it is
    * followed. It must be a recorded event, not merely a missing one.
    */
   it('records a miss distinguishably, and still 404s', async () => {
@@ -94,7 +94,7 @@ describe('GET /api/v1/knowledge/[slug] recall telemetry', () => {
   it('passes on a read that says it is part of a sweep, so it is kept out of recall', async () => {
     mocks.getKnowledge.mockResolvedValue(entry)
 
-    await read('supabase-connection-pooling', { 'X-Cairn-Read': 'sweep' })
+    await read('supabase-connection-pooling', { 'X-Croft-Read': 'sweep' })
 
     expect(mocks.recordKnowledgeRead).toHaveBeenCalledWith(
       actor,

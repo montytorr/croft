@@ -8,7 +8,7 @@ import { hostOf } from './api/auth'
 import { withHost } from './api/activity'
 
 /**
- * CAIRN-290: the ways a correctly written CLI still ended up speaking with the
+ * CROFT-290: the ways a correctly written CLI still ended up speaking with the
  * wrong identity, from the wrong machine, or out of date — each exercised the
  * way a runtime meets it, by spawning the real file.
  *
@@ -19,7 +19,7 @@ import { withHost } from './api/activity'
  */
 
 const REPO = resolve(__dirname, '../..')
-const CLI = join(REPO, 'cli/cairn.mjs')
+const CLI = join(REPO, 'cli/croft.mjs')
 const NODE_DIR = dirname(process.execPath)
 const BASE_PATH = `${NODE_DIR}:/usr/bin:/bin:/usr/sbin:/sbin`
 
@@ -46,7 +46,7 @@ const serve = (headers: Record<string, string> = {}) =>
       seen.push({ url: req.url ?? '', headers: req.headers })
       res.writeHead(200, { 'content-type': 'application/json', ...headers })
       const data = req.url?.startsWith('/api/v1/health')
-        ? { status: 'ok', version: headers['x-cairn-version'] ?? '0.0.0', build: 'test' }
+        ? { status: 'ok', version: headers['x-croft-version'] ?? '0.0.0', build: 'test' }
         : []
       res.end(JSON.stringify({ success: true, data }))
     })
@@ -68,18 +68,18 @@ const run = (command: string, args: string[], env: Record<string, string>, cwd =
   })
 
 const homeWith = async (envFile: string) => {
-  const home = await temp('cairn-wiring-home-')
-  await mkdir(join(home, '.cairn'))
-  await writeFile(join(home, '.cairn/env'), envFile)
+  const home = await temp('croft-wiring-home-')
+  await mkdir(join(home, '.croft'))
+  await writeFile(join(home, '.croft/env'), envFile)
   return home
 }
 
 const bearer = (seen: Seen[]) => String(seen[0]?.headers.authorization ?? '').replace(/^Bearer /, '')
 
 const SPLIT = [
-  'CAIRN_API_KEY=cairn_default',
-  'CAIRN_API_KEY_CLAUDE_CODE=cairn_claude',
-  'CAIRN_API_KEY_CODEX=cairn_codex',
+  'CROFT_API_KEY=croft_default',
+  'CROFT_API_KEY_CLAUDE_CODE=croft_claude',
+  'CROFT_API_KEY_CODEX=croft_codex',
 ].join('\n')
 
 /**
@@ -106,10 +106,10 @@ describe('which runtime is innermost', () => {
   const setUp = async () => {
     const { base, seen } = await serve()
     const home = await homeWith(SPLIT)
-    const bin = await temp('cairn-wiring-bin-')
+    const bin = await temp('croft-wiring-bin-')
     const codex = await fakeRuntime(bin, 'codex')
     const claude = await fakeRuntime(bin, 'claude')
-    const env = { PATH: BASE_PATH, HOME: home, CAIRN_BASE_URL: base, CAIRN_HOST: 'test-box' }
+    const env = { PATH: BASE_PATH, HOME: home, CROFT_BASE_URL: base, CROFT_HOST: 'test-box' }
     return { seen, env, codex, claude }
   }
 
@@ -120,7 +120,7 @@ describe('which runtime is innermost', () => {
     const nested = { ...env, CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'cli', CODEX_THREAD_ID: 't-1' }
     const out = await run(codex, ['node', CLI, 'projects'], nested)
     expect(out.code, out.stderr).toBe(0)
-    expect(bearer(seen)).toBe('cairn_codex')
+    expect(bearer(seen)).toBe('croft_codex')
   })
 
   it('files a Claude Code started from a Codex shell as Claude Code', async () => {
@@ -128,23 +128,23 @@ describe('which runtime is innermost', () => {
     const nested = { ...env, CLAUDECODE: '1', CODEX_THREAD_ID: 't-1', CODEX_MANAGED_BY_NPM: '1' }
     const out = await run(codex, [claude, 'node', CLI, 'projects'], nested)
     expect(out.code, out.stderr).toBe(0)
-    expect(bearer(seen)).toBe('cairn_claude')
+    expect(bearer(seen)).toBe('croft_claude')
   })
 
   it('keeps plain Claude Code as Claude Code, and plain Codex as Codex', async () => {
     const claudeOnly = await setUp()
     await run('node', [CLI, 'projects'], { ...claudeOnly.env, CLAUDECODE: '1' })
-    expect(bearer(claudeOnly.seen)).toBe('cairn_claude')
+    expect(bearer(claudeOnly.seen)).toBe('croft_claude')
 
     const codexOnly = await setUp()
     await run('node', [CLI, 'projects'], { ...codexOnly.env, CODEX_THREAD_ID: 't-2' })
-    expect(bearer(codexOnly.seen)).toBe('cairn_codex')
+    expect(bearer(codexOnly.seen)).toBe('croft_codex')
   })
 
   it('keeps the old answer when the process tree names no runtime', async () => {
     const { seen, env } = await setUp()
     await run('node', [CLI, 'projects'], { ...env, CLAUDECODE: '1', CODEX_THREAD_ID: 't-3' })
-    expect(bearer(seen)).toBe('cairn_claude')
+    expect(bearer(seen)).toBe('croft_claude')
   })
 })
 
@@ -152,75 +152,75 @@ describe('the maintenance identity never borrows a key', () => {
   it('refuses, loudly and before sending anything, when it has no key of its own', async () => {
     const { base, seen } = await serve()
     const home = await homeWith(SPLIT)
-    const out = await run('node', [CLI, 'note', 'CAIRN-1', 'x'], {
-      PATH: BASE_PATH, HOME: home, CAIRN_BASE_URL: base, CAIRN_AGENT: 'maintenance',
+    const out = await run('node', [CLI, 'note', 'CROFT-1', 'x'], {
+      PATH: BASE_PATH, HOME: home, CROFT_BASE_URL: base, CROFT_AGENT: 'maintenance',
     })
     expect(out.code).toBe(3)
-    expect(out.stderr).toContain('CAIRN_API_KEY_MAINTENANCE')
+    expect(out.stderr).toContain('CROFT_API_KEY_MAINTENANCE')
     expect(seen).toHaveLength(0)
   })
 
   it('uses its own key when there is one', async () => {
     const { base, seen } = await serve()
-    const home = await homeWith(`${SPLIT}\nCAIRN_API_KEY_MAINTENANCE=cairn_maint`)
+    const home = await homeWith(`${SPLIT}\nCROFT_API_KEY_MAINTENANCE=croft_maint`)
     const out = await run('node', [CLI, 'projects'], {
-      PATH: BASE_PATH, HOME: home, CAIRN_BASE_URL: base, CAIRN_AGENT: 'maintenance',
+      PATH: BASE_PATH, HOME: home, CROFT_BASE_URL: base, CROFT_AGENT: 'maintenance',
     })
     expect(out.code, out.stderr).toBe(0)
-    expect(bearer(seen)).toBe('cairn_maint')
+    expect(bearer(seen)).toBe('croft_maint')
   })
 
   it('still works on a machine that was never split into per-runtime keys', async () => {
     const { base, seen } = await serve()
-    const home = await homeWith('CAIRN_API_KEY=cairn_only')
+    const home = await homeWith('CROFT_API_KEY=croft_only')
     const out = await run('node', [CLI, 'projects'], {
-      PATH: BASE_PATH, HOME: home, CAIRN_BASE_URL: base, CAIRN_AGENT: 'maintenance',
+      PATH: BASE_PATH, HOME: home, CROFT_BASE_URL: base, CROFT_AGENT: 'maintenance',
     })
     expect(out.code, out.stderr).toBe(0)
-    expect(bearer(seen)).toBe('cairn_only')
+    expect(bearer(seen)).toBe('croft_only')
   })
 
   it('makes the sync job say so on every run, not only when it reports', async () => {
     const home = await homeWith(SPLIT)
     // --check writes nothing, which matters: the sync's targets include
-    // /usr/local/bin/cairn on whatever machine runs this suite.
-    const out = await run('node', ['scripts/sync-agent-files.mjs', '--check', '--notify', 'CAIRN-1'], {
-      PATH: BASE_PATH, HOME: home, CAIRN_AGENT: 'maintenance',
+    // /usr/local/bin/croft on whatever machine runs this suite.
+    const out = await run('node', ['scripts/sync-agent-files.mjs', '--check', '--notify', 'CROFT-1'], {
+      PATH: BASE_PATH, HOME: home, CROFT_AGENT: 'maintenance',
     })
-    expect(out.stdout).toContain('WARNING: CAIRN_AGENT=maintenance')
-    expect(out.stdout).toContain('CAIRN_API_KEY_MAINTENANCE')
+    expect(out.stdout).toContain('WARNING: CROFT_AGENT=maintenance')
+    expect(out.stdout).toContain('CROFT_API_KEY_MAINTENANCE')
     expect(out.code).not.toBe(0)
   })
 })
 
-describe('the sync job on a machine with several instances (CAIRN-301)', () => {
+describe('the sync job on a machine with several instances (CROFT-301)', () => {
   const withInstances = async (personalEnv: string) => {
     const home = await homeWith('')
-    await writeFile(join(home, '.cairn/instances.json'), JSON.stringify({
+    await writeFile(join(home, '.croft/instances.json'), JSON.stringify({
       version: 1, instances: { personal: { url: 'https://a.example' }, work: { url: 'https://b.example' } },
     }))
-    await mkdir(join(home, '.cairn/instances/personal'), { recursive: true })
-    await writeFile(join(home, '.cairn/instances/personal/env'), personalEnv)
+    await mkdir(join(home, '.croft/instances/personal'), { recursive: true })
+    await writeFile(join(home, '.croft/instances/personal/env'), personalEnv)
     return home
   }
   const check = (home: string, notify: string) =>
     run('node', ['scripts/sync-agent-files.mjs', '--check', '--notify', notify], {
-      PATH: BASE_PATH, HOME: home, CAIRN_AGENT: 'maintenance',
+      PATH: BASE_PATH, HOME: home, CROFT_AGENT: 'maintenance',
     })
 
   it('asks for the instance when --notify names only a ref', async () => {
-    const out = await check(await withInstances(SPLIT), 'CAIRN-1')
-    expect(out.stdout).toContain('does not say which one CAIRN-1 is on')
-    expect(out.stdout).toContain('<instance>:CAIRN-1')
+    const out = await check(await withInstances(SPLIT), 'CROFT-1')
+    expect(out.stdout).toContain('does not say which one CROFT-1 is on')
+    expect(out.stdout).toContain('<instance>:CROFT-1')
     expect(out.code).not.toBe(0)
   })
 
   it("checks the named instance's own env for a maintenance key", async () => {
-    const missing = await check(await withInstances(SPLIT), 'personal:CAIRN-1')
-    expect(missing.stdout).toContain(join('.cairn', 'instances', 'personal', 'env'))
+    const missing = await check(await withInstances(SPLIT), 'personal:CROFT-1')
+    expect(missing.stdout).toContain(join('.croft', 'instances', 'personal', 'env'))
     expect(missing.code).not.toBe(0)
 
-    const present = await check(await withInstances(`${SPLIT}\nCAIRN_API_KEY_MAINTENANCE=m`), 'personal:CAIRN-1')
+    const present = await check(await withInstances(`${SPLIT}\nCROFT_API_KEY_MAINTENANCE=m`), 'personal:CROFT-1')
     expect(present.stdout).not.toContain('WARNING')
   })
 })
@@ -228,21 +228,21 @@ describe('the sync job on a machine with several instances (CAIRN-301)', () => {
 describe('the machine travels beside the actor', () => {
   it('sends the host, and the actor key is unchanged', async () => {
     const { base, seen } = await serve()
-    const home = await homeWith('CAIRN_API_KEY=cairn_only')
-    await run('node', [CLI, 'projects'], { PATH: BASE_PATH, HOME: home, CAIRN_BASE_URL: base, CAIRN_HOST: 'clawdius' })
-    expect(seen[0]?.headers['x-cairn-host']).toBe('clawdius')
+    const home = await homeWith('CROFT_API_KEY=croft_only')
+    await run('node', [CLI, 'projects'], { PATH: BASE_PATH, HOME: home, CROFT_BASE_URL: base, CROFT_HOST: 'clawdius' })
+    expect(seen[0]?.headers['x-croft-host']).toBe('clawdius')
   })
 
   it('drops a host it could not store safely rather than sanitising it', async () => {
     const { base, seen } = await serve()
-    const home = await homeWith('CAIRN_API_KEY=cairn_only')
-    await run('node', [CLI, 'projects'], { PATH: BASE_PATH, HOME: home, CAIRN_BASE_URL: base, CAIRN_HOST: 'a b;c' })
-    expect(seen[0]?.headers['x-cairn-host']).toBeUndefined()
+    const home = await homeWith('CROFT_API_KEY=croft_only')
+    await run('node', [CLI, 'projects'], { PATH: BASE_PATH, HOME: home, CROFT_BASE_URL: base, CROFT_HOST: 'a b;c' })
+    expect(seen[0]?.headers['x-croft-host']).toBeUndefined()
   })
 
   it('is read by the server with the same filter, and folded into event data', () => {
     const req = (host?: string) =>
-      new Request('http://x', { headers: host === undefined ? {} : { 'x-cairn-host': host } })
+      new Request('http://x', { headers: host === undefined ? {} : { 'x-croft-host': host } })
     expect(hostOf(req('mac-mini.local'))).toBe('mac-mini.local')
     expect(hostOf(req('a b'))).toBeNull()
     expect(hostOf(req())).toBeNull()
@@ -259,18 +259,18 @@ describe('which side of a drift is newer', () => {
 
   const warn = async (headers: Record<string, string>, args = ['projects']) => {
     const { base } = await serve(headers)
-    const home = await homeWith('CAIRN_API_KEY=cairn_only')
-    return run('node', [CLI, ...args], { PATH: BASE_PATH, HOME: home, CAIRN_BASE_URL: base })
+    const home = await homeWith('CROFT_API_KEY=croft_only')
+    return run('node', [CLI, ...args], { PATH: BASE_PATH, HOME: home, CROFT_BASE_URL: base })
   }
 
   it('says the CLI is older when the server is a later release', async () => {
-    const { stderr } = await warn({ 'x-cairn-version': '99.0.0' })
+    const { stderr } = await warn({ 'x-croft-version': '99.0.0' })
     expect(stderr).toContain('this CLI is older than the server')
     expect(stderr).toContain('update:')
   })
 
   it('says the CLI is newer when the server is an earlier release, and does not tell it to update', async () => {
-    const { stderr } = await warn({ 'x-cairn-version': '0.0.1' })
+    const { stderr } = await warn({ 'x-croft-version': '0.0.1' })
     expect(stderr).toContain('this CLI is newer than the server')
     expect(stderr).not.toContain('update:')
   })
@@ -278,53 +278,53 @@ describe('which side of a drift is newer', () => {
   it('orders the same release by build time against install time', async () => {
     const version = await release()
     const future = new Date(Date.now() + 86_400_000).toISOString().replace(/\.\d+Z$/, 'Z')
-    const older = await warn({ 'x-cairn-version': version, 'x-cairn-cli': '0123456789abcdef', 'x-cairn-built-at': future })
+    const older = await warn({ 'x-croft-version': version, 'x-croft-cli': '0123456789abcdef', 'x-croft-built-at': future })
     expect(older.stderr).toContain('this CLI is older than the server')
 
-    const newer = await warn({ 'x-cairn-version': version, 'x-cairn-cli': '0123456789abcdef', 'x-cairn-built-at': '2001-01-01T00:00:00Z' })
+    const newer = await warn({ 'x-croft-version': version, 'x-croft-cli': '0123456789abcdef', 'x-croft-built-at': '2001-01-01T00:00:00Z' })
     expect(newer.stderr).toContain('this CLI is newer than the server')
   })
 
   it('is neutral when nothing can order them', async () => {
-    const { stderr } = await warn({ 'x-cairn-version': await release(), 'x-cairn-cli': '0123456789abcdef' })
+    const { stderr } = await warn({ 'x-croft-version': await release(), 'x-croft-cli': '0123456789abcdef' })
     expect(stderr).toContain('CLI and server differ')
   })
 
   it('names the scheduled job when this machine has one', async () => {
-    const { base } = await serve({ 'x-cairn-version': '99.0.0' })
-    const home = await homeWith('CAIRN_API_KEY=cairn_only')
-    await mkdir(join(home, '.cairn/maintenance'), { recursive: true })
-    await writeFile(join(home, '.cairn/maintenance/install-cron.mjs'), '')
-    const agent = join(home, 'Library/LaunchAgents/com.cairn.agent-files.plist')
+    const { base } = await serve({ 'x-croft-version': '99.0.0' })
+    const home = await homeWith('CROFT_API_KEY=croft_only')
+    await mkdir(join(home, '.croft/maintenance'), { recursive: true })
+    await writeFile(join(home, '.croft/maintenance/install-cron.mjs'), '')
+    const agent = join(home, 'Library/LaunchAgents/com.croft.agent-files.plist')
     await mkdir(dirname(agent), { recursive: true })
     await writeFile(agent, '')
-    const { stderr } = await run('node', [CLI, 'projects'], { PATH: BASE_PATH, HOME: home, CAIRN_BASE_URL: base })
+    const { stderr } = await run('node', [CLI, 'projects'], { PATH: BASE_PATH, HOME: home, CROFT_BASE_URL: base })
     expect(stderr).toContain(
       process.platform === 'darwin'
         ? 'launchctl kickstart gui/'
-        : `node ${join(home, '.cairn/maintenance/install-cron.mjs')} --run agent-files`,
+        : `node ${join(home, '.croft/maintenance/install-cron.mjs')} --run agent-files`,
     )
   })
 
   it('--version says it once', async () => {
-    const { stdout, stderr } = await warn({ 'x-cairn-version': '99.0.0' }, ['--version'])
+    const { stdout, stderr } = await warn({ 'x-croft-version': '99.0.0' }, ['--version'])
     expect(stdout).toContain('server 99.0.0')
     expect(stderr.match(/older than the server/g)).toHaveLength(1)
   })
 
   it('reads install time from the file itself', async () => {
     // A copy whose mtime is older than the build: the Mac after a merge.
-    const dir = await temp('cairn-wiring-copy-')
-    const copy = join(dir, 'cairn.mjs')
+    const dir = await temp('croft-wiring-copy-')
+    const copy = join(dir, 'croft.mjs')
     await writeFile(copy, `${await readFile(CLI, 'utf8')}\n// drifted\n`)
     await utimes(copy, new Date('2001-01-01'), new Date('2001-01-01'))
     const { base } = await serve({
-      'x-cairn-version': await release(),
-      'x-cairn-cli': '0123456789abcdef',
-      'x-cairn-built-at': '2020-01-01T00:00:00Z',
+      'x-croft-version': await release(),
+      'x-croft-cli': '0123456789abcdef',
+      'x-croft-built-at': '2020-01-01T00:00:00Z',
     })
-    const home = await homeWith('CAIRN_API_KEY=cairn_only')
-    const { stderr } = await run('node', [copy, 'projects'], { PATH: BASE_PATH, HOME: home, CAIRN_BASE_URL: base })
+    const home = await homeWith('CROFT_API_KEY=croft_only')
+    const { stderr } = await run('node', [copy, 'projects'], { PATH: BASE_PATH, HOME: home, CROFT_BASE_URL: base })
     expect(stderr).toContain('this CLI is older than the server')
   })
 })
@@ -332,11 +332,11 @@ describe('which side of a drift is newer', () => {
 describe('the installer and the per-Read hook CCS-40 removed', () => {
   const READ_HOOK = (prefix = '') => ({
     matcher: 'Read',
-    hooks: [{ type: 'command', command: `${prefix}node /old/home/.cairn/hooks/cairn-context.mjs`, async: true, timeout: 10 }],
+    hooks: [{ type: 'command', command: `${prefix}node /old/home/.croft/hooks/croft-context.mjs`, async: true, timeout: 10 }],
   })
 
   it('takes out its own Read hook, keeps everyone else’s, and is idempotent', async () => {
-    const home = await temp('cairn-wiring-hooks-')
+    const home = await temp('croft-wiring-hooks-')
     await mkdir(join(home, '.claude'))
     await mkdir(join(home, '.codex'))
     const foreignPre = { type: 'command', command: '/someone/else/pre.sh' }
@@ -354,10 +354,10 @@ describe('the installer and the per-Read hook CCS-40 removed', () => {
     const quarry = { type: 'command', command: 'node /x/.quarry/hooks/quarry-session-end.mjs' }
     await writeFile(
       join(home, '.codex/hooks.json'),
-      JSON.stringify({ hooks: { PreToolUse: [READ_HOOK('CAIRN_AGENT=codex ')], Stop: [{ hooks: [quarry] }] } }),
+      JSON.stringify({ hooks: { PreToolUse: [READ_HOOK('CROFT_AGENT=codex ')], Stop: [{ hooks: [quarry] }] } }),
     )
 
-    const env = { PATH: BASE_PATH, HOME: home, CAIRN_OPENCLAW_BIN: 'openclaw-not-installed' }
+    const env = { PATH: BASE_PATH, HOME: home, CROFT_OPENCLAW_BIN: 'openclaw-not-installed' }
     const first = await run('node', ['scripts/install-hooks.mjs'], env)
     expect(first.code, first.stderr).toBe(0)
 
@@ -367,8 +367,8 @@ describe('the installer and the per-Read hook CCS-40 removed', () => {
       { matcher: 'Bash', hooks: [{ type: 'command', command: '/guard.sh' }] },
     ])
     expect(Object.keys(claude.hooks).sort()).toEqual(['PreCompact', 'PreToolUse', 'SessionEnd', 'SessionStart', 'Stop'])
-    // The learn nudge blocks Stop, which only a synchronous hook can (CAIRN-323).
-    expect(claude.hooks.Stop).toEqual([{ hooks: [expect.objectContaining({ command: expect.stringMatching(/cairn-learn-nudge\.mjs$/) })] }])
+    // The learn nudge blocks Stop, which only a synchronous hook can (CROFT-323).
+    expect(claude.hooks.Stop).toEqual([{ hooks: [expect.objectContaining({ command: expect.stringMatching(/croft-learn-nudge\.mjs$/) })] }])
     expect(claude.hooks.Stop[0].hooks[0].async).toBeUndefined()
 
     const codex = JSON.parse(await readFile(join(home, '.codex/hooks.json'), 'utf8'))
@@ -377,15 +377,15 @@ describe('the installer and the per-Read hook CCS-40 removed', () => {
     expect(codex.hooks.Stop.flatMap((g: { hooks: unknown[] }) => g.hooks)).toContainEqual(quarry)
     expect(first.stdout).toContain('Stop (runs every turn): node /x/.quarry/hooks/quarry-session-end.mjs')
     // Stop is a live checkpoint and SessionEnd closes the session: a Stop that
-    // ended it closed every Codex session on its first turn (CAIRN-319).
-    const cairnCommand = (event: string, script = 'cairn-session-end.mjs') =>
+    // ended it closed every Codex session on its first turn (CROFT-319).
+    const croftCommand = (event: string, script = 'croft-session-end.mjs') =>
       codex.hooks[event]
         .flatMap((g: { hooks: { command: string }[] }) => g.hooks)
         .map((h: { command: string }) => h.command)
         .find((command: string) => command.includes(script))
-    expect(cairnCommand('Stop')).toMatch(/cairn-session-end\.mjs --ongoing$/)
-    expect(cairnCommand('Stop', 'cairn-learn-nudge.mjs')).toMatch(/cairn-learn-nudge\.mjs$/)
-    expect(cairnCommand('SessionEnd')).toMatch(/cairn-session-end\.mjs$/)
+    expect(croftCommand('Stop')).toMatch(/croft-session-end\.mjs --ongoing$/)
+    expect(croftCommand('Stop', 'croft-learn-nudge.mjs')).toMatch(/croft-learn-nudge\.mjs$/)
+    expect(croftCommand('SessionEnd')).toMatch(/croft-session-end\.mjs$/)
     expect(first.stdout).toContain('removed the per-Read PreToolUse hook')
 
     const second = await run('node', ['scripts/install-hooks.mjs'], env)
@@ -397,23 +397,23 @@ describe('the installer and the per-Read hook CCS-40 removed', () => {
 
 describe('the Mac sync job', () => {
   const render = async (flag: string) => {
-    const home = await temp('cairn-wiring-cron-')
+    const home = await temp('croft-wiring-cron-')
     const sync = join(home, 'sync.mjs')
-    const cli = join(home, 'cairn')
+    const cli = join(home, 'croft')
     await writeFile(sync, '')
     await writeFile(cli, '')
     return run('node', ['scripts/install-cron.mjs', flag], {
       PATH: BASE_PATH,
       HOME: home,
-      CAIRN_SYNC_SCRIPT: sync,
-      CAIRN_CLI_PATH: cli,
-      CAIRN_NODE_PATH: process.execPath,
-      CAIRN_LOG_DIR: home,
+      CROFT_SYNC_SCRIPT: sync,
+      CROFT_CLI_PATH: cli,
+      CROFT_NODE_PATH: process.execPath,
+      CROFT_LOG_DIR: home,
     })
   }
 
   const agentFilesPlist = (stdout: string) => {
-    const start = stdout.indexOf('<string>com.cairn.agent-files</string>')
+    const start = stdout.indexOf('<string>com.croft.agent-files</string>')
     return stdout.slice(start, stdout.indexOf('</plist>', start))
   }
 
@@ -426,14 +426,14 @@ describe('the Mac sync job', () => {
     }
     expect(plist).not.toContain('<key>StartInterval</key>')
     // Nothing else changed: the other jobs still wait for their slot.
-    const reconcile = stdout.slice(stdout.indexOf('<string>com.cairn.reconcile</string>'))
+    const reconcile = stdout.slice(stdout.indexOf('<string>com.croft.reconcile</string>'))
     expect(reconcile.slice(0, reconcile.indexOf('</plist>'))).toContain('<key>RunAtLoad</key><false/>')
   })
 
   it('leaves the server crontab hourly, where the deploy is the trigger', async () => {
     const { stdout } = await render('--cron')
-    // Every value is single-quoted for the shell now (CAIRN-... F2), so this
+    // Every value is single-quoted for the shell now (CROFT-... F2), so this
     // matches the rendered line rather than pinning its old unquoted shape.
-    expect(stdout).toMatch(/^23 \* \* \* \* CAIRN_AGENT='maintenance' .*sync\.mjs'/m)
+    expect(stdout).toMatch(/^23 \* \* \* \* CROFT_AGENT='maintenance' .*sync\.mjs'/m)
   })
 })

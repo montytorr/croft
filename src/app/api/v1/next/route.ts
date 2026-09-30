@@ -54,7 +54,7 @@ export const GET = route({
     // Resolved before filtering, never matched as a string. `--project AC`
     // after AC became HOL filtered on a key no row carries any more and
     // answered "nothing open" about a project with open work — an answer that
-    // reads as true (CAIRN-264). A key that was never anyone's is refused for
+    // reads as true (CROFT-264). A key that was never anyone's is refused for
     // the same reason: "nothing open" is not what a typo deserves.
     const resolved = query.project ? await resolveProject(query.project) : null
     if (query.project && !resolved) return fail('not_found', `No project ${query.project}.`)

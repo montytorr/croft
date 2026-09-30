@@ -1,5 +1,5 @@
 /**
- * A cairn on a trail: what the product is named for, drawn large for the one
+ * A croft on a trail: what the product is named for, drawn large for the one
  * page that has room for it. Flat, in the mark's own geometry — rounded
  * stones, no shading — so it reads as the logo grown up rather than a render.
  * The stones settle into place one after another; a dotted path leads to them.
@@ -17,7 +17,7 @@ const STONES = [
 ]
 const HEIGHT = 30
 
-export const CairnIllustration = ({ className }: { className?: string }) => (
+export const CroftIllustration = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 240 270" className={className} aria-hidden>
     <path
       d="M-10 262 C 20 258, 18 250, 40 248"

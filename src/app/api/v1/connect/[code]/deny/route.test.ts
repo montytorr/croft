@@ -14,7 +14,7 @@ vi.mock('@/lib/api/connect', async (importOriginal) => {
 import { ConnectError } from '@/lib/api/connect'
 import { POST } from './route'
 
-const ORIGIN = 'https://cairn.example.test'
+const ORIGIN = 'https://croft.example.test'
 const post = () =>
   POST(
     new Request(`${ORIGIN}/api/v1/connect/BCDF-2345/deny`, { method: 'POST', headers: { origin: ORIGIN } }),

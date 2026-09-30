@@ -74,5 +74,5 @@ create index knowledge_entities_entity_idx on knowledge_entities (entity_id);
 -- three groupings named after somebody else's companies.
 --
 -- An entity is only ever worth what the person filing knowledge means by it, so
--- they are created where that is known: `cairn entities`, or Settings.
+-- they are created where that is known: `croft entities`, or Settings.
 -- ---------------------------------------------------------------------------

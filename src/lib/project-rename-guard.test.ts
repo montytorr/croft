@@ -43,7 +43,7 @@ describe('renaming a project key keeps old refs working', () => {
     // shows the new ref, so a reader holding the old one cannot tell they
     // found the right task.
     // formerRefsOf is the version that only claims keys retired after the
-    // task was filed (CAIRN-264).
+    // task was filed (CROFT-264).
     const page = read('src/app/(app)/projects/[key]/tasks/[number]/page.tsx')
     expect(page).toContain('formerRefsOf')
     // Beside the imported ref, not instead of it: a renamed project imported
@@ -52,7 +52,7 @@ describe('renaming a project key keeps old refs working', () => {
   })
 
   it('says so when an old address redirects', () => {
-    // A silent swap of AC-113 for HOL-113 is the thing CAIRN-264 fixed; the
+    // A silent swap of AC-113 for HOL-113 is the thing CROFT-264 fixed; the
     // redirect carries a marker and both pages render the notice from it.
     const task = read('src/app/(app)/projects/[key]/tasks/[number]/page.tsx')
     const project = read('src/app/(app)/projects/[key]/page.tsx')
@@ -86,7 +86,7 @@ describe('renaming a project key keeps old refs working', () => {
 })
 
 /**
- * Resolving an old ref silently was half of CAIRN-264. AC became HOL and every
+ * Resolving an old ref silently was half of CROFT-264. AC became HOL and every
  * surface kept working while none of them said so: `show AC-113` returned
  * HOL-113 with no explanation, and `next --project AC` answered "nothing open"
  * about a project with open work, because it matched the key as a string.
@@ -137,7 +137,7 @@ describe('a rename is told, not only resolved', () => {
 
   it('titles rename rows in the feed by transforming the installed function', () => {
     // Re-copying activity_feed from an older file would revert everything
-    // since — the failure 050 made with cairn_vitals.
+    // since — the failure 050 made with croft_vitals.
     const migration = read('migrations/057_project_renames_are_told.sql')
     expect(migration).toContain("pg_get_functiondef(fn)")
     expect(migration).not.toMatch(/create or replace function (public\.)?activity_feed/i)

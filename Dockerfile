@@ -19,16 +19,16 @@ ARG GIT_SHA=unknown
 COPY . .
 RUN echo "$GIT_SHA" > public/build-version.txt || (mkdir -p public && echo "$GIT_SHA" > public/build-version.txt)
 # When, so a CLI whose fingerprint disagrees can tell which side is newer:
-# its own mtime against this (CAIRN-290). Below `COPY . .`, so it is rebuilt
+# its own mtime against this (CROFT-290). Below `COPY . .`, so it is rebuilt
 # with every source change rather than cached from the first build.
 RUN date -u +%Y-%m-%dT%H:%M:%SZ > public/build-time.txt
 # The fingerprint of the CLI this image was built beside, so a copied
-# ~/.local/bin/cairn can tell whether it is the current file rather than
+# ~/.local/bin/croft can tell whether it is the current file rather than
 # whether it belongs to the current release — 133 commits fitted inside
-# v0.5.1, so the version answers almost nothing (CAIRN-261). Written here
+# v0.5.1, so the version answers almost nothing (CROFT-261). Written here
 # because the standalone build does not trace `cli/`, and into public/ because
 # that directory is already carried into the runtime image.
-RUN node -e "const{createHash}=require('node:crypto'),{readFileSync,writeFileSync}=require('node:fs');writeFileSync('public/cli-hash.txt',createHash('sha256').update(readFileSync('cli/cairn.mjs')).digest('hex').slice(0,16))"
+RUN node -e "const{createHash}=require('node:crypto'),{readFileSync,writeFileSync}=require('node:fs');writeFileSync('public/cli-hash.txt',createHash('sha256').update(readFileSync('cli/croft.mjs')).digest('hex').slice(0,16))"
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 

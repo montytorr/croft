@@ -28,7 +28,7 @@ export const resolveProjectKeys = async (keys: string[]): Promise<ResolvedProjec
   const found = new Map((data ?? []).map((row) => [row.key as string, row.id as string]))
 
   // A retired key names the project it became. Refusing it as "no such
-  // project" is the answer CAIRN-264 exists to end.
+  // project" is the answer CROFT-264 exists to end.
   for (const key of wanted) {
     if (found.has(key)) continue
     try {

@@ -148,7 +148,7 @@ describe('rankNext across concurrent sessions', () => {
   it('treats a claim that names no session as the callers own, as before', () => {
     // Claimed before the column existed, or by a runtime that cannot name
     // itself. "Cannot tell" must not become "somebody else's", or every
-    // pre-existing claim would vanish from `cairn next` at once.
+    // pre-existing claim would vanish from `croft next` at once.
     const out = rankNext([held(null)], { me: 'claude-code', now: NOW, mySession: 'my-session' })
     expect(out[0]?.tier).toBe('holding')
   })
@@ -175,7 +175,7 @@ describe('rankNext across concurrent sessions', () => {
 })
 
 /**
- * Whose it is (CAIRN-310).
+ * Whose it is (CROFT-310).
  *
  * The claim says which agent is on a task; the assignee says which human it
  * belongs to. An agent asking what to pick up is asking on behalf of its

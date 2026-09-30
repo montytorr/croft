@@ -16,14 +16,14 @@ export const withFakePool = async <T>(
   const statements: string[] = []
   const parameters: unknown[][] = []
   const scope = globalThis as typeof globalThis & {
-    __cairnPool?: unknown
-    __cairnJsonColumns?: unknown
+    __croftPool?: unknown
+    __croftJsonColumns?: unknown
   }
-  const priorPool = scope.__cairnPool
-  const priorJson = scope.__cairnJsonColumns
+  const priorPool = scope.__croftPool
+  const priorJson = scope.__croftJsonColumns
 
-  scope.__cairnJsonColumns = Promise.resolve(new Set<string>())
-  scope.__cairnPool = {
+  scope.__croftJsonColumns = Promise.resolve(new Set<string>())
+  scope.__croftPool = {
     connect: async () => ({
       query: async (sql: string, values: unknown[] = []) => {
         statements.push(sql)
@@ -37,7 +37,7 @@ export const withFakePool = async <T>(
   try {
     return { result: await run(), statements, parameters }
   } finally {
-    scope.__cairnPool = priorPool
-    scope.__cairnJsonColumns = priorJson
+    scope.__croftPool = priorPool
+    scope.__croftJsonColumns = priorJson
   }
 }

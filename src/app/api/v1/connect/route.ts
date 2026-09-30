@@ -37,12 +37,12 @@ export const POST = async (req: Request): Promise<Response> => {
   if (!parsed.success) return failValidation(parsed.error.issues)
 
   try {
-    // CAIRN_BASE_URL first, same variable the CLI and layout.tsx already use
+    // CROFT_BASE_URL first, same variable the CLI and layout.tsx already use
     // for "the public URL of this instance" — it is the only correct answer
     // behind a reverse proxy with no public hostname of its own to report.
     // Falling back to the request's served origin (the same origin CSRF
     // protection trusts, in handler.ts) covers a bare local/dev deployment.
-    const baseUrl = (process.env.CAIRN_BASE_URL || servedOrigin(req)).replace(/\/+$/, '')
+    const baseUrl = (process.env.CROFT_BASE_URL || servedOrigin(req)).replace(/\/+$/, '')
     const created = await createConnectRequest({
       host: parsed.data.host,
       runtimes: [...new Set(parsed.data.runtimes)],

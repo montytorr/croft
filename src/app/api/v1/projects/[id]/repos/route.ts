@@ -8,7 +8,7 @@ import { resolveProject } from '@/lib/api/project-keys'
 
 export const dynamic = 'force-dynamic'
 
-/** Through a retired key too, so `cairn map AC` claims the repo for HOL. */
+/** Through a retired key too, so `croft map AC` claims the repo for HOL. */
 const resolve = async (idOrKey: string) => (await resolveProject(idOrKey))?.project ?? null
 
 const linkRepo = z.object({
@@ -38,7 +38,7 @@ export const GET = route<{ id: string }>({
  * Claim a repository for this project, so every clone of it resolves without
  * anything stored on the machine doing the asking.
  *
- * Idempotent: re-running `cairn map` in a fresh clone must not fail, and it is
+ * Idempotent: re-running `croft map` in a fresh clone must not fail, and it is
  * the natural way to refresh a root commit recorded from a shallow checkout.
  */
 export const POST = route<{ id: string }, z.infer<typeof linkRepo>>({
