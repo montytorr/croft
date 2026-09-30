@@ -73,6 +73,19 @@ describe('CROFT_SHARE_LOCATION', () => {
     expect(leaks(seen).some((l) => l.startsWith('cwd'))).toBe(true)
   })
 
+  it('the brief never sends the directory, even with location shared; context --cwd still does', async () => {
+    const seen: Seen[] = []
+    const base = await serve(seen)
+    await run(['context', '--brief', '--cwd', '/tmp/repo'], base)
+    const brief = seen.filter((s) => s.url.startsWith('/api/v1/subjects/brief'))
+    expect(brief.length).toBe(1)
+    expect(new URL(brief[0]!.url, 'http://x').searchParams.has('cwd')).toBe(false)
+
+    await run(['context', '--cwd', '/tmp/repo'], base)
+    const context = seen.find((s) => s.url.startsWith('/api/v1/context'))
+    expect(new URL(context!.url, 'http://x').searchParams.get('cwd')).toBe('/tmp/repo')
+  })
+
   it('off: no cwd, no repo, no hostname, for the brief and the full context', async () => {
     const seen: Seen[] = []
     const base = await serve(seen)

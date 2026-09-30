@@ -12,12 +12,19 @@
  *
  *   node scripts/sync-agent-files.mjs --check   # report drift, write nothing
  *   node scripts/sync-agent-files.mjs           # make every reachable copy match
+ *   node sync-agent-files.mjs --source https://raw.githubusercontent.com/montytorr/croft/v0.3.0
  *
  * Targets that do not apply to this machine are skipped, not invented: a file
  * in a directory no runtime reads is worse than no file at all. The built-in
  * targets are this user's own; anything else — another user's home, a runtime
  * with a tree of its own — is named by `--also`, because which copies exist is
  * a fact about a machine rather than about Croft.
+ *
+ * What this writes is code every agent session on the machine then runs, with
+ * that user's rights, so where it comes from is the whole security question.
+ * A scheduled run syncs from the tag of the release `croft setup` installed,
+ * never from a branch any push can move; it fetches every file before writing
+ * any; and it never replaces itself from the network. See `resolveSource`.
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -32,14 +39,6 @@ const arg = (name) => {
   const index = process.argv.indexOf(name)
   return index === -1 ? null : process.argv[index + 1]
 }
-
-/**
- * Where the canonical files come from: a checkout, or the public repository.
- *
- * `--source <url>` is for the machine that has no checkout. raw.githubusercontent
- * cannot drift and is the same main branch the deploy already builds from.
- */
-const SOURCE = arg('--source') ?? join(HERE, '..')
 
 const home = homedir()
 
@@ -73,9 +72,12 @@ const ARTEFACTS = [
     // of the checkout to a stable path so a scheduled job does not depend on a
     // working tree that can be moved or checked out to a branch, and that copy
     // then goes stale exactly like every other copy here did.
+    //
+    // `self`: never replaced from a remote source — see REMOTE below.
     name: 'maintenance',
     file: 'scripts/sync-agent-files.mjs',
     mode: 0o755,
+    self: true,
     targets: [
       at('/opt/croft-maintenance/sync-agent-files.mjs', '/opt/croft-maintenance/sync-agent-files.mjs'),
       at(
@@ -113,6 +115,7 @@ const ARTEFACTS = [
     name: 'maintenance:cron',
     file: 'scripts/install-cron.mjs',
     mode: 0o755,
+    self: true,
     targets: [
       at('/opt/croft-maintenance/install-cron.mjs', '/opt/croft-maintenance/install-cron.mjs'),
       at(
@@ -235,7 +238,9 @@ const RETRY_DELAYS_MS = (process.env.CROFT_SYNC_RETRY_MS ?? '5000,15000,30000,45
 const fetchWithRetry = async (url) => {
   for (let attempt = 0; ; attempt += 1) {
     try {
-      return await fetch(url)
+      // Bounded per attempt: a server that accepts the connection and never
+      // answers would otherwise hold a scheduled run open until the next one.
+      return await fetch(url, { signal: AbortSignal.timeout(30_000) })
     } catch (error) {
       if (attempt >= RETRY_DELAYS_MS.length) throw error
       const why = error.cause?.code ?? error.message
@@ -245,18 +250,182 @@ const fetchWithRetry = async (url) => {
   }
 }
 
+/**
+ * The run stops here, before a single file is touched, and says why.
+ *
+ * Every way of not knowing what to install ends in this one place, and none of
+ * them falls back to anything: a sync that cannot say which release it should
+ * be installing and installs *something* anyway is the failure this guards
+ * against. Exit 1, so launchd, cron and `--run` all see a job that did not do
+ * its work — the copies stay as they were, which is stale at worst.
+ */
+const refuse = (why) => {
+  console.log(`\nNOT SYNCED: ${why}`)
+  console.log('Nothing was written. The copies on this machine are unchanged.')
+  process.exit(1)
+}
+
+const DEFAULT_REPO = 'https://raw.githubusercontent.com/montytorr/croft'
+
+/**
+ * The URL every scheduled job was rendered with before jobs were pinned.
+ *
+ * A job keeps its command line until `croft setup` runs again, but the script
+ * that command names was replaced by the very sync it ran — so the first run
+ * of this file on such a machine is the one chance to stop following `main`
+ * without waiting for anybody to re-run anything. It is read as the installed
+ * release. Following a branch is still possible, on purpose: CROFT_RAW_BASE on
+ * the installer renders `--unpinned` beside it, and nothing else does.
+ */
+const LEGACY_MAIN = `${DEFAULT_REPO}/main`
+const UNPINNED = process.argv.includes('--unpinned')
+
+/**
+ * A release number as package.json spells it, and nothing else: it becomes a
+ * path segment in a URL whose answer is executed, so `main`, `../x`,
+ * `1.2.3/../../evil` or an empty string must never get there.
+ */
+const RELEASE = /^\d{1,4}\.\d{1,4}\.\d{1,6}(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$/
+
+/**
+ * https only, bar loopback. What comes back from a remote source is run by
+ * every agent session on the machine, so a plain-http base would hand that to
+ * anyone on the path between the two.
+ */
+const remoteBase = (label, given) => {
+  const trimmed = given.replace(/\/+$/, '')
+  let url
+  try {
+    url = new URL(trimmed)
+  } catch {
+    return refuse(`${label} ${given} is not a URL`)
+  }
+  const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) {
+    return refuse(`${label} ${given} is not https — these files are code, and are not fetched in the clear`)
+  }
+  if (url.search || url.hash || url.username || url.password) {
+    return refuse(`${label} ${given} carries a query, fragment or credentials; give the bare base URL`)
+  }
+  if (trimmed.split('/').some((segment) => segment === '..' || segment === '.')) {
+    return refuse(`${label} ${given} has a . or .. segment`)
+  }
+  return trimmed
+}
+
+/**
+ * The release installed here: the version the CLI on this machine carries.
+ * That is the copy `croft setup` wrote from the release it unpacked, and the
+ * one a legacy job has been keeping in step with ever since.
+ */
+const installedRelease = () => {
+  const cli = ARTEFACTS.find((artefact) => artefact.name === 'cli')
+  for (const { path } of cli.targets) {
+    try {
+      const version = readFileSync(path, 'utf8').match(/^const VERSION = '([^']*)'/m)?.[1]
+      if (version !== undefined) {
+        return RELEASE.test(version)
+          ? version
+          : refuse(`${path} says it is version ${JSON.stringify(version)}, which is not a release number`)
+      }
+    } catch {
+      // not installed at this path
+    }
+  }
+  return refuse('no installed croft CLI to read the release from. Run `croft setup` to install and pin one.')
+}
+
+/**
+ * Where the canonical files come from, and whether that is the network.
+ *
+ *   (no --source)                 the checkout this script sits in
+ *   --source <dir>                a checkout or a deploy's tree, on disk
+ *   --source <base>/v<release>    that tag — what `croft setup` schedules
+ *   --source <url> --unpinned     exactly that base; a branch, on purpose
+ *
+ * A remote source that is not a release tag is refused unless --unpinned says
+ * a branch is meant: following `main` is a decision, not a default. The tags
+ * of the pre-pinning URL come from CROFT_RAW_REPO when it is set (a mirror only
+ * has to serve the same paths under `v<version>/`).
+ */
+const resolveSource = () => {
+  const given = arg('--source')
+  if (given === null) return join(HERE, '..')
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(given)) {
+    if (!given) refuse('--source is empty')
+    return given
+  }
+  if (given.replace(/\/+$/, '') === LEGACY_MAIN && !UNPINNED) {
+    const version = installedRelease()
+    const repo = remoteBase('CROFT_RAW_REPO', process.env.CROFT_RAW_REPO || DEFAULT_REPO)
+    console.log(`--source ${LEGACY_MAIN} is the pre-pinning default; pinning to the installed release instead`)
+    console.log(`release   v${version}`)
+    return `${repo}/v${version}`
+  }
+  const base = remoteBase('--source', given)
+  if (UNPINNED) {
+    console.log(`unpinned  follows ${base} as it moves (--unpinned)`)
+    return base
+  }
+  const tag = base.slice(base.lastIndexOf('/') + 1)
+  if (!tag.startsWith('v') || !RELEASE.test(tag.slice(1))) {
+    return refuse(
+      `--source ${given} does not end in a release tag (v<major>.<minor>.<patch>). ` +
+        'A branch is followed only with --unpinned (CROFT_RAW_BASE on install-cron.mjs).',
+    )
+  }
+  console.log(`release   ${tag}`)
+  return base
+}
+
+const SOURCE = resolveSource()
+
+/**
+ * The network is not trusted with the repairer itself.
+ *
+ * A script that rewrites its own code from a URL on a timer cannot be audited
+ * once it is installed: whatever was reviewed is gone by the next slot. So from
+ * a remote source the two maintenance scripts are never written — they change
+ * when `croft setup` runs, which places them from the release it unpacked, or
+ * when the source is a tree on disk (a checkout, or the deploy's own tree),
+ * which somebody put there on purpose.
+ */
+const REMOTE = /^https?:\/\//.test(SOURCE)
+console.log(`source    ${SOURCE}`)
+
 const readSource = async (file) => {
-  if (!/^https?:\/\//.test(SOURCE)) return readFileSync(join(SOURCE, file))
-  const response = await fetchWithRetry(`${SOURCE.replace(/\/+$/, '')}/${file}`)
+  if (!REMOTE) return readFileSync(join(SOURCE, file))
+  const response = await fetchWithRetry(`${SOURCE}/${file}`)
   if (!response.ok) throw new Error(`${file} returned ${response.status}`)
   return Buffer.from(await response.arrayBuffer())
+}
+
+/**
+ * Every file is read before any is written. One that cannot be fetched — a tag
+ * a mirror never got, a CDN hiccup halfway down the list — used to throw after
+ * the files before it had been replaced, leaving a machine on two releases at
+ * once. Now it is all of them or none.
+ */
+const sources = new Map()
+for (const artefact of ARTEFACTS) {
+  if (REMOTE && artefact.self) continue
+  try {
+    sources.set(artefact.name, await readSource(artefact.file))
+  } catch (error) {
+    refuse(`could not read ${artefact.file} from ${SOURCE} (${error.cause?.code ?? error.code ?? error.message})`)
+  }
 }
 
 const repaired = []
 let drifted = 0
 
 for (const artefact of ARTEFACTS) {
-  const source = await readSource(artefact.file)
+  if (!sources.has(artefact.name)) {
+    console.log(`\n${artefact.name}  ${artefact.file}`)
+    console.log('  skipped   (updated by `croft setup`, never from a remote source)')
+    continue
+  }
+  const source = sources.get(artefact.name)
   const canonical = hash(source)
   console.log(`\n${artefact.name}  ${canonical}  ${artefact.file}`)
 

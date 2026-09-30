@@ -52,10 +52,17 @@ It is also, deliberately, a thing agents write to unattended. That shapes what m
 - The Cairn API key an administrator stores for push and sync is sealed with AES-256-GCM
   under `CROFT_SECRET_KEY` (derived from the signing key when unset) and never returned by
   the API. Rotating whichever key seals it makes it unreadable: store it again afterwards.
-- The CLI sends the working directory, the git remote and the hostname with the briefing
-  and `croft context`, so a shared instance learns how every member's machine is laid out.
-  `CROFT_SHARE_LOCATION=off` (environment or `~/.croft/env`) keeps all three on the
-  machine; `croft map` and `--project` still route work to a project.
+- The session briefing (`croft context --brief`) sends no working directory: the server
+  never used it. `croft context` sends the working directory and the git remote, and every
+  request carries the hostname, so a shared instance learns how every member's machine is
+  laid out. `CROFT_SHARE_LOCATION=off` (environment or `~/.croft/env`) keeps all three on
+  the machine; `croft map` and `--project` still route work to a project.
+- The agent-files job `croft setup` installs overwrites the CLI, the session hook and the
+  skill every 15 minutes (hourly on Linux). It syncs the tag of the release setup installed,
+  never a branch, over https only; it fetches every file before writing any, and never
+  replaces its own two scripts from the network. Following a branch takes an explicit
+  `CROFT_RAW_BASE` on the installer, and the job line then says `--unpinned`. Skip the job
+  with `croft setup --no-jobs`.
 - Put it behind TLS. The included compose example assumes a proxy that terminates it.
 - Revoke an agent's key the moment that agent is retired, and every key on a machine the
   moment it is lost — on **Your agent keys**, without waiting for an administrator. A revoked

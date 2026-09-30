@@ -1184,7 +1184,13 @@ const installedAt = () => {
  * The exact command that brings this machine's copy up to date, chosen by what
  * is installed here rather than by a guess about which host this is.
  */
-const updateCommand = () => {
+const updateCommand = (newerRelease = null) => {
+  // The agent-files job keeps this machine on the release `croft setup`
+  // installed, so it can repair a drifted copy but never moves to another
+  // release. That is the installer's job, run on purpose.
+  if (newerRelease) {
+    return `curl -fsSL https://raw.githubusercontent.com/montytorr/croft/main/install.sh | sh -s -- --url ${BASE}`
+  }
   const home = homedir()
   const agent = join(home, 'Library/LaunchAgents/com.croft.agent-files.plist')
   if (process.platform === 'darwin' && existsSync(agent)) {
@@ -1199,7 +1205,7 @@ const updateCommand = () => {
   }
   const sync = join(home, '.croft/maintenance/sync-agent-files.mjs')
   if (existsSync(sync)) {
-    return `node ${sync} --source https://raw.githubusercontent.com/montytorr/croft/main`
+    return `node ${sync} --source https://raw.githubusercontent.com/montytorr/croft/v${VERSION}`
   }
   return `copy cli/croft.mjs from the deployed commit over ${process.argv[1] ?? 'this file'}`
 }
@@ -1226,14 +1232,15 @@ const driftLine = (headers) => {
   }
   if (!detail) return null
 
-  if (order === -1) return `croft: this CLI is older than the server (${detail}) — update: ${updateCommand()}`
+  const newerRelease = version && version !== VERSION ? version : null
+  if (order === -1) return `croft: this CLI is older than the server (${detail}) — update: ${updateCommand(newerRelease)}`
   if (order === 1) {
     return (
       `croft: this CLI is newer than the server (${detail}) — probably a merge not deployed yet; ` +
       `nothing to do unless it persists`
     )
   }
-  return `croft: CLI and server differ (${detail}) — if the server is newer, update: ${updateCommand()}`
+  return `croft: CLI and server differ (${detail}) — if the server is newer, update: ${updateCommand(newerRelease)}`
 }
 
 let warnedStale = false
@@ -2627,7 +2634,11 @@ const renderBrief = (d, stages) => {
 }
 
 const brief = async () => {
-  const cwd = String(flags.cwd ?? process.cwd())
+  // --cwd is how a hook says which session this is for; it chose the instance
+  // (ROUTE_DIR) and stays on this machine. /subjects/brief narrows nothing by
+  // directory, so sending it would only tell a shared instance where this
+  // machine keeps its work.
+  void flags.cwd
   if (INSTANCE_REFUSAL || IDENTITY_REFUSAL || !KEY || !BASE) return
   const get = async (path) => {
     try {
@@ -2639,7 +2650,7 @@ const brief = async () => {
     }
   }
   const [data, stages] = await Promise.all([
-    get(`/api/v1/subjects/brief${SHARE_LOCATION ? `?${new URLSearchParams({ cwd })}` : ''}`),
+    get('/api/v1/subjects/brief'),
     get('/api/v1/stages'),
   ])
   if (!data) return
@@ -2769,6 +2780,9 @@ const HELP = `croft — the lab board: subjects to explore and prove, their todo
     croft setup --name <instance>  names the new one on a machine with several
     croft setup --runtimes claude-code,codex,openclaw   default: detected
     croft setup --no-skill | --no-hooks | --no-jobs     skip one step
+                                   (the job repairs the CLI, hook and skill to
+                                   the installed release's tag; CROFT_REPO=
+                                   <owner>/<name> installs and follows a fork)
     croft setup --maintenance      also install reconcile; its key needs an admin
     croft setup --dry-run          print the plan, change nothing
 
@@ -4529,6 +4543,13 @@ const commands = {
 
     // --- 5. release files ------------------------------------------------------
     const localSource = process.env.CROFT_SETUP_SOURCE
+    // The repository the release comes from, and the one whose tag the
+    // agent-files job then follows: CROFT_REPO, as install.sh reads it, so a
+    // machine installed from a fork is not handed the public release halfway.
+    const setupRepo = process.env.CROFT_REPO?.trim() || 'montytorr/croft'
+    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(setupRepo) || setupRepo.includes('..') || /(^|\/)\.(\/|$)/.test(setupRepo)) {
+      die(`CROFT_REPO=${JSON.stringify(setupRepo)} is not <owner>/<name>`)
+    }
     const releaseDir = localSource || join(CROFT_DIR, 'releases', VERSION)
     const releaseParts = ['scripts', 'hooks', 'skills', 'cli']
     const haveRelease = releaseParts.every((p) => existsSync(join(releaseDir, p)))
@@ -4538,9 +4559,9 @@ const commands = {
     } else if (haveRelease) {
       line(`– release   v${VERSION} already downloaded (~/.croft/releases/${VERSION})`)
     } else if (dry) {
-      line(`! release   would download v${VERSION} from GitHub`)
+      line(`! release   would download v${VERSION} from github.com/${setupRepo}`)
     } else {
-      const tarUrl = `https://codeload.github.com/montytorr/croft/tar.gz/refs/tags/v${VERSION}`
+      const tarUrl = `https://codeload.github.com/${setupRepo}/tar.gz/refs/tags/v${VERSION}`
       let res
       try {
         res = await fetch(tarUrl)
@@ -4645,6 +4666,18 @@ const commands = {
         line('– jobs      skipped (--no-jobs)')
       } else {
         const jobs = ['agent-files', ...(flags.maintenance ? ['reconcile'] : [])]
+        // What the one job every machine gets actually does, said before it is
+        // installed rather than left to be found in a plist: it overwrites code
+        // every agent session runs, on a timer.
+        const rawBase = process.env.CROFT_RAW_BASE?.trim()
+        const followed = rawBase
+          ? `${rawBase} (CROFT_RAW_BASE — follows that URL as it moves, unless it names a tag)`
+          : `v${VERSION}, the release installed here, from ${process.env.CROFT_RAW_REPO?.trim() || `github.com/${setupRepo}`}`
+        line(`– job       agent-files keeps ${tilde(join(HOME, '.local', 'bin', 'croft'))}, ~/.croft/hooks and the skill equal to`)
+        line(`   ${followed},`)
+        line(`   ${process.platform === 'darwin' ? 'every 15 minutes and at login' : 'hourly'}, overwriting any copy that differs. It never replaces`)
+        line('   itself from the network and never moves to a newer release: re-run setup for that.')
+        line(`   --no-jobs skips it; node ${tilde(join(releaseDir, 'scripts', 'install-cron.mjs'))} --remove --only agent-files takes it out`)
         const result = spawnSync(
           process.execPath,
           [join(releaseDir, 'scripts', 'install-cron.mjs'), ...(dry ? [] : ['--install']), '--only', jobs.join(',')],

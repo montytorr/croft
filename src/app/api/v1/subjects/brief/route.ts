@@ -7,7 +7,8 @@ export const dynamic = 'force-dynamic'
 /**
  * The lab block of a session briefing: how many subjects sit in each stage,
  * and up to three live ones the caller's human owns, active before planned.
- * `?cwd=` is accepted for the hook's sake and not yet used to narrow anything.
+ * Nothing narrows it by directory, so the CLI sends no `?cwd=`; one sent by an
+ * older CLI is ignored.
  */
 export const GET = route({
   handler: async ({ actor }) => ok(await subjectBrief(actor.userId)),

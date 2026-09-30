@@ -8,17 +8,39 @@
 # the scheduled jobs -- is `croft setup`'s job (cli/croft.mjs), not this
 # script's; duplicating that logic here in POSIX sh would be a second place
 # for it to drift out of step with the CLI it is supposed to install.
+#
+# From a fork or a private mirror on GitHub, name it:
+#
+#   curl -fsSL https://raw.githubusercontent.com/<owner>/<name>/main/install.sh \
+#     | CROFT_REPO=<owner>/<name> sh -s -- --url https://your-croft
+#
+# CROFT_REPO is <owner>/<name> and nothing else (it becomes part of a URL whose
+# answer is then run). `croft setup` reads the same variable, so the release it
+# unpacks and the tag the agent-files job follows come from that repository
+# too, rather than quietly from the public one.
 set -eu
 
 # Everything in one function, called on the last line: a download cut off
 # halfway defines a function it never calls, instead of running half a script.
 main() {
-  REPO="montytorr/croft"
+  REPO="${CROFT_REPO:-montytorr/croft}"
   BIN_DIR="$HOME/.local/bin"
   BIN="$BIN_DIR/croft"
 
   log() { printf '%s\n' "$*" >&2; }
   die() { log "install.sh: $*"; exit 1; }
+
+  # One slash, and on each side only what GitHub allows in a name. Anything
+  # else -- a second slash, "..", a space, a URL -- is refused, not cleaned up.
+  case "$REPO" in
+    */*/*|/*|*/|*..*|./*|*/.) die "CROFT_REPO=$REPO is not <owner>/<name>" ;;
+    */*) ;;
+    *) die "CROFT_REPO=$REPO is not <owner>/<name>" ;;
+  esac
+  case "$REPO" in
+    *[!A-Za-z0-9_./-]*) die "CROFT_REPO=$REPO is not <owner>/<name>" ;;
+  esac
+  export CROFT_REPO="$REPO"
 
   command -v node >/dev/null 2>&1 || die "node is not on PATH — install Node 22 or newer first"
 
