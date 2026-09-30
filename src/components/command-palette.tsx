@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { Settings, FileJson, FlaskConical, KeyRound, ListTodo, Search as SearchIcon, Moon, Plus } from 'lucide-react'
 import { useTheme } from 'next-themes'
-import { ProjectIcon, StatusIcon } from '@/components/icons'
+import { StatusIcon } from '@/components/icons'
+import type { LabProject } from '@/lib/lab/types'
 import type { TaskStatus, TaskType } from '@/schemas/task'
 import { useCreateTask } from '@/components/task-creation'
 import { useCreateSubject } from '@/components/subject-creation'
@@ -64,7 +65,8 @@ const groupClass =
   '[&_[cmdk-group-heading]]:text-[0.65625rem] [&_[cmdk-group-heading]]:font-medium ' +
   '[&_[cmdk-group-heading]]:tracking-[0.06em] [&_[cmdk-group-heading]]:uppercase'
 
-export const CommandPalette = ({ projects }: { projects: { key: string; title: string }[] }) => {
+/** Lab projects are filters on the lab, so the palette jumps to the lab filtered to one. */
+export const CommandPalette = ({ labProjects }: { labProjects: Pick<LabProject, 'id' | 'name' | 'color'>[] }) => {
   const router = useRouter()
   const { resolvedTheme, setTheme } = useTheme()
   const { open: openCreate } = useCreateTask()
@@ -298,18 +300,22 @@ export const CommandPalette = ({ projects }: { projects: { key: string; title: s
                 </Command.Item>
               </Command.Group>
 
-              {projects.length > 0 && (
-                <Command.Group heading="Projects" className={groupClass}>
-                  {projects.slice(0, 8).map((p) => (
+              {labProjects.length > 0 && (
+                <Command.Group heading="Lab projects" className={groupClass}>
+                  {labProjects.slice(0, 8).map((p) => (
                     <Command.Item
-                      key={p.key}
-                      value={`${p.key} ${p.title}`}
-                      onSelect={() => go(`/projects/${p.key}`)}
+                      key={p.id}
+                      value={`project ${p.name}`}
+                      onSelect={() => go(`/?project=${encodeURIComponent(p.name)}`)}
                       className={itemClass}
                     >
-                      <ProjectIcon size={13} projectKey={p.key} />
-                      <span className="min-w-0 flex-1 truncate">{p.title}</span>
-                      <code className="text-fg-subtle shrink-0 text-[0.625rem]">{p.key}</code>
+                      <span
+                        className="size-[0.5rem] shrink-0 rounded-[2px]"
+                        style={{ backgroundColor: p.color || 'var(--fg-subtle)' }}
+                        aria-hidden
+                      />
+                      <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                      <span className="text-fg-subtle shrink-0 text-[0.625rem]">in the lab</span>
                     </Command.Item>
                   ))}
                 </Command.Group>

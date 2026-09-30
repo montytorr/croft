@@ -6,7 +6,7 @@ import { CommandPalette } from '@/components/command-palette'
 import { AppSidebar } from '@/components/app-sidebar'
 import { TaskCreationProvider } from '@/components/task-creation'
 import { SubjectCreationProvider } from '@/components/subject-creation'
-import { listStages, listTags } from '@/lib/lab/data'
+import { listLabProjects, listStages, listTags } from '@/lib/lab/data'
 import { TODO_PROJECT_KEY } from '@/lib/lab/types'
 import { Shortcuts } from '@/components/shortcuts'
 import { ProjectKeysProvider } from '@/components/project-keys'
@@ -22,7 +22,7 @@ const AppLayout = async ({ children }: { children: React.ReactNode }) => {
   // the guard ran.
   if (!user) redirect(await loginRedirectTarget())
 
-  const [projects, formerKeys, people, stages, tags] = await Promise.all([
+  const [projects, formerKeys, people, stages, tags, labProjects] = await Promise.all([
     listProjects(user.id),
     listFormerKeys(user.id),
     // Fetched once for every assignee and owner picker in the app, rather than
@@ -32,6 +32,7 @@ const AppLayout = async ({ children }: { children: React.ReactNode }) => {
     // tables are not there yet should still render the rest of the app.
     listStages().catch(() => []),
     listTags().catch(() => []),
+    listLabProjects().catch(() => []),
   ])
   const email = user.email ?? 'you'
   const projectList = projects.map((p) => ({ key: p.key, title: p.title }))
@@ -50,17 +51,17 @@ const AppLayout = async ({ children }: { children: React.ReactNode }) => {
       <ProjectKeysProvider keys={refKeys}>
         <PeopleProvider people={people} currentUserId={user.id}>
         <TaskCreationProvider projects={projectList}>
-        <SubjectCreationProvider stages={stages} tags={tags}>
-          <MobileNavProvider email={email} role={user.role} projects={projectList}>
+        <SubjectCreationProvider stages={stages} tags={tags} projects={labProjects}>
+          <MobileNavProvider email={email} role={user.role}>
             <div className="bg-bg flex h-dvh">
               <aside className="app-sidebar hidden w-[13.75rem] shrink-0 flex-col md:flex">
-                <AppSidebar email={email} role={user.role} projects={projectList} />
+                <AppSidebar email={email} role={user.role} />
               </aside>
 
             <div className="app-canvas flex min-w-0 flex-1 flex-col">
               <main className="min-w-0 flex-1 overflow-hidden">{children}</main>
             </div>
-              <CommandPalette projects={projectList} />
+              <CommandPalette labProjects={labProjects} />
               <Shortcuts />
               {/* Fixed to the viewport, outside the scroll containers each
                   page owns, so it stays put wherever the reader is. */}

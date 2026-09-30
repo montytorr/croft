@@ -7,7 +7,8 @@ description: "Lab board for exploring and proving ideas: new tech to evaluate, P
 
 The lab board. A **subject** (`S-12`) is one thing being explored or proved: a technology to
 evaluate, a POC, an idea to build before it becomes real work. It has a markdown write-up,
-a work log, tags, an owner, **todos** (`T-41`), a **stage**, and in the end a **conclusion**.
+a work log, tags, an owner, a **lab project** (Trig, Croft…), **todos** (`T-41`), a **stage**,
+and in the end a **conclusion**.
 
 > Exploring or proving an idea → croft check first; changing a repo for real → a Cairn task (croft push).
 
@@ -16,9 +17,9 @@ a work log, tags, an owner, **todos** (`T-41`), a **stage**, and in the end a **
 1. **Check.** `croft check "<subject>"` before evaluating, reading docs or prototyping. The
    lab may already have concluded ("rejected: no row-level security"). `croft subject show
    S-n` the hits that matter. `#0` means the subject is new.
-2. **File it.** `croft subject add "pgvector for recall" --tag db,search --body -` (markdown
-   on stdin: the question, why it matters, what would settle it). It lands in the first
-   planned stage unless `--stage`.
+2. **File it.** `croft subject add "pgvector for recall" --tag db,search --project Trig --body -`
+   (markdown on stdin: the question, why it matters, what would settle it). It lands in the
+   first planned stage unless `--stage`.
 3. **Break it into todos.** `croft subject todo S-12 "benchmark 1M rows" --body -`. From an
    agent runtime it files `T-n` and **claims by default**. Otherwise `croft claim T-41`.
    **Exit 9 means another agent holds it: pick different work**, never force it.
@@ -57,31 +58,33 @@ Single-letter keys on purpose: they never collide with Cairn refs (`CAIRN-331`).
 ## Subjects
 
 ```bash
-croft subject list [--stage exploring] [--tag db] [--mine] [--all]   # --all includes archived
+croft subject list [--stage exploring] [--tag db] [--project Trig|none] [--mine] [--all]
 croft subject show S-12 [--full]          # digest: write-up, conclusion, todos, recent log
-croft subject add "<title>" [--stage S] [--tag a,b] [--owner me] [--body -]
-croft subject edit S-12 [--title "T"] [--body -]
+croft subject add "<title>" [--stage S] [--tag a,b] [--project P] [--owner me] [--body -]
+croft subject edit S-12 [--title "T"] [--body -] [--project P|none]
 croft subject stage S-12 "<stage>" [--conclusion -|"text"]
 croft subject note S-12 "<text>"|- [--kind finding|decision|attempt|note|handoff]
 croft subject tag S-12 +vector -later     # add and remove tags
 croft subject todo S-12 "<title>" [--body -]
 ```
 
-`list` prints: ref, stage, todos open/done, tags, `~tokens`, title. A stage change writes a
+`list` prints: ref, stage, todos open/done, tags, project, `~tokens`, title. `--all` includes
+archived. A stage change writes a
 `stage` note by itself ("to explore → exploring"); do not narrate it.
 
 **Bodies and notes are markdown**: `##` headings, `-` lists, code and paths in backticks.
 A wall of text is refused, naming what to fix. Secrets are refused everywhere — write
 `$ENV_VAR` or a vault path instead.
 
-## Stages and tags
+## Stages, tags and projects
 
 ```bash
 croft stages    # the pipeline, in order, with each stage's category
 croft tags      # the curated tags
+croft projects  # the lab projects, each with the Cairn key its todos go to
 ```
 
-Admins curate both in the web app. The seed pipeline:
+Admins curate all three in the web app. A subject is in at most one lab project. The seed pipeline:
 
 | stage | category |
 | --- | --- |
@@ -98,8 +101,11 @@ person re-evaluating the same thing.
 When a todo becomes committed work on a repo tracked in Cairn, hand it over:
 
 ```bash
-croft push T-41 --to CAIRN      # CAIRN = the Cairn project key
+croft push T-41                 # to the Cairn key of its subject's lab project
+croft push T-41 --to CAIRN      # or name the Cairn project key; --to always wins
 ```
+
+With no `--to` and no key on the subject's project, it refuses and says what is missing.
 
 This runs `cairn add` with the todo's title and description (plus "From Croft T-41 (subject
 S-12)"), labels the Cairn task `croft:T-41`, and links the two. **From then on Cairn owns the
@@ -114,7 +120,7 @@ croft sync      # pull linked Cairn statuses back
 subject ("CAIRN-331 done: <resolution>") once. Then decide the subject's stage — often
 `rolled out` with a conclusion.
 
-`croft push T-41 <sha> [--branch B]` (no `--to`) is the other `push`: it records a git push
+`croft push T-41 <sha> [--branch B]` (with a sha) is the other `push`: it records a git push
 on the todo as evidence, like `croft commit` and `croft run`. None of those executes anything.
 
 ## Briefing

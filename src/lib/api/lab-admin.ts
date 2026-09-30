@@ -1,11 +1,12 @@
 import type { Pool, PoolClient } from 'pg'
 import { normalizeDatabaseValue, pool, transaction } from '@/lib/db/client'
-import type { Stage, StageCategory, Tag } from '@/lib/lab/types'
+import type { LabProject, Stage, StageCategory, Tag } from '@/lib/lab/types'
 import type { Actor } from './auth'
 import { fail } from './response'
 
 /**
- * The board's furniture: stages (the lanes) and tags (the curated filter).
+ * The board's furniture: stages (the lanes), tags (the curated filter) and
+ * lab projects (which effort a subject is part of).
  * Everyone reads them; only an administrator changes them, because a lane
  * renamed or deleted moves every subject in it for the whole group.
  */
@@ -254,3 +255,157 @@ export const deleteTag = async (id: string): Promise<Outcome<{ id: string; delet
     return { ok: true, value: { id, deleted: true as const, subjects: used } }
   })
 }
+
+// ---------------------------------------------------------------------------
+// Lab projects: which effort a subject is part of (Trig, Croft, Dispofi…),
+// and the Cairn project its todos go to on `croft push`. Curated like tags.
+// Not the task `projects` table: todos stay `T-n` whatever their subject's
+// lab project, because per-project refs would collide with Cairn's keys.
+// ---------------------------------------------------------------------------
+
+const LAB_PROJECT_COLUMNS = 'id, name, color, cairn_key, position'
+
+/** A lab project with how many subjects (archived ones included) are in it. */
+export type LabProjectListed = LabProject & { subjects: number }
+
+export const listLabProjects = async (db: Db = pool()): Promise<LabProjectListed[]> =>
+  rows<LabProjectListed>(
+    await db.query(
+      `select lp.id, lp.name, lp.color, lp.cairn_key, lp.position,
+              (select count(*) from subjects s where s.project_id = lp.id)::int as subjects
+         from lab_projects lp
+        where lp.archived_at is null
+        order by lp.position, lower(lp.name)`,
+    ),
+  )
+
+/** A lab project by id, or by name in any case. */
+export const findLabProject = async (ref: string, db: Db = pool()): Promise<LabProject | null> => {
+  const value = ref.trim()
+  const result = isUuid(value)
+    ? await db.query(`select ${LAB_PROJECT_COLUMNS} from lab_projects where id = $1`, [value])
+    : await db.query(`select ${LAB_PROJECT_COLUMNS} from lab_projects where lower(name) = lower($1)`, [value])
+  return rows<LabProject>(result)[0] ?? null
+}
+
+export const unknownLabProject = async (ref: string) => {
+  const projects = await listLabProjects()
+  return fail(
+    'validation_failed',
+    `No lab project ${ref}. Lab projects are curated by an administrator. ` +
+      `Valid: ${projects.map((p) => p.name).join(' | ') || '(none yet)'}.`,
+    { valid: projects.map((p) => p.name) },
+  )
+}
+
+const projectNameTaken = (name: string | undefined) =>
+  fail('conflict', `A lab project called ${name} already exists.`)
+
+export const createLabProject = async (input: {
+  name: string
+  color?: string
+  cairnKey?: string | null
+  position?: number
+}): Promise<Outcome<LabProject>> => {
+  try {
+    const result = await pool().query(
+      `insert into lab_projects (name, color, cairn_key, position)
+       values ($1, coalesce($2, '#8a8792'), $3,
+               coalesce($4, (select coalesce(max(position) + 1, 0) from lab_projects)))
+       returning ${LAB_PROJECT_COLUMNS}`,
+      [input.name, input.color ?? null, input.cairnKey ?? null, input.position ?? null],
+    )
+    return { ok: true, value: rows<LabProject>(result)[0]! }
+  } catch (error) {
+    if (isUniqueViolation(error)) return { ok: false, response: projectNameTaken(input.name) }
+    throw error
+  }
+}
+
+/** `cairnKey: null` clears the key; omitted leaves it. */
+export const updateLabProject = async (
+  id: string,
+  patch: { name?: string; color?: string; cairnKey?: string | null; position?: number },
+): Promise<Outcome<LabProject>> => {
+  if (!isUuid(id)) return { ok: false, response: fail('not_found', `No lab project ${id}.`) }
+  try {
+    const result = await pool().query(
+      `update lab_projects set
+         name      = coalesce($2, name),
+         color     = coalesce($3, color),
+         cairn_key = case when $4::boolean then $5::text else cairn_key end,
+         position  = coalesce($6, position)
+       where id = $1
+       returning ${LAB_PROJECT_COLUMNS}`,
+      [
+        id,
+        patch.name ?? null,
+        patch.color ?? null,
+        patch.cairnKey !== undefined,
+        patch.cairnKey ?? null,
+        patch.position ?? null,
+      ],
+    )
+    const project = rows<LabProject>(result)[0]
+    return project ? { ok: true, value: project } : { ok: false, response: fail('not_found', `No lab project ${id}.`) }
+  } catch (error) {
+    if (isUniqueViolation(error)) return { ok: false, response: projectNameTaken(patch.name) }
+    throw error
+  }
+}
+
+/**
+ * Refused while any subject — archived ones included — is in the project,
+ * as a stage is: taking it off them silently would lose the grouping, and
+ * which project they belong to instead is the admin's call.
+ */
+export const deleteLabProject = async (id: string): Promise<Outcome<{ id: string; deleted: true }>> => {
+  if (!isUuid(id)) return { ok: false, response: fail('not_found', `No lab project ${id}.`) }
+  return transaction(async (client) => {
+    const project = rows<LabProject>(
+      await client.query(`select ${LAB_PROJECT_COLUMNS} from lab_projects where id = $1 for update`, [id]),
+    )[0]
+    if (!project) return { ok: false, response: fail('not_found', `No lab project ${id}.`) }
+
+    const inUse = Number(
+      rows<{ n: number }>(await client.query('select count(*)::int as n from subjects where project_id = $1', [id]))[0]?.n ?? 0,
+    )
+    if (inUse > 0) {
+      return {
+        ok: false,
+        response: fail(
+          'project_in_use',
+          `${inUse} subject${inUse === 1 ? '' : 's'} (archived ones included) ${inUse === 1 ? 'is' : 'are'} in ${project.name}. ` +
+            'Move them to another project, or to none, first.',
+          { subjects: inUse },
+        ),
+      }
+    }
+
+    await client.query('delete from lab_projects where id = $1', [id])
+    return { ok: true, value: { id, deleted: true as const } }
+  })
+}
+
+/** `ids` must name every lab project exactly once; the order given becomes the order. */
+export const reorderLabProjects = async (ids: string[]): Promise<Outcome<LabProjectListed[]>> =>
+  transaction(async (client) => {
+    const current = rows<{ id: string }>(
+      await client.query('select id from lab_projects where archived_at is null for update'),
+    )
+    const known = new Set(current.map((p) => p.id))
+    const given = new Set(ids)
+    if (given.size !== ids.length || given.size !== known.size || ids.some((id) => !known.has(id))) {
+      return {
+        ok: false,
+        response: fail('validation_failed', `Send every lab project id exactly once (${known.size} projects).`),
+      }
+    }
+    await client.query(
+      `update lab_projects p set position = o.ord - 1
+         from unnest($1::uuid[]) with ordinality as o(id, ord)
+        where p.id = o.id`,
+      [ids],
+    )
+    return { ok: true, value: await listLabProjects(client) }
+  })

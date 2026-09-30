@@ -14,8 +14,8 @@ const row = (overrides: Partial<ActivityRow>): ActivityRow => ({
 })
 
 describe('project events in the activity feed', () => {
-  it('link a project-level event to the project', () => {
-    expect(hrefFor(row({}))).toBe('/projects/HOL')
+  it('link a project-level event to the todos, projects having no page', () => {
+    expect(hrefFor(row({}))).toBe('/todos')
   })
 
   it('still link a task event to the task', () => {

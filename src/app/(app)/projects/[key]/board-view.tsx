@@ -1,30 +1,16 @@
 'use client'
 
-import {
-  DndContext, DragOverlay, KeyboardSensor, PointerSensor, useSensor, useSensors,
-  useDraggable, type DragEndEvent, type DragStartEvent,
-} from '@dnd-kit/core'
+import { useDraggable } from '@dnd-kit/core'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useState } from 'react'
 import { MarkdownPreview } from '@/components/markdown'
-import { Avatar, LabelPill, PriorityIcon, ProjectIcon, StatusIcon, TypePill } from '@/components/icons'
-import { COLUMN_PANEL, COLUMN_WIDTH, ColumnCount, DragPreview, DropList, laneTone } from '@/components/board-columns'
-import { ResolutionDialog } from './resolution-dialog'
-import { useMutate } from '@/lib/api/use-mutate'
+import { Avatar, LabelPill, PriorityIcon, ProjectIcon, TypePill } from '@/components/icons'
 import { cn } from '@/lib/utils'
-import { TASK_STATUSES, isTerminal, type ResolutionKind, type TaskStatus } from '@/schemas/task'
 import type { TaskListItem } from '@/lib/data'
 
-const COLUMN_LABEL: Record<TaskStatus, string> = {
-  backlog: 'Backlog',
-  todo: 'Todo',
-  doing: 'Doing',
-  'in-review': 'In review',
-  done: 'Done',
-  cancelled: 'Cancelled',
-}
-
+/**
+ * A todo on the todo board (`/board`). The per-project board that also drew
+ * these went with the Projects menu; the card stayed for the one that is left.
+ */
 export const Card = ({
   task,
   projectKey,
@@ -32,9 +18,7 @@ export const Card = ({
 }: {
   task: TaskListItem
   projectKey: string
-  /** The cross-project board's whole reason for existing: which project a
-   * card belongs to. Off by default — the per-project board already has that
-   * context from its own header. */
+  /** Which project a card belongs to, for a board that spans several. */
   showProjectBadge?: boolean
 }) => {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: task.id })
@@ -109,165 +93,5 @@ export const Card = ({
         </div>
       )}
     </div>
-  )
-}
-
-const Column = ({
-  status,
-  tasks,
-  projectKey,
-}: {
-  status: TaskStatus
-  tasks: TaskListItem[]
-  projectKey: string
-}) => (
-  <section className={cn(COLUMN_PANEL, 'h-full', COLUMN_WIDTH)} style={laneTone(`var(--status-${status})`)}>
-    <div className="flex h-8 items-center gap-2 px-2.5">
-      <StatusIcon status={status} size={13} />
-      <span className="text-fg text-xs font-medium">{COLUMN_LABEL[status]}</span>
-      <ColumnCount count={tasks.length} />
-    </div>
-    <DropList dropId={status} count={tasks.length} className="min-h-0 flex-1 overscroll-contain">
-      {tasks.map((task) => (
-        <Card key={task.id} task={task} projectKey={projectKey} />
-      ))}
-    </DropList>
-  </section>
-)
-
-export const BoardView = ({
-  tasks: initial,
-  projectKey,
-}: {
-  tasks: TaskListItem[]
-  projectKey: string
-}) => {
-  const router = useRouter()
-  const request = useMutate()
-  const [tasks, setTasks] = useState(initial)
-  // cross-project-board.tsx has carried this reconcile since it was written;
-  // this board never got it, so a card moved by an agent stayed where it was
-  // until a reload. Adjusted during render rather than in an effect, and this
-  // is also what settles the optimistic drag below against what the server
-  // actually did.
-  const [prevInitial, setPrevInitial] = useState(initial)
-  if (initial !== prevInitial) {
-    setPrevInitial(initial)
-    setTasks(initial)
-  }
-  const [dragging, setDragging] = useState<TaskListItem | null>(null)
-  const [pendingClose, setPendingClose] = useState<{ task: TaskListItem; status: TaskStatus } | null>(null)
-
-  // A small activation distance, so clicking a link inside a card does not
-  // start a drag.
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor),
-  )
-
-  const persist = async (
-    task: TaskListItem,
-    status: TaskStatus,
-    close?: { resolution: string; kind: ResolutionKind; duplicateOf?: string },
-  ) => {
-    const previous = tasks
-    setTasks((current) => current.map((t) => (t.id === task.id ? { ...t, status } : t)))
-
-    const result = await request(`/api/v1/tasks/${task.id}`, {
-      method: 'PATCH',
-      body: close
-        ? {
-            status,
-            resolution: close.resolution,
-            resolutionKind: close.kind,
-            ...(close.duplicateOf ? { duplicateOf: close.duplicateOf } : {}),
-          }
-        : { status },
-    })
-
-    // Rolling back silently made a refused drag look like a card that would
-    // not stay put. A dropped connection was worse: the fetch threw, this
-    // line never ran, and the card stayed in a lane it never reached.
-    if (!result.ok) {
-      setTasks(previous)
-      return false
-    }
-    router.refresh()
-    return true
-  }
-
-  const onDragEnd = async ({ active, over }: DragEndEvent) => {
-    setDragging(null)
-    if (!over) return
-
-    const task = tasks.find((t) => t.id === active.id)
-    const status = over.id as TaskStatus
-    if (!task || task.status === status) return
-
-    /**
-     * Closing requires a resolution, so a drag into Done or Cancelled has to
-     * ask for one rather than fire a PATCH that the API will reject. This is a
-     * direct consequence of making resolutions mandatory — worth the friction,
-     * but it has to be handled here or dragging would just silently fail.
-     */
-    if (isTerminal(status) && !task.has_resolution) {
-      setPendingClose({ task, status })
-      return
-    }
-
-    await persist(task, status)
-  }
-
-  return (
-    <>
-      {/* A fixed id: dnd-kit otherwise numbers its aria-describedby from a
-          module counter that the server and the client do not share. */}
-      <DndContext
-        id={`project-board-${projectKey}`}
-        sensors={sensors}
-        onDragStart={({ active }: DragStartEvent) =>
-          setDragging(tasks.find((t) => t.id === active.id) ?? null)
-        }
-        onDragEnd={onDragEnd}
-        onDragCancel={() => setDragging(null)}
-      >
-        <div className="h-full snap-x scroll-px-3 overflow-auto md:snap-none">
-          <div className="flex h-full w-max gap-2.5 p-3">
-            {TASK_STATUSES.map((status) => (
-              <Column
-                key={status}
-                status={status}
-                projectKey={projectKey}
-                tasks={tasks.filter((t) => t.status === status)}
-              />
-            ))}
-          </div>
-        </div>
-
-        <DragOverlay>
-          {dragging ? (
-            <DragPreview title={dragging.title} />
-          ) : null}
-        </DragOverlay>
-      </DndContext>
-
-      {pendingClose && (
-        <ResolutionDialog
-          taskTitle={pendingClose.task.title}
-          status={pendingClose.status}
-          suggestion={pendingClose.task.checkpoint_summary}
-          onCancel={() => setPendingClose(null)}
-          onConfirm={async (resolution: string, kind, duplicateOf) => {
-            const ok = await persist(pendingClose.task, pendingClose.status, {
-              resolution,
-              kind,
-              duplicateOf,
-            })
-            setPendingClose(null)
-            return ok
-          }}
-        />
-      )}
-    </>
   )
 }

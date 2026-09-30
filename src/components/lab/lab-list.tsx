@@ -5,6 +5,7 @@ import { Avatar } from '@/components/icons'
 import { RelativeTime } from '@/components/relative-time'
 import type { Stage, SubjectSummary } from '@/lib/lab/types'
 import { CATEGORY_LABEL, StageGlyph, stageTone } from './stage'
+import { ProjectLabel } from './project-label'
 import { TagChip } from './tag-chip'
 
 const Counts = ({ todos }: { todos: SubjectSummary['todos'] }) =>
@@ -31,6 +32,11 @@ const Row = ({ subject }: { subject: SubjectSummary }) => (
           <span className="writeup-sm text-fg-muted block truncate !text-[0.8125rem] italic">{subject.conclusion}</span>
         ) : null}
       </span>
+      {subject.project ? (
+        <span className="hidden max-w-[9rem] shrink-0 items-center sm:flex" title={`Project: ${subject.project.name}`}>
+          <ProjectLabel project={subject.project} />
+        </span>
+      ) : null}
       {subject.tags.length > 0 ? (
         <span className="hidden max-w-[16rem] shrink items-center gap-1 overflow-hidden lg:flex">
           {subject.tags.slice(0, 3).map((tag) => (

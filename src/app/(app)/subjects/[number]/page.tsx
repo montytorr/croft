@@ -4,11 +4,12 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import { currentUser } from '@/lib/data'
-import { getSubject, listStages, listSubjectNotes, listSubjectTodos, listTags } from '@/lib/lab/data'
+import { getSubject, listLabProjects, listStages, listSubjectNotes, listSubjectTodos, listTags } from '@/lib/lab/data'
 import { parseSubjectRef } from '@/lib/lab/types'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { LiveUpdates } from '@/components/live-updates'
 import { StageBadge } from '@/components/lab/stage'
+import { ProjectLabel } from '@/components/lab/project-label'
 import { SubjectTitle } from '@/components/lab/subject-title'
 import { ConclusionCallout } from '@/components/lab/conclusion-callout'
 import { WriteUp } from '@/components/lab/writeup'
@@ -42,11 +43,12 @@ const SubjectPage = async ({ params }: { params: Promise<{ number: string }> }) 
   const subject = await cachedSubject(n)
   if (!subject) notFound()
 
-  const [notes, todos, stages, tags] = await Promise.all([
+  const [notes, todos, stages, tags, projects] = await Promise.all([
     listSubjectNotes(subject.id),
     listSubjectTodos(subject.id),
     listStages(),
     listTags(),
+    listLabProjects(),
   ])
 
   return (
@@ -83,6 +85,18 @@ const SubjectPage = async ({ params }: { params: Promise<{ number: string }> }) 
               <span className="font-mono">{subject.ref}</span>
               <span aria-hidden>·</span>
               <StageBadge stage={subject.stage} className="text-fg-muted" />
+              {subject.project ? (
+                <>
+                  <span aria-hidden>·</span>
+                  <Link
+                    href={`/?project=${encodeURIComponent(subject.project.name)}`}
+                    title={`Every subject in ${subject.project.name}`}
+                    className="rounded-[5px] transition-opacity hover:opacity-80"
+                  >
+                    <ProjectLabel project={subject.project} />
+                  </Link>
+                </>
+              ) : null}
             </p>
             <SubjectTitle subjectRef={subject.ref} initial={subject.title} />
 
@@ -124,7 +138,13 @@ const SubjectPage = async ({ params }: { params: Promise<{ number: string }> }) 
           className="border-border bg-bg-elevated shrink-0 overflow-x-hidden border-t lg:w-[21rem] lg:overflow-y-auto lg:border-t-0 lg:border-l"
         >
           <div className="flex flex-col gap-8 px-5 py-6 sm:px-8 lg:px-6 lg:py-8">
-            <SubjectProperties subject={subject} stages={stages} tags={tags} />
+            <SubjectProperties
+              subject={subject}
+              stages={stages}
+              tags={tags}
+              projects={projects}
+              canCreateTags={user.role === 'admin'}
+            />
             <div className="border-border border-t pt-6">
               <TodosPanel subjectRef={subject.ref} todos={todos} />
             </div>

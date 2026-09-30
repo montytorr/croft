@@ -2363,12 +2363,13 @@ const subjectArg = (value, usage) => {
 const subjectTokens = (s) =>
   s.tokens ?? Math.ceil((String(s.title ?? '').length + String(s.body ?? '').length + String(s.conclusion ?? '').length) / 4) + 20
 
-const SUBJECT_COLUMNS = ['ref', 'stage', 'todos', 'tags', 'tokens', 'title']
+const SUBJECT_COLUMNS = ['ref', 'stage', 'todos', 'tags', 'project', 'tokens', 'title']
 const subjectRow = (s) => ({
   ref: s.ref ?? (s.number !== undefined ? `S-${s.number}` : ''),
   stage: cellOf(s.stage),
   todos: `${s.todos?.open ?? 0}/${s.todos?.done ?? 0}`,
   tags: (s.tags ?? []).map((t) => cellOf(t)).join(','),
+  project: cellOf(s.project),
   tokens: `~${subjectTokens(s)}`,
   title: truncate(s.title, 70),
 })
@@ -2396,6 +2397,7 @@ const renderSubject = (s, notes, todos, { full }) => {
   const out = [`${s.ref}  ${cellOf(s.stage)}  ${s.title}`]
   const facts = [
     s.owner?.name ? `owner ${s.owner.name}` : 'no owner',
+    s.project?.name ? `project ${s.project.name}${s.project.cairn_key ? ` (Cairn ${s.project.cairn_key})` : ''}` : '',
     s.tags?.length ? `tags ${s.tags.map((t) => cellOf(t)).join(', ')}` : '',
     s.updated_at ? `updated ${DAY(s.updated_at)}` : '',
     s.archived_at ? 'archived' : '',
@@ -2438,6 +2440,33 @@ const renderSubject = (s, notes, todos, { full }) => {
 }
 
 const indent = (text, pad = '  ') => String(text).trim().split('\n').map((l) => `${pad}${l}`)
+
+/**
+ * `--project` on subject add/edit: a lab project's name or id, or `none` to
+ * take the subject out of its project (null on the wire). Undefined when the
+ * flag was not given.
+ */
+const labProjectFlag = () => {
+  if (flags.project === undefined) return undefined
+  const value = String(need(flags.project, '--project needs a lab project name, or none (croft projects lists them)')).trim()
+  return value.toLowerCase() === 'none' ? null : value
+}
+
+/**
+ * Where `croft push T-41` with no --to files the todo: the Cairn key of its
+ * subject's lab project. `{ key }`, or `{ why }` saying what is missing.
+ */
+const pushTarget = (todo, todoRef) => {
+  const subject = todo?.subject
+  const key = subject?.project?.cairn_key
+  if (key) return { key: String(key).toUpperCase() }
+  const why = !subject
+    ? `${todoRef} is not part of a subject, so there is no lab project to take a Cairn key from`
+    : !subject.project
+      ? `${todoRef}'s subject ${subject.ref ?? ''} is in no lab project (croft subject edit ${subject.ref ?? 'S-n'} --project <name>)`
+      : `${todoRef}'s lab project ${subject.project.name} has no Cairn key (an administrator sets one in Settings)`
+  return { why: `${why}\nsay where it goes: croft push ${todoRef} --to <CAIRN_KEY>` }
+}
 
 const tagChanges = (args) => {
   const add = []
@@ -2610,12 +2639,12 @@ const HELP = `croft — the lab board: subjects to explore and prove, their todo
     → a Cairn task (croft push).
 
   subjects (refs S-12)
-    croft subject add "<title>" [--stage S] [--tag t]... [--owner me] [--body -]
+    croft subject add "<title>" [--stage S] [--tag t]... [--project P] [--owner me] [--body -]
                                    --tag repeats or takes a comma list
-    croft subject list [--stage S] [--tag t] [--mine] [--all]
+    croft subject list [--stage S] [--tag t] [--project P|none] [--mine] [--all]
                                    --mine: owned by your human; --all: archived too
     croft subject show S-12 [--full]       a digest unless --full
-    croft subject edit S-12 [--title T] [--body -]
+    croft subject edit S-12 [--title T] [--body -] [--project P|none]
     croft subject stage S-12 "<stage>" [--conclusion -|"<text>"]
                                    done, rejected, rolled out (any completed or
                                    dropped stage) need a --conclusion
@@ -2625,6 +2654,8 @@ const HELP = `croft — the lab board: subjects to explore and prove, their todo
                                    files a todo (T-n) under it; agents claim it
     croft stages                   the pipeline, in order, with each stage's category
     croft tags                     the tags subjects can carry
+    croft projects                 the lab projects (Trig, Croft…) a subject can be
+                                   part of, each with the Cairn key its todos go to
 
   todos (refs T-41) — the task verbs
     croft next [--assignee me|<who>]       what to pick up, and why
@@ -2653,13 +2684,14 @@ const HELP = `croft — the lab board: subjects to explore and prove, their todo
     croft people                   who work can be assigned to
 
   pairing with Cairn
-    croft push T-41 --to <CAIRN_KEY> [--type T]
+    croft push T-41 [--to <CAIRN_KEY>] [--type T]
                                    files it in Cairn (cairn add … --label croft:T-41)
                                    and links it; from then on Cairn owns its status.
+                                   Without --to: the Cairn key of its subject's project.
                                    Needs the cairn CLI (PATH, ~/.local/bin or CROFT_CAIRN_BIN)
     croft push T-41 --link CAIRN-331       record a link made by hand
     croft push T-41 <sha> [--repo PATH] [--branch NAME] [--remote NAME] [--url URL]
-                                   without --to: records a git push, as commit does
+                                   with a sha: records a git push, as commit does
     croft sync                     pull the status of every paired todo back from Cairn
 
   briefing
@@ -2668,9 +2700,9 @@ const HELP = `croft — the lab board: subjects to explore and prove, their todo
     croft context [--scope project|all] [--project K]
                                    what you hold, what is in flight, stale claims
 
-  labels and projects
+  labels and task projects
     croft labels  |  croft labels rename <from> <to>  |  croft labels remove <label>
-    croft projects [--archived]
+    croft project list [--archived]   the task containers (every todo is in T)
     croft project create <KEY> "<title>" [--body -]   KEY is 1-10 uppercase, starting with a letter
     croft project rename <KEY> "<title>"  |  croft project rekey <KEY> <NEW>
     croft project rename <KEY> --key <NEW>
@@ -3034,6 +3066,29 @@ const keyIsValid = async (baseUrl, key) => {
   }
 }
 
+/**
+ * The task containers, as `croft projects` listed them before lab projects:
+ * `croft project list [--archived]`. Every todo lives in `T`.
+ */
+const listTaskProjects = async () => {
+  const suffix = flags.archived ? '?archived=1' : ''
+  const data = await request('GET', `/api/v1/projects${suffix}`)
+  if (FORMAT !== 'tsv') return emit(data)
+  // `was` is the keys a project used to have, space-separated, and it is the
+  // LAST column: readers of this table (trig's connector among them) key on
+  // the header, and a column appended at the end is one they never see move.
+  // When they were retired, and by whom, is in --json as `former_keys`.
+  const rows = data.map(({ former_keys: former, ...rest }) => ({
+    ...rest,
+    was: (former ?? []).map((f) => f.key).join(' '),
+  }))
+  const columns = [
+    ...new Set(rows.flatMap(({ was: _was, ...rest }) => Object.keys(flatten(rest)))),
+    'was',
+  ]
+  emit(rows, { columns })
+}
+
 const commands = {
   async check() {
     const q = need(positional[0], 'usage: croft check "<subject>"')
@@ -3136,23 +3191,21 @@ const commands = {
     }
   },
 
+  /**
+   * The lab projects (Trig, Croft…): what a subject can be part of, and the
+   * Cairn project each one's todos go to on `croft push T-n`. The task
+   * containers this used to list are an internal detail now — every todo
+   * lives in `T` — and are still listed by `croft project list`.
+   */
   async projects() {
-    const suffix = flags.archived ? '?archived=1' : ''
-    const data = await request('GET', `/api/v1/projects${suffix}`)
-    if (FORMAT !== 'tsv') return emit(data)
-    // `was` is the keys a project used to have, space-separated, and it is the
-    // LAST column: readers of this table (trig's connector among them) key on
-    // the header, and a column appended at the end is one they never see move.
-    // When they were retired, and by whom, is in --json as `former_keys`.
-    const rows = data.map(({ former_keys: former, ...rest }) => ({
-      ...rest,
-      was: (former ?? []).map((f) => f.key).join(' '),
-    }))
-    const columns = [
-      ...new Set(rows.flatMap(({ was: _was, ...rest }) => Object.keys(flatten(rest)))),
-      'was',
-    ]
-    emit(rows, { columns })
+    const data = await request('GET', '/api/v1/lab-projects')
+    emit(data, {
+      rows: (d) =>
+        [...asList(d, 'projects')]
+          .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+          .map((p) => ({ project: cellOf(p.name), cairn: p.cairn_key ?? '', subjects: p.subjects ?? '' })),
+      columns: ['project', 'cairn', 'subjects'],
+    })
   },
 
   async people() {
@@ -3562,8 +3615,10 @@ const commands = {
   async project() {
     const sub = need(
       positional[0],
-      'usage: croft project <create|rename|rekey|archive|restore|delete> <KEY> [...]',
+      'usage: croft project <list|create|rename|rekey|archive|restore|delete> <KEY> [...]',
     )
+    // The task containers (T holds every todo). Lab projects are `croft projects`.
+    if (sub === 'list') return listTaskProjects()
     const key = need(positional[1], 'a project key is required')
 
     /**
@@ -3759,13 +3814,15 @@ const commands = {
     const usage = 'usage: croft subject add|list|show|edit|stage|note|tag|todo …  (croft help)'
 
     if (verb === 'add') {
-      const title = need(positional[1], 'usage: croft subject add "<title>" [--stage S] [--tag t] [--owner me] [--body -]')
+      const title = need(positional[1], 'usage: croft subject add "<title>" [--stage S] [--tag t] [--project P] [--owner me] [--body -]')
       const body = { title }
       if (flags.body !== undefined) body.body = await resolveValue(need(flags.body, '--body needs text, or - for stdin'))
       if (flags.stage !== undefined) body.stage = need(flags.stage, '--stage needs a stage name (croft stages)')
       const tags = splitList(flags.tag)
       if (tags.length) body.tags = tags
       if (flags.owner !== undefined) body.owner = need(flags.owner, '--owner needs me or a user id')
+      const project = labProjectFlag()
+      if (project) body.project = project
       const created = await request('POST', '/api/v1/subjects', body)
       if (FORMAT !== 'tsv') return emit(created)
       emitSubjects([created])
@@ -3779,6 +3836,7 @@ const commands = {
       const tags = splitList(flags.tag)
       if (tags.length) params.set('tag', tags.join(','))
       if (flags.mine) params.set('owner', 'me')
+      if (flags.project !== undefined) params.set('project', need(flags.project, '--project needs a lab project name, or none (croft projects)'))
       // `include`: live and archived. (`1`/`true` would be archived ONLY.)
       if (flags.all) params.set('archived', 'include')
       const list = await request('GET', `/api/v1/subjects${String(params) ? `?${params}` : ''}`)
@@ -3806,11 +3864,13 @@ const commands = {
     }
 
     if (verb === 'edit') {
-      const ref = subjectArg(positional[1], 'usage: croft subject edit S-12 [--title T] [--body -]')
+      const ref = subjectArg(positional[1], 'usage: croft subject edit S-12 [--title T] [--body -] [--project P|none]')
       const patch = {}
       if (flags.title !== undefined) patch.title = need(flags.title, '--title needs text')
       if (flags.body !== undefined) patch.body = await resolveValue(need(flags.body, '--body needs text, or - for stdin'))
-      if (!Object.keys(patch).length) die('nothing to change — pass --title and/or --body')
+      const project = labProjectFlag()
+      if (project !== undefined) patch.project = project
+      if (!Object.keys(patch).length) die('nothing to change — pass --title, --body and/or --project')
       const updated = await request('PATCH', `/api/v1/subjects/${ref}`, patch)
       return FORMAT === 'tsv' ? emitSubjects([updated]) : emit(updated)
     }
@@ -3910,7 +3970,7 @@ const commands = {
    * `push <ref> <sha>` records a git push, as it always has.
    */
   async push() {
-    const ref = need(positional[0], 'usage: croft push T-41 --to <CAIRN_KEY>   |   croft push <ref> <sha>')
+    const ref = need(positional[0], 'usage: croft push T-41 [--to <CAIRN_KEY>]   |   croft push <ref> <sha>')
 
     if (flags.link !== undefined) {
       const cairnRef = String(need(flags.link, '--link needs the Cairn ref, e.g. --link CAIRN-331')).toUpperCase()
@@ -3918,8 +3978,8 @@ const commands = {
       return emit(await request('POST', `/api/v1/tasks/${ref}/cairn-link`, { cairnRef }))
     }
 
-    if (flags.to === undefined) {
-      const sha = need(positional[1], 'the pushed commit SHA is required (or --to <CAIRN_KEY> to hand the todo to Cairn)')
+    if (flags.to === undefined && positional[1] !== undefined) {
+      const sha = positional[1]
       const payload = { event: 'git_push', sha }
       if (flags.repo) payload.repo = flags.repo
       if (flags.branch) payload.branch = flags.branch
@@ -3928,8 +3988,9 @@ const commands = {
       return emit(await request('POST', `/api/v1/tasks/${ref}/activity`, payload))
     }
 
-    const key = String(need(flags.to, '--to needs the Cairn project key, e.g. --to CAIRN')).toUpperCase()
-    if (!/^[A-Z][A-Z0-9]{0,9}$/.test(key)) die(`"${key}" is not a Cairn project key`)
+    // An explicit --to wins; without one, the subject's lab project says where.
+    let key = flags.to === undefined ? null : String(need(flags.to, '--to needs the Cairn project key, e.g. --to CAIRN')).toUpperCase()
+    if (key && !/^[A-Z][A-Z0-9]{0,9}$/.test(key)) die(`"${key}" is not a Cairn project key`)
     const bin = resolveCairn()
     if (!bin) die(NO_CAIRN)
 
@@ -3937,6 +3998,12 @@ const commands = {
     const todoRef = refOfTask(todo) ?? ref
     if (todo.cairn_ref && !flags.force) {
       die(`${todoRef} is already paired with ${todo.cairn_ref} — \`croft sync\` pulls its status; --force files another`)
+    }
+    if (!key) {
+      const target = pushTarget(todo, todoRef)
+      if (!target.key) die(target.why)
+      key = target.key
+      process.stderr.write(`filing in ${key}, ${todo.subject.project.name}'s Cairn project\n`)
     }
     const subjectRef =
       todo.subject?.ref ?? todo.subject_ref ?? (todo.subject_number ? `S-${todo.subject_number}` : null)

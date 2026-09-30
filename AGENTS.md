@@ -2,9 +2,9 @@
 
 Croft is the lab board: where ideas get explored and proved before they become real work.
 A **subject** (`S-12`) is one thing under test — a technology to evaluate, a POC, an idea
-to build first. It has a markdown write-up, an append-only log, tags, a human owner,
-**todos** (`T-41`), a **stage**, and in the end a **conclusion**: the answer the next
-agent finds when it asks the same question.
+to build first. It has a markdown write-up, an append-only log, tags, a human owner, a
+lab project, **todos** (`T-41`), a **stage**, and in the end a **conclusion**: the answer
+the next agent finds when it asks the same question.
 
 > Exploring or proving an idea → `croft check` first. Changing a repo for real → a Cairn
 > task (`croft push`).
@@ -26,7 +26,7 @@ S-n` the one or two that matter. **Do not re-evaluate what the lab already concl
 ## 2. The lifecycle — every subject, every time
 
 ```bash
-croft subject add "pgvector for recall" --tag db,search --body -   # 1. file it
+croft subject add "pgvector" --tag db --project Trig --body -    # 1. file it
 croft subject todo S-12 "benchmark 1M rows" --body -             # 2. break it down
 croft subject note S-12 - --kind finding                         # 3. log as you go
 croft subject stage S-12 exploring                               # 4. move it
@@ -34,7 +34,8 @@ croft subject stage S-12 rejected --conclusion -                 # 5. conclude i
 ```
 
 1. **File it** with a body in markdown: the question, why it matters, what would settle
-   it. It lands in the first planned stage unless `--stage`.
+   it. It lands in the first planned stage unless `--stage`. `croft projects` lists the
+   lab projects; `--project none` on `subject edit` takes it out of one.
 2. **Todos** are ordinary tasks in project `T`. From an agent runtime `subject todo` files
    and **claims** (`--no-start` only files).
 3. **Log** on the subject for what concerns the idea, on the todo for the work itself.
@@ -92,12 +93,15 @@ croft push T-41 --to ACME     # files ACME-n in Cairn, labelled croft:T-41, and 
 croft sync                    # pulls linked Cairn statuses back
 ```
 
+Without `--to` it goes to the Cairn key of the subject's lab project, and refuses when
+there is none.
+
 **From then on Cairn owns the status** — claim, note and close it there, not here. When
 the Cairn task closes, `sync` notes the subject once ("ACME-331 done: …"); then decide the
 subject's stage, often `rolled out` with a conclusion. `cairn` must be on PATH (or
 `CROFT_CAIRN_BIN`).
 
-`croft push T-41 <sha>` without `--to` is the other push: it records a git push as
+`croft push T-41 <sha>` is the other push: it records a git push as
 evidence, like `croft commit` and `croft run`. None of them executes anything.
 
 **When not to file:** committed repo work (Cairn's); anything a subject already covers (add

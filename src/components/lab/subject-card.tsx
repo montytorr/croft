@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Avatar } from '@/components/icons'
 import { cn } from '@/lib/utils'
 import type { SubjectSummary } from '@/lib/lab/types'
+import { ProjectLabel } from './project-label'
 import { TagChip } from './tag-chip'
 
 /** "2 of 5 todos done" as a short strip that fills as the work does. */
@@ -27,8 +28,8 @@ export const TodoTally = ({ todos, className }: { todos: SubjectSummary['todos']
 }
 
 /**
- * A subject on the board. The title is the card; the ref, tags and people are
- * set small beneath it. A conclusion, when there is one, is quoted in the
+ * A subject on the board. The title is the card; the ref, project, tags and
+ * people are set small beneath it. A conclusion, when there is one, is quoted in the
  * reading serif — it is the most useful sentence the subject has.
  */
 export const SubjectCard = ({
@@ -75,6 +76,7 @@ export const SubjectCard = ({
 
     <div className="mt-2.5 flex items-center gap-2">
       <span className="text-fg-subtle font-mono text-[0.65625rem]">{subject.ref}</span>
+      {subject.project ? <ProjectLabel project={subject.project} className="min-w-0 shrink" /> : null}
       <TodoTally todos={subject.todos} />
       {subject.owner ? (
         <span className="ml-auto" title={`Owner: ${subject.owner.name}`}>

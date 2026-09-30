@@ -9,13 +9,14 @@ export const dynamic = 'force-dynamic'
 
 /**
  * The board, as a list: lanes in order, then each lane's own order.
- * `owner` is `me`, a user id, an email or a display name.
+ * `owner` is `me`, a user id, an email or a display name. `project` is a lab
+ * project's name or id, `none`, or a comma list of them.
  */
 export const GET = route({
   handler: async ({ actor, url }) => {
     const parsed = listSubjectsQuery.safeParse(Object.fromEntries(url.searchParams))
     if (!parsed.success) return fail('validation_failed', 'Bad query parameters.', { issues: parsed.error.issues })
-    const { stage, tag, owner, q, archived } = parsed.data
+    const { stage, tag, owner, project, q, archived } = parsed.data
 
     let ownerId: string | undefined
     if (owner) {
@@ -24,7 +25,7 @@ export const GET = route({
       ownerId = person.person.id
     }
 
-    return ok(await listSubjects({ stage, tag, ownerId, q, archived }))
+    return ok(await listSubjects({ stage, tag, ownerId, project, q, archived }))
   },
 })
 

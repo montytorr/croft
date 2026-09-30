@@ -144,7 +144,7 @@ describe('--project with a retired key', () => {
   })
 })
 
-describe('croft projects lists former keys', () => {
+describe('croft project list lists former keys', () => {
   it('as a trailing `was` column, keeping every column readers already key on', async () => {
     const base = await serve(() =>
       ok([
@@ -155,7 +155,7 @@ describe('croft projects lists former keys', () => {
           created_at: '2026-09-10T00:00:00Z', updated_at: '2026-09-22T00:00:00Z', former_keys: [] },
       ]),
     )
-    const { stdout } = await run(['projects'], base)
+    const { stdout } = await run(['project', 'list'], base)
     // Not trimmed: an empty `was` is a trailing tab, and the cell count is the point.
     const [count, header, hol, croft] = stdout.split('\n')
     expect(count).toBe('#2')

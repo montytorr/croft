@@ -17,7 +17,17 @@ import {
 } from '@/lib/lab/types'
 import { createTaskSchema } from '@/schemas/task'
 import type { Actor } from './auth'
-import { defaultStage, findStage, findTags, isUuid, unknownStage, unknownTags, type Outcome } from './lab-admin'
+import {
+  defaultStage,
+  findLabProject,
+  findStage,
+  findTags,
+  isUuid,
+  unknownLabProject,
+  unknownStage,
+  unknownTags,
+  type Outcome,
+} from './lab-admin'
 import { resolveAssignee } from './people'
 import { fail, failValidation } from './response'
 import { createTaskInProject } from './task-create'
@@ -98,6 +108,10 @@ const SUBJECT_SELECT = `
              join tags t on t.id = x.tag_id
             where x.subject_id = s.id
          ), '[]'::json) as tags,
+         case when lp.id is null then null
+              else json_build_object('id', lp.id, 'name', lp.name, 'color', lp.color,
+                                     'cairn_key', lp.cairn_key, 'position', lp.position)
+         end as project,
          case when u.id is null then null
               else json_build_object('id', u.id, 'name', coalesce(nullif(trim(p.display_name), ''), u.email))
          end as owner,
@@ -105,6 +119,7 @@ const SUBJECT_SELECT = `
          (select count(*) from tasks k where k.subject_id = s.id and k.status = 'done')::int as todos_done
     from subjects s
     join subject_stages st on st.id = s.stage_id
+    left join lab_projects lp on lp.id = s.project_id
     left join app_users u on u.id = s.owner_user_id
     left join user_profiles p on p.id = u.id`
 
@@ -129,6 +144,11 @@ export type SubjectFilters = {
   /** Tag name (any case) or id, or a comma list of them: subjects carrying any. */
   tag?: string
   ownerId?: string
+  /**
+   * Lab project name (any case) or id, `none` for subjects in no project, or
+   * a comma list of them: subjects in any.
+   */
+  project?: string
   q?: string
   /**
    * `'include'`: live and archived. `'only'` or `true`: archived only.
@@ -160,6 +180,17 @@ export const listSubjects = async (filters: SubjectFilters = {}, db: Db = pool()
     where.push(`exists (select 1 from subject_tags x join tags t on t.id = x.tag_id
                          where x.subject_id = s.id
                            and (t.id::text = any(${v}::text[]) or t.name = any(select lower(u) from unnest(${v}::text[]) u)))`)
+  }
+  const projects = (filters.project ?? '').split(',').map((p) => p.trim()).filter(Boolean)
+  if (projects.length) {
+    const named = projects.filter((p) => p.toLowerCase() !== 'none')
+    const either: string[] = []
+    if (named.length < projects.length) either.push('s.project_id is null')
+    if (named.length) {
+      const v = bind(named)
+      either.push(`(lp.id::text = any(${v}::text[]) or lower(lp.name) = any(select lower(u) from unnest(${v}::text[]) u))`)
+    }
+    where.push(`(${either.join(' or ')})`)
   }
   if (filters.ownerId) {
     if (!isUuid(filters.ownerId)) return []
@@ -239,7 +270,16 @@ export type CreateSubjectInput = {
   stage?: string
   tags?: string[]
   owner?: string | null
+  /** A lab project by name or id; omitted or null, none. */
+  project?: string | null
   conclusion?: string
+}
+
+/** `undefined` → leave it; `null` → none; anything else → that lab project, or a refusal listing the real ones. */
+const resolveLabProject = async (ref: string | null | undefined): Promise<Outcome<string | null | undefined>> => {
+  if (ref === undefined || ref === null) return { ok: true, value: ref }
+  const project = await findLabProject(ref)
+  return project ? { ok: true, value: project.id } : { ok: false, response: await unknownLabProject(ref) }
 }
 
 export const createSubject = async (actor: Actor, input: CreateSubjectInput): Promise<Outcome<Subject>> => {
@@ -254,16 +294,19 @@ export const createSubject = async (actor: Actor, input: CreateSubjectInput): Pr
   const { tags, unknown } = await findTags(input.tags ?? [])
   if (unknown.length) return { ok: false, response: await unknownTags(unknown) }
 
+  const project = await resolveLabProject(input.project)
+  if (!project.ok) return project
+
   const owner = await resolveOwner(input.owner, actor)
   if (!owner.ok) return owner
 
   const id = await transaction(async (client) => {
     const inserted = await client.query(
       `insert into subjects
-         (title, body, stage_id, owner_user_id, conclusion, concluded_at, position, actor_type, actor_id)
+         (title, body, stage_id, owner_user_id, conclusion, concluded_at, position, actor_type, actor_id, project_id)
        values ($1, $2, $3, $4, $5, $6,
                (select coalesce(max(position) + 1, 0) from subjects where stage_id = $3),
-               $7, $8)
+               $7, $8, $9)
        returning id`,
       [
         input.title,
@@ -274,6 +317,7 @@ export const createSubject = async (actor: Actor, input: CreateSubjectInput): Pr
         isConcluding(stage.category) ? new Date().toISOString() : null,
         actor.actorType,
         actor.actorId,
+        project.value ?? null,
       ],
     )
     const subjectId = (inserted.rows[0] as { id: string }).id
@@ -291,6 +335,8 @@ export type UpdateSubjectInput = {
   conclusion?: string | null
   tags?: string[]
   owner?: string | null
+  /** A lab project by name or id; `null` takes the subject out of its project. */
+  project?: string | null
   position?: number
   archived?: boolean
 }
@@ -331,6 +377,9 @@ export const updateSubject = async (
     tags = found.tags
   }
 
+  const project = await resolveLabProject(patch.project)
+  if (!project.ok) return project
+
   let ownerId: string | null | undefined
   if (patch.owner !== undefined) {
     const owner = await resolveOwner(patch.owner, actor)
@@ -350,6 +399,7 @@ export const updateSubject = async (
   if (patch.body !== undefined) assign('body', patch.body)
   if (patch.conclusion !== undefined) assign('conclusion', patch.conclusion)
   if (ownerId !== undefined) assign('owner_user_id', ownerId)
+  if (project.value !== undefined) assign('project_id', project.value)
   if (patch.archived !== undefined) {
     if (patch.archived && !subject.archived_at) assign('archived_at', now)
     if (!patch.archived && subject.archived_at) assign('archived_at', null)

@@ -1,7 +1,7 @@
 /**
- * What `c` creates where you are. On the todo surfaces — a project's list or
- * board, the cross-project board, the list of all todos — it is a todo, as it
- * always was; everywhere else in the lab it is a new subject.
+ * What `c` creates where you are. On the todo surfaces — the todo board, the
+ * list of all todos, a todo's own page (under `/projects/…/tasks/…`) — it is a
+ * todo, as it always was; everywhere else in the lab it is a new subject.
  */
 export const createsTodo = (pathname: string | null | undefined): boolean =>
   /^\/(projects|board|todos)(\/|$)/.test(pathname ?? '')

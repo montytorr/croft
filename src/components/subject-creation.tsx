@@ -11,7 +11,8 @@ import { StageGlyph } from '@/components/lab/stage'
 import { TagChip } from '@/components/lab/tag-chip'
 import { mutate } from '@/lib/api/mutate'
 import { createsTodo, typingInField } from '@/lib/lab/ui-shortcuts'
-import type { Stage, Subject, Tag } from '@/lib/lab/types'
+import type { LabProject, Stage, Subject, Tag } from '@/lib/lab/types'
+import { matchProjectFilter } from '@/lib/lab/ui-colours'
 import { cn } from '@/lib/utils'
 
 type Ctx = { open: () => void }
@@ -26,17 +27,31 @@ const CHIP =
 const defaultStage = (stages: Stage[]) => stages.find((s) => s.category === 'planned') ?? stages[0]
 
 /**
+ * The project the lab is filtered to, when the dialog opens over it: a subject
+ * started while looking at Trig is almost always a Trig subject. Read at open,
+ * from the address bar, so the provider needs no hook on the search params.
+ */
+const projectInView = (projects: LabProject[]): string => {
+  if (typeof window === 'undefined' || window.location.pathname !== '/') return ''
+  const match = matchProjectFilter(new URLSearchParams(window.location.search).get('project'), projects)
+  return match && match !== 'none' ? match.id : ''
+}
+
+/**
  * New subject. Only the title is required: press c, name it, press enter, and
- * you are on its page with the write-up open to be started. Stage, tags and
- * owner have defaults a click away — the first planned stage, none, and you.
+ * you are on its page with the write-up open to be started. Stage, project,
+ * tags and owner have defaults a click away — the first planned stage, the
+ * project the lab is filtered to (or none), no tags, and you.
  */
 const CreateSubject = ({
   stages,
   tags,
+  projects,
   onClose,
 }: {
   stages: Stage[]
   tags: Tag[]
+  projects: LabProject[]
   onClose: () => void
 }) => {
   const router = useRouter()
@@ -47,11 +62,13 @@ const CreateSubject = ({
   const [stageId, setStageId] = useState(defaultStage(stages)?.id ?? '')
   const [picked, setPicked] = useState<string[]>([])
   const [owner, setOwner] = useState(currentUserId)
+  const [projectId, setProjectId] = useState(() => projectInView(projects))
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const stage = stages.find((s) => s.id === stageId)
   const ownerName = people.find((p) => p.id === owner)?.name ?? 'You'
+  const project = projects.find((p) => p.id === projectId)
 
   useEffect(() => {
     titleRef.current?.focus()
@@ -71,6 +88,7 @@ const CreateSubject = ({
         ...(body.trim() ? { body: body.trim() } : {}),
         ...(stageId ? { stage: stageId } : {}),
         tags: picked,
+        ...(projectId ? { project: projectId } : {}),
         owner: owner === currentUserId ? 'me' : owner,
       },
     })
@@ -160,6 +178,30 @@ const CreateSubject = ({
             </label>
           ) : null}
 
+          {projects.length > 0 ? (
+            <label className={CHIP}>
+              <span
+                className="size-[0.5rem] shrink-0 rounded-[2px]"
+                style={{ backgroundColor: project?.color || 'transparent', boxShadow: project ? undefined : 'inset 0 0 0 1px var(--border-strong)' }}
+                aria-hidden
+              />
+              {project?.name ?? 'No project'}
+              <select
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+                className="absolute inset-0 cursor-pointer opacity-0"
+                aria-label="Project"
+              >
+                <option value="">No project</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
           <label className={CHIP}>
             <Avatar name={ownerName} size={16} />
             {owner === currentUserId ? 'You' : ownerName}
@@ -202,10 +244,12 @@ const CreateSubject = ({
 export const SubjectCreationProvider = ({
   stages,
   tags,
+  projects,
   children,
 }: {
   stages: Stage[]
   tags: Tag[]
+  projects: LabProject[]
   children: React.ReactNode
 }) => {
   const [isOpen, setIsOpen] = useState(false)
@@ -240,7 +284,7 @@ export const SubjectCreationProvider = ({
   return (
     <SubjectContext.Provider value={value}>
       {children}
-      {isOpen ? <CreateSubject key={instance} stages={stages} tags={tags} onClose={close} /> : null}
+      {isOpen ? <CreateSubject key={instance} stages={stages} tags={tags} projects={projects} onClose={close} /> : null}
     </SubjectContext.Provider>
   )
 }

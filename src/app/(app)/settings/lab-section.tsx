@@ -8,118 +8,15 @@ import {
 } from '@dnd-kit/sortable'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { GripVertical, Plus, Trash2 } from 'lucide-react'
-import { Button, InlineInput } from '@/components/ui/control'
-import { Spinner } from '@/components/spinner'
+import { GripVertical, Trash2 } from 'lucide-react'
 import { CATEGORY_LABEL, StageGlyph } from '@/components/lab/stage'
 import { TagChip } from '@/components/lab/tag-chip'
 import { mutate } from '@/lib/api/mutate'
-import { STAGE_CATEGORIES, type Stage, type StageCategory, type Tag } from '@/lib/lab/types'
+import { STAGE_CATEGORIES, type LabProject, type Stage, type StageCategory, type Tag } from '@/lib/lab/types'
 import { cn } from '@/lib/utils'
 import { SettingsCard } from './settings-card'
-
-/**
- * Starting colours that hold up on paper and on peat alike — mid-tones, none
- * of them heather, which is the accent's alone.
- */
-const PRESETS = ['#5a6f8c', '#8a4f1c', '#4a7a2c', '#7d5d50', '#2f7a6e', '#5b4bb0', '#2f62a8', '#a14a22', '#b08a2e', '#6f666b']
-
-const HEX = /^#[0-9a-f]{6}$/i
-
-/** A colour swatch that is its own picker; commits when the picker closes. */
-const Swatch = ({
-  value,
-  disabled,
-  label,
-  onCommit,
-}: {
-  value: string
-  disabled?: boolean
-  label: string
-  onCommit: (hex: string) => void
-}) => {
-  const [draft, setDraft] = useState(HEX.test(value) ? value : '#6f666b')
-  const [prev, setPrev] = useState(value)
-  if (value !== prev) {
-    setPrev(value)
-    if (HEX.test(value)) setDraft(value)
-  }
-  return (
-    <label
-      className={cn(
-        'border-border-strong relative block size-[1.125rem] shrink-0 overflow-hidden rounded-full border',
-        !disabled && 'cursor-pointer hover:ring-2 hover:ring-[var(--border-strong)]',
-      )}
-      style={{ backgroundColor: draft }}
-      title={disabled ? draft : `${label}: ${draft}`}
-    >
-      <input
-        type="color"
-        list="croft-lab-colours"
-        value={draft}
-        disabled={disabled}
-        aria-label={label}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => draft !== value && onCommit(draft)}
-        className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-default"
-      />
-    </label>
-  )
-}
-
-/** A name that turns into a field on click; Enter saves, Escape puts it back. */
-const EditableName = ({
-  value,
-  disabled,
-  label,
-  onCommit,
-}: {
-  value: string
-  disabled?: boolean
-  label: string
-  onCommit: (name: string) => Promise<boolean>
-}) => {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(value)
-
-  if (!editing || disabled) {
-    return (
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => {
-          setDraft(value)
-          setEditing(true)
-        }}
-        className="text-fg min-w-0 truncate rounded px-1 text-left text-[0.8125rem] enabled:hover:bg-surface-hover disabled:cursor-default"
-        title={disabled ? undefined : 'Rename'}
-      >
-        {value}
-      </button>
-    )
-  }
-
-  const commit = async () => {
-    const next = draft.trim()
-    if (!next || next === value) return setEditing(false)
-    if (await onCommit(next)) setEditing(false)
-  }
-
-  return (
-    <InlineInput
-      autoFocus
-      value={draft}
-      aria-label={label}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => void commit()}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') void commit()
-        if (e.key === 'Escape') setEditing(false)
-      }}
-      className="h-[1.625rem] min-w-0 flex-1"
-    />
-  )
-}
+import { AddRow, EditableName, LabColours, Swatch } from './lab-controls'
+import { LabProjectsSection } from './lab-projects-section'
 
 const StageRow = ({
   stage,
@@ -206,72 +103,24 @@ const StageRow = ({
   )
 }
 
-/** The add row shared by stages and tags. */
-const AddRow = ({
-  placeholder,
-  withCategory,
-  onAdd,
-}: {
-  placeholder: string
-  withCategory?: boolean
-  onAdd: (input: { name: string; color: string; category: StageCategory }) => Promise<boolean>
-}) => {
-  const [name, setName] = useState('')
-  const [color, setColor] = useState(PRESETS[0]!)
-  const [category, setCategory] = useState<StageCategory>('planned')
-  const [pending, setPending] = useState(false)
-
-  const add = async () => {
-    if (!name.trim() || pending) return
-    setPending(true)
-    const ok = await onAdd({ name: name.trim(), color, category })
-    setPending(false)
-    if (ok) {
-      setName('')
-      setColor(PRESETS[(PRESETS.indexOf(color) + 1) % PRESETS.length]!)
-    }
-  }
-
-  return (
-    <div className="border-border flex flex-wrap items-center gap-2 border-t px-3 py-2.5 md:px-4">
-      <Swatch value={color} label="Colour" onCommit={setColor} />
-      <InlineInput
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && void add()}
-        placeholder={placeholder}
-        aria-label={placeholder}
-        className="h-[1.75rem] min-w-[10rem] flex-1"
-      />
-      {withCategory ? (
-        <select
-          value={category}
-          onChange={(e) => setCategory(e.target.value as StageCategory)}
-          aria-label="Category"
-          className="border-border bg-surface text-fg-muted h-[1.75rem] rounded-md border px-2 text-[0.75rem]"
-        >
-          {STAGE_CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {CATEGORY_LABEL[c]}
-            </option>
-          ))}
-        </select>
-      ) : null}
-      <Button size="sm" variant="primary" onClick={() => void add()} disabled={!name.trim() || pending} className="h-[1.75rem] px-3">
-        {pending ? <Spinner /> : <><Plus size={13} aria-hidden /> Add</>}
-      </Button>
-    </div>
-  )
-}
-
 /**
- * The lab's two curated lists: the stages every subject moves along, in
- * pipeline order, and the tags subjects can carry. Administrators shape them;
+ * The lab's curated lists: the stages every subject moves along, in
+ * pipeline order, the projects subjects belong to, and the tags they carry. Administrators shape them;
  * everyone else sees them as they are. A stage's category is what gives it
  * meaning to the rest of Croft — entering a completed or dropped one asks for
  * a conclusion — so it is set explicitly rather than guessed from the name.
  */
-export const LabSection = ({ stages: initialStages, tags, canEdit }: { stages: Stage[]; tags: Tag[]; canEdit: boolean }) => {
+export const LabSection = ({
+  stages: initialStages,
+  tags,
+  projects,
+  canEdit,
+}: {
+  stages: Stage[]
+  tags: Tag[]
+  projects: LabProject[]
+  canEdit: boolean
+}) => {
   const router = useRouter()
   const [stages, setStages] = useState(initialStages)
   const [prev, setPrev] = useState(initialStages)
@@ -342,11 +191,7 @@ export const LabSection = ({ stages: initialStages, tags, canEdit }: { stages: S
 
   return (
     <>
-      <datalist id="croft-lab-colours">
-        {PRESETS.map((c) => (
-          <option key={c} value={c} />
-        ))}
-      </datalist>
+      <LabColours />
 
       <SettingsCard
         title="Lab stages"
@@ -386,6 +231,8 @@ export const LabSection = ({ stages: initialStages, tags, canEdit }: { stages: S
           />
         ) : null}
       </SettingsCard>
+
+      <LabProjectsSection projects={projects} canEdit={canEdit} />
 
       <SettingsCard
         title="Lab tags"

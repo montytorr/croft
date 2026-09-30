@@ -1,4 +1,4 @@
-import { admin } from '@/lib/db/client'
+import { admin, pool } from '@/lib/db/client'
 import type { Actor } from './auth'
 import { diffTaskEvents, recordActivity } from './activity'
 import { subjectRef } from '@/lib/lab/types'
@@ -309,13 +309,35 @@ export const closeTask = async (actor: Actor, task: ClosableTask, close: CloseIn
   await recordActivity(diffTaskEvents(actor, task.id, task, patch), actor.userId, actor.host)
 }
 
-export type TaskSubject = { ref: string; number: number; title: string }
+export type TaskSubject = {
+  ref: string
+  number: number
+  title: string
+  /**
+   * The subject's lab project, and the Cairn project its todos go to:
+   * `croft push T-n` with no `--to` files the todo under `cairn_key`.
+   */
+  project: { name: string; cairn_key: string | null } | null
+}
 
 /** The subject a todo belongs to — "part of S-12" — or null for an ordinary task. */
 export const subjectOfTask = async (subjectId: unknown): Promise<TaskSubject | null> => {
   if (typeof subjectId !== 'string' || !subjectId) return null
-  const { data, error } = await admin().from('subjects').select('number, title').eq('id', subjectId).maybeSingle()
-  if (error || !data) return null
-  const row = data as { number: number; title: string }
-  return { ref: subjectRef(row.number), number: row.number, title: row.title }
+  const result = await pool().query(
+    `select s.number, s.title, lp.name as project_name, lp.cairn_key
+       from subjects s
+       left join lab_projects lp on lp.id = s.project_id
+      where s.id = $1`,
+    [subjectId],
+  )
+  const row = result.rows[0] as
+    | { number: number; title: string; project_name: string | null; cairn_key: string | null }
+    | undefined
+  if (!row) return null
+  return {
+    ref: subjectRef(row.number),
+    number: row.number,
+    title: row.title,
+    project: row.project_name === null ? null : { name: row.project_name, cairn_key: row.cairn_key },
+  }
 }

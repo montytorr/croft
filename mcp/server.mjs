@@ -97,13 +97,14 @@ const TOOLS = [
   {
     name: 'croft_subject_list',
     description:
-      'The lab board: subjects with their stage, open/done todo counts and tags. ' +
+      'The lab board: subjects with their stage, open/done todo counts, tags and lab project. ' +
       'Archived subjects are left out unless all is true.',
     inputSchema: {
       type: 'object',
       properties: {
         stage: { type: 'string', description: 'Only this stage, by name, e.g. "exploring".' },
         tag: { type: 'string', description: 'Only subjects carrying this tag.' },
+        project: { type: 'string', description: 'Only subjects in this lab project (e.g. "Trig"), or "none".' },
         mine: { type: 'boolean', description: 'Only subjects owned by the human behind this key.' },
         all: { type: 'boolean', description: 'Include archived subjects.' },
       },
@@ -112,6 +113,7 @@ const TOOLS = [
       'subject', 'list',
       ...(a.stage ? ['--stage', a.stage] : []),
       ...(a.tag ? ['--tag', a.tag] : []),
+      ...(a.project ? ['--project', a.project] : []),
       ...(a.mine ? ['--mine'] : []),
       ...(a.all ? ['--all'] : []),
     ],
@@ -147,6 +149,7 @@ const TOOLS = [
         },
         stage: { type: 'string', description: 'Stage name; defaults to the first planned stage.' },
         tags: { type: 'string', description: 'Comma-separated tag names (croft tags lists them).' },
+        project: { type: 'string', description: 'The lab project it is part of, e.g. "Trig" (croft projects lists them).' },
         owner: { type: 'string', description: '"me" to own it yourself.' },
       },
       required: ['title'],
@@ -156,6 +159,7 @@ const TOOLS = [
       ...(a.body ? ['--body', a.body] : []),
       ...(a.stage ? ['--stage', a.stage] : []),
       ...(a.tags ? ['--tag', a.tags] : []),
+      ...(a.project ? ['--project', a.project] : []),
       ...(a.owner ? ['--owner', a.owner] : []),
     ],
   },

@@ -32,6 +32,10 @@ import { GET as searchRoute } from '@/app/api/v1/search/route'
 import { GET as listProjectTasksRoute } from '@/app/api/v1/projects/[id]/tasks/route'
 import { PATCH as patchTagRoute } from '@/app/api/v1/tags/[id]/route'
 import { GET as listStagesRoute } from '@/app/api/v1/stages/route'
+import { GET as listLabProjectsRoute, POST as createLabProjectRoute } from '@/app/api/v1/lab-projects/route'
+import { DELETE as deleteLabProjectRoute, PATCH as patchLabProjectRoute } from '@/app/api/v1/lab-projects/[id]/route'
+import { POST as reorderLabProjectsRoute } from '@/app/api/v1/lab-projects/reorder/route'
+import { listLabProjects } from '@/lib/lab/data'
 import { getTask } from '@/lib/data'
 
 const databaseUrl = process.env.DATABASE_URL
@@ -80,6 +84,7 @@ let savedConnection: Record<string, unknown> | null = null
 const subjectIds: string[] = []
 const tagIds: string[] = []
 const stageIds: string[] = []
+const labProjectIds: string[] = []
 
 beforeAll(async () => {
   for (const [id, role] of [[adminId, 'admin'], [memberId, 'member']] as const) {
@@ -99,6 +104,10 @@ afterAll(async () => {
   if (subjectIds.length) {
     await pool().query('delete from tasks where subject_id = any($1::uuid[])', [subjectIds])
     await pool().query('delete from subjects where id = any($1::uuid[])', [subjectIds])
+  }
+  if (labProjectIds.length) {
+    await pool().query('update subjects set project_id = null where project_id = any($1::uuid[])', [labProjectIds])
+    await pool().query('delete from lab_projects where id = any($1::uuid[])', [labProjectIds])
   }
   if (tagIds.length) await pool().query('delete from tags where id = any($1::uuid[])', [tagIds])
   if (stageIds.length) await pool().query('delete from subject_stages where id = any($1::uuid[])', [stageIds])
@@ -278,7 +287,12 @@ describe('the lab board', () => {
 
   it('shows a todo with its subject and Cairn pairing, and lists them per row', async () => {
     const shown = await call(showTaskRoute, 'GET', `/tasks/${todoRef}`, { ref: todoRef })
-    expect(shown.json.data.subject).toEqual({ ref, number: Number(ref.slice(2)), title: `Evaluate ${WORD} for semantic recall` })
+    expect(shown.json.data.subject).toEqual({
+      ref,
+      number: Number(ref.slice(2)),
+      title: `Evaluate ${WORD} for semantic recall`,
+      project: null,
+    })
     expect(shown.json.data).toMatchObject({ cairn_ref: null, cairn_status: null, cairn_synced_at: null })
 
     const digest = await call(showTaskRoute, 'GET', `/tasks/${todoRef}?view=digest`, { ref: todoRef })
@@ -453,5 +467,144 @@ describe('the lab board', () => {
       await change()
       expect(await pulse(), `the pulse missed ${what}`).not.toBe(before)
     }
+  })
+})
+
+describe('lab projects', () => {
+  const name = `Trig-${RUN}`
+  let projectId = ''
+  let otherId = ''
+  let subjectRef = ''
+
+  it('are curated by administrators: members read, admins write, names unique in any case', async () => {
+    auth.actor = actorFor(memberId, 'member')
+    const refused = await call(createLabProjectRoute, 'POST', '/lab-projects', {}, { name })
+    expect(refused.status).toBe(403)
+    expect(refused.json.code).toBe('forbidden')
+
+    auth.actor = actorFor(adminId, 'admin', 'agent')
+    const created = await call(createLabProjectRoute, 'POST', '/lab-projects', {}, { name, color: '#6B7FA6', cairnKey: 'trig' })
+    expect(created.status).toBe(201)
+    expect(created.json.data).toEqual({ id: expect.any(String), name, color: '#6b7fa6', cairn_key: 'TRIG', position: expect.any(Number) })
+    projectId = created.json.data.id
+    labProjectIds.push(projectId)
+
+    const twin = await call(createLabProjectRoute, 'POST', '/lab-projects', {}, { name: name.toUpperCase() })
+    expect(twin.status).toBe(409)
+    expect(twin.json.code).toBe('conflict')
+
+    const badKey = await call(createLabProjectRoute, 'POST', '/lab-projects', {}, { name: `x-${RUN}`, cairnKey: 'no-such' })
+    expect(badKey.status).toBe(400)
+
+    const other = await call(createLabProjectRoute, 'POST', '/lab-projects', {}, { name: `Croft-${RUN}` })
+    expect(other.json.data.cairn_key).toBeNull()
+    otherId = other.json.data.id
+    labProjectIds.push(otherId)
+
+    auth.actor = actorFor(memberId, 'member')
+    const listed = await call(listLabProjectsRoute, 'GET', '/lab-projects')
+    expect(listed.status).toBe(200)
+    expect(listed.json.data.find((p: { id: string }) => p.id === projectId)).toMatchObject({ name, cairn_key: 'TRIG', subjects: 0 })
+    expect((await listLabProjects()).some((p) => p.id === projectId)).toBe(true)
+    const memberPatch = await call(patchLabProjectRoute, 'PATCH', `/lab-projects/${projectId}`, { id: projectId }, { name: 'x' })
+    expect(memberPatch.status).toBe(403)
+  })
+
+  it('rename, recolour and re-key; null or an empty string clears the key', async () => {
+    const patch = (body: unknown) => call(patchLabProjectRoute, 'PATCH', `/lab-projects/${otherId}`, { id: otherId }, body)
+    expect((await patch({ cairnKey: 'CROFT' })).json.data.cairn_key).toBe('CROFT')
+    expect((await patch({ color: '#123456' })).json.data).toMatchObject({ color: '#123456', cairn_key: 'CROFT' })
+    expect((await patch({ cairnKey: null })).json.data.cairn_key).toBeNull()
+    await patch({ cairnKey: 'CROFT' })
+    expect((await patch({ cairnKey: '' })).json.data.cairn_key).toBeNull()
+    const taken = await patch({ name: name.toLowerCase() })
+    expect(taken.status).toBe(409)
+    const missing = await call(patchLabProjectRoute, 'PATCH', `/lab-projects/${randomUUID()}`, { id: randomUUID() }, { color: '#000000' })
+    expect(missing.status).toBe(404)
+  })
+
+  it('reorders when every project is named once', async () => {
+    const all = (await listLabProjects()).map((p) => p.id)
+    const reversed = [...all].reverse()
+    const partial = await call(reorderLabProjectsRoute, 'POST', '/lab-projects/reorder', {}, { ids: [projectId] })
+    expect(partial.status).toBe(400)
+    expect(partial.json.code).toBe('validation_failed')
+    const reordered = await call(reorderLabProjectsRoute, 'POST', '/lab-projects/reorder', {}, { ids: reversed })
+    expect(reordered.status).toBe(200)
+    expect(reordered.json.data.map((p: { id: string }) => p.id)).toEqual(reversed)
+  })
+
+  it('a subject is filed into one by name or id, moved, taken out, and refused an unknown one with the valid list', async () => {
+    const unknown = await call(createSubjectRoute, 'POST', '/subjects', {}, { title: 'x', project: `nope-${RUN}` })
+    expect(unknown.status).toBe(400)
+    expect(unknown.json.code).toBe('validation_failed')
+    expect(unknown.json.valid).toContain(name)
+
+    const created = await call(createSubjectRoute, 'POST', '/subjects', {}, { title: `Projected ${WORD}`, project: name.toLowerCase() })
+    expect(created.status).toBe(201)
+    subjectIds.push(created.json.data.id)
+    subjectRef = created.json.data.ref
+    expect(created.json.data.project).toEqual({ id: projectId, name, color: '#6b7fa6', cairn_key: 'TRIG', position: expect.any(Number) })
+
+    const patch = (body: unknown) => call(patchSubjectRoute, 'PATCH', `/subjects/${subjectRef}`, { ref: subjectRef }, body)
+    expect((await patch({ project: otherId })).json.data.project.id).toBe(otherId)
+    expect((await patch({ project: null })).json.data.project).toBeNull()
+    expect((await patch({ project: `nope-${RUN}` })).status).toBe(400)
+    const back = await patch({ project: name })
+    expect(back.json.data.project.id).toBe(projectId)
+    // Nothing in the log: a project change is an edit, not an event.
+    const notes = await call(listNotesRoute, 'GET', `/subjects/${subjectRef}/notes`, { ref: subjectRef })
+    expect(notes.json.data).toEqual([])
+  })
+
+  it('filters the board by project name, id, none, or a comma list', async () => {
+    const refs = async (query: string) =>
+      (await call(listSubjectsRoute, 'GET', `/subjects?q=${WORD}&archived=include&${query}`)).json.data.map((x: { ref: string }) => x.ref) as string[]
+    expect(await refs(`project=${encodeURIComponent(name.toUpperCase())}`)).toEqual([subjectRef])
+    expect(await refs(`project=${projectId}`)).toEqual([subjectRef])
+    expect(await refs(`project=Croft-${RUN}`)).toEqual([])
+    const none = await refs('project=none')
+    expect(none).not.toContain(subjectRef)
+    expect(none.length).toBeGreaterThan(0)
+    expect((await refs(`project=none,${encodeURIComponent(name)}`)).sort()).toEqual([...none, subjectRef].sort())
+    const listed = await call(listSubjectsRoute, 'GET', `/subjects?project=${encodeURIComponent(name)}`)
+    expect(listed.json.data[0].project).toMatchObject({ name, cairn_key: 'TRIG' })
+  })
+
+  it("shows a todo's subject with its project and Cairn key, for croft push", async () => {
+    const todo = await call(addTodoRoute, 'POST', `/subjects/${subjectRef}/todos`, { ref: subjectRef }, { title: 'Ship it behind a flag' })
+    expect(todo.status).toBe(201)
+    const shown = await call(showTaskRoute, 'GET', `/tasks/${todo.json.data.ref}`, { ref: todo.json.data.ref })
+    expect(shown.json.data.subject).toMatchObject({ ref: subjectRef, project: { name, cairn_key: 'TRIG' } })
+    const digest = await call(showTaskRoute, 'GET', `/tasks/${todo.json.data.ref}?view=digest`, { ref: todo.json.data.ref })
+    expect(digest.json.data.subject.project).toEqual({ name, cairn_key: 'TRIG' })
+  })
+
+  it('refuses to delete a project while a subject, archived or not, is in it', async () => {
+    await call(patchSubjectRoute, 'PATCH', `/subjects/${subjectRef}`, { ref: subjectRef }, { archived: true })
+    const counted = (await listLabProjects()).find((p) => p.id === projectId)
+    expect(counted?.subjects).toBe(1)
+
+    auth.actor = actorFor(memberId, 'member')
+    expect((await call(deleteLabProjectRoute, 'DELETE', `/lab-projects/${projectId}`, { id: projectId })).status).toBe(403)
+    auth.actor = actorFor(adminId, 'admin')
+
+    const inUse = await call(deleteLabProjectRoute, 'DELETE', `/lab-projects/${projectId}`, { id: projectId })
+    expect(inUse.status).toBe(409)
+    expect(inUse.json).toMatchObject({ code: 'project_in_use', subjects: 1 })
+
+    await call(patchSubjectRoute, 'PATCH', `/subjects/${subjectRef}`, { ref: subjectRef }, { project: null })
+    const deleted = await call(deleteLabProjectRoute, 'DELETE', `/lab-projects/${projectId}`, { id: projectId })
+    expect(deleted.status).toBe(200)
+    expect(deleted.json.data).toEqual({ id: projectId, deleted: true })
+    expect((await call(deleteLabProjectRoute, 'DELETE', `/lab-projects/${projectId}`, { id: projectId })).status).toBe(404)
+  })
+
+  it('moves the live-update pulse when a project changes', async () => {
+    const pulse = async () => (await pool().query('select croft_pulse(null) as p')).rows[0].p as string
+    const before = await pulse()
+    await new Promise((r) => setTimeout(r, 5))
+    await call(patchLabProjectRoute, 'PATCH', `/lab-projects/${otherId}`, { id: otherId }, { color: '#654321' })
+    expect(await pulse()).not.toBe(before)
   })
 })

@@ -32,6 +32,19 @@ export type Tag = {
   position: number
 }
 
+/**
+ * A lab project: a curated grouping of subjects (Trig, Croft, Dispofi…), each
+ * optionally mapped to the Cairn project that receives its todos on `croft push`.
+ * Not a task container: todos keep their `T-n` refs whatever their subject's project.
+ */
+export type LabProject = {
+  id: string
+  name: string
+  color: string
+  cairn_key: string | null
+  position: number
+}
+
 export type SubjectOwner = { id: string; name: string } | null
 
 export type SubjectSummary = {
@@ -41,6 +54,7 @@ export type SubjectSummary = {
   title: string
   stage: Stage
   tags: Tag[]
+  project: LabProject | null
   owner: SubjectOwner
   conclusion: string | null
   todos: { open: number; done: number }

@@ -1,11 +1,9 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { admin } from '@/lib/db/client'
 import { currentUser, listAllTasks, listProjects } from '@/lib/data'
 import { ListView } from '../projects/[key]/list-view'
 import { LiveUpdates } from '@/components/live-updates'
-import { ProjectIcon } from '@/components/icons'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { PendingLink } from '@/components/pending-link'
 import { EmptyState } from '@/components/empty-state'
@@ -85,24 +83,6 @@ const TodosPage = async ({ searchParams }: { searchParams: Promise<{ closed?: st
           showProject
           projects={projects.map((p) => ({ key: p.key, title: p.title }))}
         />
-
-        <section className="border-border mt-6 border-t px-4 py-4">
-          <h2 className="text-fg-muted mb-2 text-[0.6875rem] font-medium">Projects</h2>
-          <ul className="flex flex-wrap gap-1.5">
-            {projects.map((p) => (
-              <li key={p.id}>
-                <Link
-                  href={`/projects/${p.key}`}
-                  className="border-border text-fg-muted hover:bg-surface-hover hover:text-fg hover:border-border-strong flex h-[1.625rem] items-center gap-1.5 rounded-md border px-2 text-[0.75rem] transition-colors duration-[var(--dur-1)] ease-[var(--ease-out)]"
-                >
-                  <ProjectIcon size={12} projectKey={p.key} />
-                  {p.title}
-                  <span className="text-fg-subtle tabular">{p.task_counter}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
       </div>
 
       <LiveUpdates />

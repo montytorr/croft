@@ -17,10 +17,12 @@ import {
   createSubjectNoteSchema,
   createSubjectSchema,
   createSubjectTodoSchema,
+  createLabProjectSchema,
   createTagSchema,
   reorderSchema,
   updateStageSchema,
   updateSubjectSchema,
+  updateLabProjectSchema,
   updateTagSchema,
 } from '@/schemas/subject'
 import { STAGE_CATEGORIES, SUBJECT_NOTE_KINDS } from '@/lib/lab/types'
@@ -53,7 +55,7 @@ const errorResponse = {
             enum: [
               'unauthorized', 'forbidden', 'not_found', 'validation_failed',
               'conflict', 'already_claimed', 'resolution_required',
-              'conclusion_required', 'stage_in_use', 'cairn_not_configured',
+              'conclusion_required', 'stage_in_use', 'project_in_use', 'cairn_not_configured',
               'secret_detected', 'rate_limited', 'internal_error',
             ],
           },
@@ -119,6 +121,30 @@ const tagSchema = {
   required: ['id', 'name', 'color', 'position'],
 }
 
+const labProjectSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    name: { type: 'string', example: 'Trig' },
+    color: { type: 'string', example: '#6b7fa6' },
+    cairn_key: {
+      type: ['string', 'null'],
+      example: 'TRIG',
+      description: 'The Cairn project `croft push T-n` files this project\'s todos under when no `--to` is given.',
+    },
+    position: { type: 'integer' },
+  },
+  required: ['id', 'name', 'color', 'cairn_key', 'position'],
+}
+
+const labProjectListedSchema = {
+  ...labProjectSchema,
+  properties: {
+    ...labProjectSchema.properties,
+    subjects: { type: 'integer', description: 'How many subjects, archived ones included, are in it.' },
+  },
+}
+
 const subjectSchema = {
   type: 'object',
   properties: {
@@ -129,6 +155,7 @@ const subjectSchema = {
     body: { type: ['string', 'null'], description: 'The write-up. Absent from list rows.' },
     stage: stageSchema,
     tags: { type: 'array', items: tagSchema },
+    project: { oneOf: [labProjectSchema, { type: 'null' }], description: 'The lab project it is part of, if any.' },
     owner: {
       type: ['object', 'null'],
       properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' } },
@@ -604,7 +631,17 @@ export const openapiSpec = () => ({
               subject: {
                 type: ['object', 'null'],
                 description: 'The lab subject a todo is part of; null for an ordinary task. In the digest only when set.',
-                properties: { ref: { type: 'string', example: 'S-12' }, number: { type: 'integer' }, title: { type: 'string' } },
+                properties: {
+                  ref: { type: 'string', example: 'S-12' },
+                  number: { type: 'integer' },
+                  title: { type: 'string' },
+                  project: {
+                    type: ['object', 'null'],
+                    description:
+                      "The subject's lab project. `croft push T-n` with no `--to` files the todo under its `cairn_key`.",
+                    properties: { name: { type: 'string', example: 'Trig' }, cairn_key: { type: ['string', 'null'], example: 'TRIG' } },
+                  },
+                },
               },
               subject_id: { type: ['string', 'null'], format: 'uuid' },
               cairn_ref: { type: ['string', 'null'], example: 'CAIRN-331', description: 'The Cairn task `croft push` handed it to. In the digest only when set.' },
@@ -1064,6 +1101,12 @@ export const openapiSpec = () => ({
           { name: 'stage', in: 'query', schema: { type: 'string' }, description: 'Stage name (any case) or id.' },
           { name: 'tag', in: 'query', schema: { type: 'string' }, description: 'Tag name or id, or a comma list: subjects carrying any of them.' },
           { name: 'owner', in: 'query', schema: { type: 'string' }, description: '`me`, a user id, an email or a display name.' },
+          {
+            name: 'project',
+            in: 'query',
+            schema: { type: 'string' },
+            description: 'Lab project name (any case) or id, `none` for subjects in no project, or a comma list: subjects in any of them.',
+          },
           { name: 'q', in: 'query', schema: { type: 'string' }, description: 'Full text over title, write-up and conclusion.' },
           { name: 'archived', in: 'query', schema: { type: 'string', enum: ['include', 'only', 'true', 'false', '1', '0'] } },
         ],
@@ -1073,7 +1116,8 @@ export const openapiSpec = () => ({
         summary: 'File a subject',
         description:
           'Without `stage`, it lands in the first planned stage. `tags` are names of existing tags ' +
-          '(unknown ones are refused with the valid list). `owner` defaults to the caller; `null` leaves it unowned. ' +
+          '(unknown ones are refused with the valid list). `project` is a lab project\'s name or id (unknown ones are ' +
+          'refused the same way). `owner` defaults to the caller; `null` leaves it unowned. ' +
           'Filing straight into a completed or dropped stage needs a `conclusion` (`conclusion_required`).',
         requestBody: body(json(createSubjectSchema)),
         responses: { '201': okResponse('The subject.', subjectSchema), '400': errorResponse, '404': errorResponse },
@@ -1105,7 +1149,8 @@ export const openapiSpec = () => ({
         description:
           'Moving into a completed or dropped stage without a conclusion (already recorded or sent with ' +
           'the move) is refused with `conclusion_required`. Every stage change appends a `stage` note ' +
-          '(`to explore → exploring`). `tags` replaces the whole set. `archived: true` takes it off the board.',
+          '(`to explore → exploring`). `tags` replaces the whole set. `project` is a lab project\'s name or id; ' +
+          '`null` takes the subject out of its project. `archived: true` takes it off the board.',
         requestBody: body(json(updateSubjectSchema)),
         responses: { '200': okResponse('The subject.', subjectSchema), '400': errorResponse, '404': errorResponse },
       },
@@ -1199,6 +1244,53 @@ export const openapiSpec = () => ({
       delete: {
         summary: 'Delete a tag (administrators); it comes off every subject',
         responses: { '200': okResponse('Deleted, with how many subjects carried it.'), '403': errorResponse, '404': errorResponse },
+      },
+    },
+    '/lab-projects': {
+      get: {
+        summary: 'The lab projects, in order',
+        description: 'Each row carries `subjects`: how many subjects, archived ones included, are in it.',
+        responses: { '200': okResponse('LabProject[]', { type: 'array', items: labProjectListedSchema }) },
+      },
+      post: {
+        summary: 'Add a lab project (administrators)',
+        description:
+          'Names are unique in any case. `cairnKey` is the Cairn project `croft push T-n` files the ' +
+          'project\'s todos under when no `--to` is given (upper-cased; `""` or `null` for none).',
+        requestBody: body(json(createLabProjectSchema)),
+        responses: { '201': okResponse('The lab project.', labProjectSchema), '400': errorResponse, '403': errorResponse, '409': errorResponse },
+      },
+    },
+    '/lab-projects/reorder': {
+      post: {
+        summary: 'Reorder the lab projects (administrators)',
+        description: '`ids` must name every lab project exactly once.',
+        requestBody: body(json(reorderSchema)),
+        responses: {
+          '200': okResponse('LabProject[]', { type: 'array', items: labProjectListedSchema }),
+          '400': errorResponse,
+          '403': errorResponse,
+        },
+      },
+    },
+    '/lab-projects/{id}': {
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+      patch: {
+        summary: 'Rename, recolour, re-key or move a lab project (administrators)',
+        description: '`cairnKey: null` (or `""`) clears the Cairn key; an omitted field is left as it is.',
+        requestBody: body(json(updateLabProjectSchema)),
+        responses: {
+          '200': okResponse('The lab project.', labProjectSchema),
+          '400': errorResponse,
+          '403': errorResponse,
+          '404': errorResponse,
+          '409': errorResponse,
+        },
+      },
+      delete: {
+        summary: 'Delete a lab project (administrators)',
+        description: 'Refused with `project_in_use` (409) while any subject, archived ones included, is in it.',
+        responses: { '200': okResponse('Deleted.'), '403': errorResponse, '404': errorResponse, '409': errorResponse },
       },
     },
     '/integrations/cairn': {

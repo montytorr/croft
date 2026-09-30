@@ -8,6 +8,24 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+### Added
+
+- **Lab projects.** A subject can belong to one project from a short list an administrator
+  curates in Settings (name, colour, and optionally a Cairn project key), like tags. The board
+  filters by project (`?project=`, any-of lists and `none`), and cards, rows and the subject
+  page show it. `croft projects` lists them; `croft subject add|edit|list --project`.
+- **`croft push T-n` knows where to go.** With no `--to`, a todo is pushed to the Cairn key of
+  its subject's project; an explicit `--to` still wins, and push says what is missing when
+  there is no project or no key.
+- **Create a tag where you need it.** An administrator can create a tag from a subject's tag
+  picker, not only in Settings.
+
+### Removed
+
+- **The Projects menu inherited from Cairn.** Task-container projects are an internal detail
+  now: todos keep their `T-n` refs and live under their subject. `croft project list` still
+  shows the containers.
+
 ## [0.1.0] — 2026-09-30
 
 Forked from Cairn v0.12.1 (1ef3556).

@@ -53,13 +53,11 @@ describe('renaming a project key keeps old refs working', () => {
 
   it('says so when an old address redirects', () => {
     // A silent swap of AC-113 for HOL-113 is the thing CROFT-264 fixed; the
-    // redirect carries a marker and both pages render the notice from it.
+    // redirect carries a marker and the todo page renders the notice from it.
+    // (The project board that did the same went with the Projects menu.)
     const task = read('src/app/(app)/projects/[key]/tasks/[number]/page.tsx')
-    const project = read('src/app/(app)/projects/[key]/page.tsx')
     expect(task).toMatch(/\?from=/)
     expect(task).toContain('RedirectNotice')
-    expect(project).toContain('from: retired.key')
-    expect(project).toContain('RedirectNotice')
   })
 
   it('refuses to reuse a key another project retired', () => {

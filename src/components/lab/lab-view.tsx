@@ -9,16 +9,19 @@ import { Spinner } from '@/components/spinner'
 import { Button } from '@/components/ui/control'
 import { cn } from '@/lib/utils'
 import { rememberLabView, type LabView as View } from '@/lib/lab/ui-view'
-import type { Stage, SubjectSummary, Tag } from '@/lib/lab/types'
+import type { LabProject, Stage, SubjectSummary, Tag } from '@/lib/lab/types'
+import { matchProjectFilter } from '@/lib/lab/ui-colours'
 import { useCreateSubject } from '@/components/subject-creation'
 import { LabBoard } from './lab-board'
 import { LabList } from './lab-list'
+import { ProjectLabel } from './project-label'
 import { TagChip } from './tag-chip'
 
-export type LabFilters = { tag: string; owner: 'me' | 'all'; q: string }
+export type LabFilters = { project: string; tag: string; owner: 'me' | 'all'; q: string }
 
-const labUrl = ({ tag, owner, q }: LabFilters) => {
+const labUrl = ({ project, tag, owner, q }: LabFilters) => {
   const params = new URLSearchParams()
+  if (project) params.set('project', project)
   if (tag) params.set('tag', tag)
   if (owner === 'me') params.set('owner', 'me')
   if (q.trim()) params.set('q', q.trim())
@@ -67,12 +70,14 @@ export const LabView = ({
   subjects,
   stages,
   tags,
+  projects,
   initialView,
   filters,
 }: {
   subjects: SubjectSummary[]
   stages: Stage[]
   tags: Tag[]
+  projects: LabProject[]
   initialView: View | null
   filters: LabFilters
 }) => {
@@ -87,15 +92,15 @@ export const LabView = ({
     start(() => router.replace(labUrl({ ...filters, q: query, ...next }), { scroll: false }))
 
   // The text filter follows typing, a beat behind it.
-  const { tag, owner, q } = filters
+  const { project, tag, owner, q } = filters
   useEffect(() => {
     if (query === q) return
     const timer = setTimeout(
-      () => start(() => router.replace(labUrl({ tag, owner, q: query }), { scroll: false })),
+      () => start(() => router.replace(labUrl({ project, tag, owner, q: query }), { scroll: false })),
       280,
     )
     return () => clearTimeout(timer)
-  }, [query, q, tag, owner, router])
+  }, [query, q, project, tag, owner, router])
 
   // `/` focuses the filter, as it does on every list.
   useEffect(() => {
@@ -119,7 +124,10 @@ export const LabView = ({
   const active = subjects.filter((s) => s.stage.category === 'active').length
   const planned = subjects.filter((s) => s.stage.category === 'planned').length
   const concluded = subjects.length - active - planned
-  const filtered = Boolean(filters.tag || filters.owner === 'me' || filters.q)
+  const filtered = Boolean(filters.project || filters.tag || filters.owner === 'me' || filters.q)
+  // Matched by name, any case, or id, as the API does — so a link typed by hand
+  // still lights its chip.
+  const pickedProject = matchProjectFilter(filters.project, projects)
 
   return (
     <div className="flex h-dvh flex-col">
@@ -186,6 +194,43 @@ export const LabView = ({
             { value: 'me', label: 'Mine' },
           ]}
         />
+
+        {projects.length > 0 ? (
+          <div className="flex min-w-0 flex-wrap items-center gap-1" role="group" aria-label="Filter by project">
+            {projects.map((p) => {
+              const on = pickedProject !== 'none' && pickedProject?.id === p.id
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => push({ project: on ? '' : p.name })}
+                  className="rounded-[5px] transition-opacity hover:opacity-100"
+                  style={{ opacity: filters.project && !on ? 0.6 : 1 }}
+                >
+                  <ProjectLabel project={p} active={on} />
+                </button>
+              )
+            })}
+            <button
+              type="button"
+              aria-pressed={pickedProject === 'none'}
+              onClick={() => push({ project: pickedProject === 'none' ? '' : 'none' })}
+              className={cn(
+                'border-border h-[1.25rem] rounded-[5px] border border-dashed px-1.5 text-[0.6875rem] leading-none font-medium transition-[opacity,color]',
+                pickedProject === 'none' ? 'text-fg border-border-strong bg-surface-raised' : 'text-fg-subtle hover:text-fg',
+                filters.project && pickedProject !== 'none' && 'opacity-60 hover:opacity-100',
+              )}
+              title="Subjects that belong to no project"
+            >
+              No project
+            </button>
+          </div>
+        ) : null}
+
+        {projects.length > 0 && tags.length > 0 ? (
+          <span className="bg-border hidden h-4 w-px shrink-0 sm:block" aria-hidden />
+        ) : null}
 
         {tags.length > 0 ? (
           <div className="flex min-w-0 flex-wrap items-center gap-1" role="group" aria-label="Filter by tag">

@@ -8,17 +8,9 @@ import { AppSidebar } from '@/components/app-sidebar'
 /**
  * The whole of navigation on a narrow screen. Until this existed the sidebar
  * was simply `hidden md:flex`, which left a phone with no way to reach any
- * project at all.
+ * other page at all.
  */
-export const MobileNav = ({
-  email,
-  role,
-  projects,
-}: {
-  email: string
-  role: 'admin' | 'member'
-  projects: { key: string; title: string }[]
-}) => {
+export const MobileNav = ({ email, role }: { email: string; role: 'admin' | 'member' }) => {
   const [open, setOpen] = useState(false)
   const pathname = usePathname()
 
@@ -63,7 +55,6 @@ export const MobileNav = ({
             <AppSidebar
               email={email}
               role={role}
-              projects={projects}
               onNavigate={() => setOpen(false)}
               trailing={
                 <button

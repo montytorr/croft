@@ -45,10 +45,10 @@ export const hrefFor = (row: ActivityRow): string | null => {
   if (subject) return `/subjects/${subject[1]}`
   const [key, number] = row.ref.split('-')
   if (key && number) return `/projects/${key}/tasks/${number}`
-  // An event about the project itself — renamed, re-keyed, archived — carries
-  // the project's live key as its ref and no number. It was unlinked, so the
-  // one row saying "AC is now HOL" led nowhere.
-  if (row.kind === 'event' && row.project_key) return `/projects/${row.project_key.split(',')[0]}`
+  // An event about a task project itself — renamed, re-keyed, archived —
+  // carries the project's live key as its ref and no number. Projects have no
+  // page of their own any more, so it leads to their todos.
+  if (row.kind === 'event' && row.project_key) return '/todos'
   return null
 }
 

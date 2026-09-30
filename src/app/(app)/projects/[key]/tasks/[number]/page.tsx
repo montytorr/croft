@@ -171,8 +171,10 @@ const TaskPage = async ({
             <span className="truncate">{task.subject.title}</span>
           </Link>
         ) : (
+          // No subject: the todo's project, leading to the list of all todos —
+          // the project page this used to lead to went with the Projects menu.
           <Link
-            href={`/projects/${task.project.key}`}
+            href="/todos"
             className="text-fg-muted hover:text-fg flex min-w-0 shrink items-center gap-1.5 text-[0.8125rem] transition-colors"
           >
             <ProjectIcon size={13} projectKey={task.project.key} />
@@ -238,7 +240,7 @@ const TaskPage = async ({
                 {ref}
               </span>
               <Link
-                href={`/projects/${task.project.key}`}
+                href="/todos"
                 className="border-border text-fg-muted hover:text-fg hover:border-border-strong hover:bg-surface-hover inline-flex h-[1.25rem] min-w-0 items-center gap-1.5 rounded-full border pr-2 pl-1.5 text-[0.6875rem] transition-colors duration-[var(--dur-1)] ease-[var(--ease-out)]"
               >
                 <ProjectIcon size={11} projectKey={task.project.key} />

@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { currentUser } from '@/lib/data'
-import { listStages, listSubjects, listTags } from '@/lib/lab/data'
+import { listLabProjects, listStages, listSubjects, listTags } from '@/lib/lab/data'
 import { LAB_VIEW_COOKIE, parseLabView } from '@/lib/lab/ui-view'
 import { LabView } from '@/components/lab/lab-view'
 import { LiveUpdates } from '@/components/live-updates'
@@ -12,24 +12,26 @@ export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Lab' }
 
 /**
- * Home is the lab: every subject, filtered by the URL (`?tag=`, `?owner=me`,
- * `?q=`), shown as the list or the board this viewer last chose.
+ * Home is the lab: every subject, filtered by the URL (`?project=`, `?tag=`,
+ * `?owner=me`, `?q=`), shown as the list or the board this viewer last chose.
  */
 const LabPage = async ({
   searchParams,
 }: {
-  searchParams: Promise<{ tag?: string; owner?: string; q?: string }>
+  searchParams: Promise<{ project?: string; tag?: string; owner?: string; q?: string }>
 }) => {
   const user = await currentUser()
   if (!user) redirect('/login')
 
-  const { tag = '', owner, q = '' } = await searchParams
+  const { project = '', tag = '', owner, q = '' } = await searchParams
   const mine = owner === 'me'
 
-  const [stages, tags, subjects] = await Promise.all([
+  const [stages, tags, projects, subjects] = await Promise.all([
     listStages(),
     listTags(),
+    listLabProjects(),
     listSubjects({
+      ...(project ? { project } : {}),
       ...(tag ? { tag } : {}),
       ...(mine ? { ownerId: user.id } : {}),
       ...(q.trim() ? { q: q.trim() } : {}),
@@ -47,8 +49,9 @@ const LabPage = async ({
         subjects={subjects}
         stages={stages}
         tags={tags}
+        projects={projects}
         initialView={initialView}
-        filters={{ tag, owner: mine ? 'me' : 'all', q }}
+        filters={{ project, tag, owner: mine ? 'me' : 'all', q }}
       />
       <LiveUpdates />
     </div>

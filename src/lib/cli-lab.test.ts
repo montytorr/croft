@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { createServer, type Server } from 'node:http'
+import { existsSync } from 'node:fs'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -102,8 +103,8 @@ describe('croft subject', () => {
     })
     const lines = stdout.trim().split('\n')
     expect(lines[0]).toBe('#1')
-    expect(lines[1]).toBe('ref\tstage\ttodos\ttags\ttokens\ttitle')
-    expect(lines[2]).toMatch(/^S-12\texploring\t2\/1\tdb\t~\d+\tpgvector for recall$/)
+    expect(lines[1]).toBe('ref\tstage\ttodos\ttags\tproject\ttokens\ttitle')
+    expect(lines[2]).toMatch(/^S-12\texploring\t2\/1\tdb\t\t~\d+\tpgvector for recall$/)
   })
 
   it('list passes its filters and prints one row per subject', async () => {
@@ -225,6 +226,58 @@ describe('croft subject', () => {
     expect(code).toBe(1)
     expect(stderr).toContain('T-41 is a todo')
     expect(seen).toHaveLength(0)
+  })
+})
+
+const trig = { id: 'p1', name: 'Trig', color: '#6b7fa6', cairn_key: 'TRIG', position: 0 }
+
+describe('lab projects', () => {
+  it('croft projects lists the lab projects with their Cairn key and subject count, in order', async () => {
+    const seen: Seen[] = []
+    const base = await serve(() => [
+      { id: 'p2', name: 'Croft', color: '#888888', cairn_key: null, position: 1, subjects: 0 },
+      { ...trig, subjects: 4 },
+    ], seen)
+    const { code, stdout } = await run(['projects'], base)
+    expect(code).toBe(0)
+    expect(seen[0]).toMatchObject({ method: 'GET', path: '/api/v1/lab-projects' })
+    expect(stdout.split('\n').slice(0, 4)).toEqual(['#2', 'project\tcairn\tsubjects', 'Trig\tTRIG\t4', 'Croft\t\t0'])
+  })
+
+  it('project list is where the task containers went', async () => {
+    const seen: Seen[] = []
+    const base = await serve(() => [{ id: 'x', key: 'T', title: 'Todos', status: 'active', former_keys: [] }], seen)
+    const { code, stdout } = await run(['project', 'list', '--archived'], base)
+    expect(code).toBe(0)
+    expect(seen[0]!.path).toBe('/api/v1/projects?archived=1')
+    expect(stdout).toContain('T\tTodos')
+  })
+
+  it('subject add and list carry --project, and the row shows it', async () => {
+    const seen: Seen[] = []
+    const base = await serve(() => subject({ project: trig }), seen)
+    const added = await run(['subject', 'add', 'pgvector for recall', '--project', 'Trig'], base)
+    expect(added.code).toBe(0)
+    expect(seen[0]!.body).toEqual({ title: 'pgvector for recall', project: 'Trig' })
+    expect(added.stdout).toMatch(/\tdb\tTrig\t~\d+\tpgvector for recall/)
+
+    const listed = await run(['subject', 'list', '--project', 'none'], base)
+    expect(listed.code).toBe(0)
+    expect(new URL(seen[1]!.path, base).searchParams.get('project')).toBe('none')
+  })
+
+  it('subject edit --project none takes it out of its project; a name puts it in one', async () => {
+    const seen: Seen[] = []
+    const base = await serve(() => subject(), seen)
+    expect((await run(['subject', 'edit', 'S-12', '--project', 'none'], base)).code).toBe(0)
+    expect((await run(['subject', 'edit', 'S-12', '--project', 'Trig'], base)).code).toBe(0)
+    expect(seen.map((s) => s.body)).toEqual([{ project: null }, { project: 'Trig' }])
+  })
+
+  it('subject show prints the project and its Cairn key', async () => {
+    const base = await serve((req) => (req.path.endsWith('/notes') || req.path.endsWith('/todos') ? [] : subject({ project: trig })))
+    const { stdout } = await run(['subject', 'show', 'S-12'], base)
+    expect(stdout).toContain('project Trig (Cairn TRIG)')
   })
 })
 
@@ -380,6 +433,45 @@ describe('croft push --to', () => {
     const { code, stderr } = await run(['push', 'T-41', '--to', 'CAIRN'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
     expect(code).toBe(1)
     expect(stderr).toContain('T-41 is already paired with CAIRN-300')
+  })
+
+  it('without --to files it under the Cairn key of its subject\'s lab project', async () => {
+    const dir = await tempDir('croft-cairn-')
+    const cairn = await fakeCairn(dir)
+    const seen: Seen[] = []
+    const withKey = { ...todo, subject: { ref: 'S-12', project: { name: 'Trig', cairn_key: 'TRIG' } } }
+    const base = await serve((req) => (req.method === 'GET' ? withKey : { cairn_ref: 'CAIRN-331' }), seen)
+    const { code, stderr } = await run(['push', 'T-41'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
+    expect(code, stderr).toBe(0)
+    const [call] = await cairn.calls()
+    expect(call.args.slice(0, 4)).toEqual(['add', 'Ship the index', '--project', 'TRIG'])
+    expect(stderr).toContain("filing in TRIG, Trig's Cairn project")
+    expect(posts(seen, '/api/v1/tasks/T-41/cairn-link')).toHaveLength(1)
+
+    // An explicit --to still wins.
+    const again = await run(['push', 'T-41', '--to', 'OTHER'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
+    expect(again.code, again.stderr).toBe(0)
+    expect((await cairn.calls())[1].args.slice(0, 4)).toEqual(['add', 'Ship the index', '--project', 'OTHER'])
+  })
+
+  it('without --to refuses, saying what is missing, when there is no key to go to', async () => {
+    const dir = await tempDir('croft-cairn-')
+    const cairn = await fakeCairn(dir)
+    const cases: [Record<string, unknown>, string][] = [
+      [{ ...todo, subject: null }, 'T-41 is not part of a subject'],
+      [{ ...todo, subject: { ref: 'S-12', project: null } }, "T-41's subject S-12 is in no lab project"],
+      [{ ...todo, subject: { ref: 'S-12', project: { name: 'Trig', cairn_key: null } } }, "T-41's lab project Trig has no Cairn key"],
+    ]
+    for (const [shown, why] of cases) {
+      const seen: Seen[] = []
+      const base = await serve(() => shown, seen)
+      const { code, stderr } = await run(['push', 'T-41'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
+      expect(code).toBe(1)
+      expect(stderr).toContain(why)
+      expect(stderr).toContain('croft push T-41 --to <CAIRN_KEY>')
+      expect(seen.map((s) => s.method)).toEqual(['GET'])
+    }
+    expect(existsSync(join(dir, 'calls.jsonl'))).toBe(false)
   })
 
   it('without --to still records a git push', async () => {
@@ -596,7 +688,7 @@ describe('the CLI surface', () => {
 
   it('offers the lab verbs and none of the memory verbs', async () => {
     const { stdout } = await run(['help'], 'http://127.0.0.1:9')
-    for (const verb of ['croft subject add', 'croft subject stage', 'croft stages', 'croft tags', 'croft push T-41 --to', 'croft sync', 'croft context --brief']) {
+    for (const verb of ['croft subject add', 'croft subject stage', 'croft stages', 'croft tags', 'croft projects', 'croft push T-41 [--to', 'croft sync', 'croft context --brief']) {
       expect(stdout).toContain(verb)
     }
     for (const gone of ['croft learn', 'croft relearn', 'croft unlearn', 'croft verify', 'croft know', 'croft recall', 'croft vitals', 'croft session', 'croft entities']) {

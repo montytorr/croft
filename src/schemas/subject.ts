@@ -23,6 +23,8 @@ const stageRef = z.string().trim().min(1).max(80)
 const tagNames = z.array(z.string().trim().min(1).max(40)).max(20)
 /** `me`, a user id, an email or a display name. */
 const owner = z.string().trim().min(1).max(320)
+/** A lab project by name (any case) or id. Unknown ones are refused by the route, which lists the real ones. */
+const projectRef = z.string().trim().min(1).max(80)
 
 export const createSubjectSchema = z.object({
   title,
@@ -30,6 +32,8 @@ export const createSubjectSchema = z.object({
   stage: stageRef.optional(),
   tags: tagNames.optional(),
   owner: owner.nullable().optional(),
+  /** A lab project, by name or id. Omitted or `null`: none. */
+  project: projectRef.nullable().optional(),
   /** Only needed when the subject is filed straight into a completed or dropped stage. */
   conclusion: conclusion.optional(),
 })
@@ -43,6 +47,8 @@ export const updateSubjectSchema = z
     conclusion: conclusion.nullable(),
     tags: tagNames,
     owner: owner.nullable(),
+    /** A lab project, by name or id; `null` takes the subject out of its project. */
+    project: projectRef.nullable(),
     position: z.number().int().min(-1_000_000).max(1_000_000),
     archived: z.boolean(),
   })
@@ -70,6 +76,8 @@ export const listSubjectsQuery = z.object({
   /** One tag, or a comma list: subjects carrying any of them. */
   tag: z.string().trim().min(1).max(400).optional(),
   owner: z.string().trim().min(1).max(320).optional(),
+  /** A lab project name or id, `none` for subjects in no project, or a comma list: subjects in any of them. */
+  project: z.string().trim().min(1).max(400).optional(),
   q: z.string().trim().min(1).max(500).optional(),
   /**
    * `include`: live and archived. `only` (or `true`/`1`): archived only.
@@ -121,6 +129,41 @@ export const createTagSchema = z.object({
 
 export const updateTagSchema = z
   .object({ name: tagName, color: colour, position: z.number().int().min(0).max(10_000) })
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, 'Send at least one field to change.')
+
+const labProjectName = z.string().trim().min(1).max(40)
+
+/** Cairn's project key shape (`CAIRN`, `TRIG`): two to ten characters, a letter first. */
+export const CAIRN_KEY = /^[A-Z][A-Z0-9]{1,9}$/
+/** Upper-cased. An empty string reads as no key, so a cleared form field clears it. */
+const cairnKey = z
+  .string()
+  .trim()
+  .transform((v) => v.toUpperCase())
+  .pipe(
+    z
+      .string()
+      .regex(/^(?:[A-Z][A-Z0-9]{1,9})?$/, 'expected a Cairn project key like CAIRN (2-10 characters, a letter first)'),
+  )
+  .transform((v) => v || null)
+
+export const createLabProjectSchema = z.object({
+  name: labProjectName,
+  color: colour.optional(),
+  /** Where `croft push T-n` files this project's todos when no `--to` is given. */
+  cairnKey: cairnKey.nullable().optional(),
+  position: z.number().int().min(0).max(10_000).optional(),
+})
+
+export const updateLabProjectSchema = z
+  .object({
+    name: labProjectName,
+    color: colour,
+    /** `null` clears it. */
+    cairnKey: cairnKey.nullable(),
+    position: z.number().int().min(0).max(10_000),
+  })
   .partial()
   .refine((value) => Object.keys(value).length > 0, 'Send at least one field to change.')
 

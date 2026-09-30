@@ -6,8 +6,10 @@ import {
   createSubjectNoteSchema,
   createSubjectSchema,
   createSubjectTodoSchema,
+  createLabProjectSchema,
   createTagSchema,
   listSubjectsQuery,
+  updateLabProjectSchema,
   updateSubjectSchema,
 } from './subject'
 
@@ -70,6 +72,34 @@ describe('stage and tag schemas', () => {
     expect(createStageSchema.parse({ name: 'x', category: 'active', color: '#AABBCC' }).color).toBe('#aabbcc')
     expect(createTagSchema.parse({ name: '  AI ' }).name).toBe('ai')
     expect(createTagSchema.safeParse({ name: 'x', color: 'red' }).success).toBe(false)
+  })
+})
+
+describe('lab project schemas', () => {
+  it('takes a name, an optional colour and an optional Cairn key, upper-cased', () => {
+    expect(createLabProjectSchema.parse({ name: ' Trig ', cairnKey: 'trig' })).toEqual({ name: 'Trig', cairnKey: 'TRIG' })
+    expect(createLabProjectSchema.parse({ name: 'Croft', color: '#AABBCC' })).toEqual({ name: 'Croft', color: '#aabbcc' })
+    expect(createLabProjectSchema.safeParse({ name: '' }).success).toBe(false)
+    expect(createLabProjectSchema.safeParse({ name: 'x'.repeat(41) }).success).toBe(false)
+  })
+
+  it('refuses a Cairn key that is not one', () => {
+    for (const bad of ['T', '1ABC', 'TOO-LONG', 'ABCDEFGHIJK', 'A B']) {
+      expect(createLabProjectSchema.safeParse({ name: 'x', cairnKey: bad }).success, bad).toBe(false)
+    }
+  })
+
+  it('clears the key with null or an empty string, and never invents fields on a PATCH', () => {
+    expect(updateLabProjectSchema.parse({ cairnKey: null })).toEqual({ cairnKey: null })
+    expect(updateLabProjectSchema.parse({ cairnKey: '  ' })).toEqual({ cairnKey: null })
+    expect(updateLabProjectSchema.parse({ name: 'Trig' })).toEqual({ name: 'Trig' })
+    expect(updateLabProjectSchema.safeParse({}).success).toBe(false)
+  })
+
+  it('lets a subject name its project, or leave it with null', () => {
+    expect(createSubjectSchema.parse({ title: 'x', project: ' Trig ' }).project).toBe('Trig')
+    expect(updateSubjectSchema.parse({ project: null })).toEqual({ project: null })
+    expect(listSubjectsQuery.parse({ project: 'Trig,none' }).project).toBe('Trig,none')
   })
 })
 
