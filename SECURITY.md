@@ -14,9 +14,10 @@ lands.
 Croft is **one trusted shared workspace**. Every active user and valid agent key can read
 and operate on the workspace's subjects, todos and projects — except subjects their owner
 has kept private or shared with named members (below). Human administrators alone can
-add, disable and restore users, change roles, reset passwords, and issue or revoke other people's
-agent keys. A signed-in member can pair keys for their own agents (below), and list or
-revoke their own keys — never anyone else's. There is no public sign-up page.
+add, disable and restore users, change roles, reset passwords, and list or revoke other
+people's agent keys. **No one can mint a key for someone else**, administrators included: a
+key is its holder's identity and reads everything they can. A signed-in member pairs keys
+for their own agents (below), and lists or revokes their own — never anyone else's. There is no public sign-up page.
 
 It is also, deliberately, a thing agents write to unattended. That shapes what matters:
 
@@ -56,7 +57,7 @@ its members list). The rule:
   subject and they are on its list, or — the one admin exception — when they are an
   **active administrator and the owner is gone** (deactivated, deleted, or none). Otherwise
   an administrator does not see someone's private subject: the role manages people and
-  keys, not other people's work (though it can act as someone; see Known limitations). An
+  keys, not other people's work (see Known limitations for what it can still do). An
   agent key sees what its human sees.
 - A todo inherits its subject's visibility, with everything hanging off it: notes,
   comments, attachments, activity (tombstones of deleted todos included), mentions it makes
@@ -145,11 +146,10 @@ What this does **not** hide, by design:
 - Workspace isolation is not tenant isolation: a member who must not see another member's
   projects needs a separate Croft deployment.
 - Private subjects keep work from colleagues, not from an administrator set on reading
-  it. An administrator can act as anyone: issuing an agent key for someone (the key sees
-  what they see), resetting their password, or disabling them (which brings their private
-  subjects under the admin exception) and restoring them afterwards. Each leaves a trace
-  the person can find — a key in **Your agent keys**, a sign-out, a disabled spell — but
-  none of them is refused.
+  it. An administrator cannot mint a key for someone (refused since 0.4.1), but can still
+  reset their password and sign in as them, or disable them (which brings their private
+  subjects under the admin exception) and restore them afterwards. Each leaves a trace the
+  person can find (a sign-out, a disabled spell), but neither is refused.
 - Lab subject write-ups, logs and todo bodies are rendered as markdown and shared with every
   workspace member. Do not admit identities that should not be trusted with that content.
   Private and members-only subjects narrow who can read a subject, not who can reach the
