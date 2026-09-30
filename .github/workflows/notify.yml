@@ -1,0 +1,48 @@
+name: notify
+
+# Announces pushes (every branch) and published releases in the team's Discord
+# channel. Deploys announce themselves from deploy.yml. The webhook is the
+# CROFT_DISCORD_WEBHOOK repository secret: never in the repo, and never given to
+# a fork's workflow runs (a fork's pushes do not trigger this in this repo).
+on:
+  push:
+    branches: ['**']
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    if: github.repository == 'montytorr/croft'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: announce
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.CROFT_DISCORD_WEBHOOK }}
+        run: |
+          set -uo pipefail
+          if [ -z "${DISCORD_WEBHOOK:-}" ]; then echo "::warning::CROFT_DISCORD_WEBHOOK is not set"; exit 0; fi
+          ev="$GITHUB_EVENT_PATH"
+          repo_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          if [ "$GITHUB_EVENT_NAME" = release ]; then
+            message=$(jq -r '"🏷️ **Croft \(.release.tag_name) released**" + (if (.release.name // "") != "" and .release.name != .release.tag_name then " · " + .release.name else "" end) + " · by \(.release.author.login)\n<\(.release.html_url)>"' "$ev")
+          else
+            branch="${GITHUB_REF#refs/heads/}"
+            if [ "$(jq -r '.deleted' "$ev")" = true ]; then
+              message="🗑️ **Croft** branch \`${branch}\` deleted by ${GITHUB_ACTOR}"
+            else
+              message=$(jq -r --arg branch "$branch" '
+                (.commits | length) as $n
+                | "📦 **Croft** · \($n) commit\(if $n == 1 then "" else "s" end) to `\($branch)` by \(.pusher.name)" + (if .forced then " (force-push)" else "" end)
+                + ([.commits[-5:][] | "\n- [`\(.id[0:7])`](<\(.url)>) \(.message | split("\n")[0] | .[0:120])"] | join(""))
+                + (if $n > 5 then "\n…and \($n - 5) more" else "" end)
+                + "\n<\(.compare)>"' "$ev")
+            fi
+          fi
+          # allowed_mentions: none, so no commit message or release name can ping anyone.
+          jq -n --arg c "${message:0:1900}" '{content: $c, allowed_mentions: {parse: []}}' \
+            | curl -fsS -m 10 -H 'Content-Type: application/json' -d @- "$DISCORD_WEBHOOK" >/dev/null \
+            || echo "::warning::Discord notification failed"
