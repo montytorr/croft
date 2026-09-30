@@ -21,7 +21,13 @@
  * without touching anyone else's. Every entry it owns is tagged, and tagging
  * is how it knows what is safe to replace.
  *
- * Usage: node scripts/install-hooks.mjs [--dry-run] [--openclaw]
+ * Usage: node scripts/install-hooks.mjs [--dry-run] [--openclaw] [--runtimes a,b]
+ *
+ * `--runtimes` limits the wiring to those runtimes (claude-code, codex, hermes,
+ * openclaw). `croft setup` passes the runtimes it paired keys for, so a hook is
+ * never wired into a runtime that has no key to run it with, and a runtime the
+ * person did not choose (Hermes, an OpenClaw gateway) is left untouched.
+ * Without it, every runtime found here, as before.
  *
  * `croft setup` runs this for you, alongside pairing keys and copying the
  * skill; run it by hand only to re-wire the hooks on their own.
@@ -34,6 +40,14 @@ import { dirname, join } from 'node:path'
 const DRY = process.argv.includes('--dry-run')
 /** Link the OpenClaw hook even where this user has no OpenClaw config yet. */
 const FORCE_OPENCLAW = process.argv.includes('--openclaw')
+/** The runtimes to wire, or null for every runtime found (a run by hand). */
+const RUNTIMES = (() => {
+  const at = process.argv.indexOf('--runtimes')
+  if (at === -1) return null
+  return new Set(String(process.argv[at + 1] ?? '').split(',').map((r) => r.trim()).filter(Boolean))
+})()
+const wanted = (runtime) => !RUNTIMES || RUNTIMES.has(runtime)
+const notWanted = (label) => log(`  ${label}: not in --runtimes — left untouched`)
 const HOME = homedir()
 const REPO = dirname(import.meta.dirname)
 
@@ -631,7 +645,11 @@ const version = () => {
 log(`Installing Croft hooks${DRY ? ' (dry run)' : ''}`)
 log(`  ${version()}`)
 installScripts()
-installClaude()
-installCodex()
-installHermes()
-installOpenclaw()
+if (wanted('claude-code')) installClaude()
+else notWanted('claude')
+if (wanted('codex')) installCodex()
+else notWanted('codex')
+if (wanted('hermes')) installHermes()
+else notWanted('Hermes Agent by Nous Research')
+if (wanted('openclaw')) installOpenclaw()
+else notWanted('openclaw')

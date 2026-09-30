@@ -4541,7 +4541,13 @@ const commands = {
       if (flags['no-hooks']) {
         line('– hooks     skipped (--no-hooks)')
       } else {
-        const result = spawnSync(process.execPath, [join(releaseDir, 'scripts', 'install-hooks.mjs'), ...(dry ? ['--dry-run'] : [])], { encoding: 'utf8' })
+        // Only the runtimes this setup paired keys for: a hook in a runtime with no
+        // key cannot run, and a runtime the person did not choose is not ours to edit.
+        const result = spawnSync(
+          process.execPath,
+          [join(releaseDir, 'scripts', 'install-hooks.mjs'), '--runtimes', runtimes.join(','), ...(dry ? ['--dry-run'] : [])],
+          { encoding: 'utf8' },
+        )
         line(`${dry ? '!' : '✓'} hooks     ${dry ? 'would install:' : 'installed:'}`)
         for (const l of `${result.stdout ?? ''}${result.stderr ?? ''}`.split('\n')) if (l.trim()) line(`   ${l}`)
       }
