@@ -26,12 +26,14 @@ check() {
   [ "$got" != "0" ] && [ "$got" != "f" ] || { echo "DRILL FAILED on $label"; exit 1; }
 }
 
-check "tasks" "select count(*) from public.tasks"
-check "projects" "select count(*) from public.projects"
-check "resolutions" "select count(*) from public.tasks where resolution is not null"
+# What every Croft database has from its first day (seeded stages, the first
+# administrator), then consistency that holds at any size: a new lab has no
+# subjects yet, and a drill that demanded some would fail on a healthy empty one.
+check "stages" "select count(*) from public.subject_stages"
 check "app users" "select count(*) from public.app_users"
-check "search vectors" "select count(*) from public.tasks where search_vector is not null"
-
+check "subject search vectors" "select count(*) filter (where search_vector is null) = 0 from public.subjects"
+check "todo search vectors" "select count(*) filter (where search_vector is null) = 0 from public.tasks"
+echo "  subjects: $(q "$SCRATCH" "select count(*) from public.subjects"), todos: $(q "$SCRATCH" "select count(*) from public.tasks")"
 LATEST_FILES=$(find "$DEST/daily" -maxdepth 1 -name 'croft-storage-*.tar.gz' -printf '%T@ %p\n' | sort -nr | head -1 | cut -d' ' -f2-)
 [ -n "$LATEST_FILES" ] && tar -tzf "$LATEST_FILES" >/dev/null
 echo "  attachment archive: readable"
