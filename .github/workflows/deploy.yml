@@ -1,9 +1,13 @@
 name: deploy
 
+# Manual until Croft has a host with a runner labelled `croft`. On
+# workflow_run it would queue after every green CI on main, waiting for a
+# runner that does not exist yet. Restore the trigger below once it does.
+#   workflow_run:
+#     workflows: [ci]
+#     types: [completed]
 on:
-  workflow_run:
-    workflows: [ci]
-    types: [completed]
+  workflow_dispatch:
 
 # One deploy at a time. A second push mid-build would otherwise race the
 # first for the same container name.
