@@ -21,7 +21,7 @@
    --------------------------------------------------------------------------- */
 
 :root {
-  --radius: 7px;
+  --radius: 6px;
 
   /* light — paper */
   --bg:             #f6f2ea;  /* the page: unbleached paper */
@@ -100,7 +100,10 @@
   --priority-low:    #857b80;
 
   /* Row heights are applied directly in the markup: a --spacing-* theme token
-     does not generate an `h-*` utility. */
+     does not generate an `h-*` utility. The rhythm they follow (v0.3 density
+     pass, at the 16px root): a list row 1.875rem (30px), a property row
+     1.75rem (28px), a toolbar 2.75rem (44px), and a section label at 0.6875rem
+     (11px) caps. Gaps step 0.25 / 0.5 / 0.75 / 1rem and rarely further. */
 
   /* Depth. Nothing that sits on the page casts a shadow; only what floats
      above it (menus, dialogs, toasts) does, and the shadow is warm — a grey
@@ -239,7 +242,7 @@
   --shadow-lg: var(--shadow-lg);
 
   --radius-md: var(--radius);
-  --radius-lg: 8px;
+  --radius-lg: 7px;
   --radius-sm: 4px;
 
   /* Three faces, each with one job (fonts.ts). Schibsted Grotesk for the
@@ -264,22 +267,23 @@
    * One knob for how large the whole interface is.
    *
    * Every size in the app is expressed in rem, so this scales text, row
-   * heights, control heights and spacing together. 18px, as the family has
-   * it; what makes Croft calmer than a tracker is not a bigger root but the
-   * leading and the room: body text at 15px on a 1.6 line, and the lab's own
-   * views laid out at a reading pace rather than three hundred rows a screen.
-   * A root size in px still honours browser zoom.
+   * heights, control heights and spacing together. 16px since v0.3 (it was
+   * 18px): the same proportions, about 11% tighter everywhere, so a subject
+   * page, a board or a todo list shows a working screen rather than a
+   * poster. The calm is kept by the leading and the hairlines, not the size.
+   * Prose still reads at 17px (`.writeup`); the interface sits at 14px on a
+   * 1.5 line. A root size in px still honours browser zoom.
    */
   html {
-    font-size: 18px;
+    font-size: 16px;
   }
 
   body {
     background-color: var(--bg);
     color: var(--fg);
     font-family: var(--font-sans);
-    font-size: 0.8333rem;
-    line-height: 1.6;
+    font-size: 0.875rem;
+    line-height: 1.5;
     letter-spacing: -0.003em;
     font-feature-settings: 'ss01' on;
     -webkit-font-smoothing: antialiased;
@@ -454,14 +458,64 @@
        device with no keyboard. Layout comes from the utility instead. */
     align-items: center;
     justify-content: center;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 5px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
     border-radius: 4px;
     background: var(--surface-raised);
     color: var(--fg-muted);
     font-size: 0.6875rem;
     line-height: 1;
+  }
+
+  /* A section's label: small caps in the subtle ink, the one way a pane
+     names itself. Paired with .count for the number beside it. */
+  .pane-label {
+    color: var(--fg-subtle);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.07em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+  .count {
+    display: inline-flex;
+    align-items: center;
+    height: 1rem;
+    padding: 0 0.3125rem;
+    border-radius: 999px;
+    background-color: color-mix(in oklab, var(--fg) 6%, transparent);
+    color: var(--fg-muted);
+    font-size: 0.6875rem;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
+    line-height: 1;
+  }
+
+  /* A tab in a page's section bar: text on the hairline, and the one that is
+     open underlined in ink, not the accent — the accent stays for the action.
+     The underline sits on the bar's own border so the bar stays one line. */
+  .section-tab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    height: 2.5rem;
+    padding: 0 0.125rem;
+    color: var(--fg-muted);
+    font-size: 0.8125rem;
+    white-space: nowrap;
+    transition: color var(--dur-1) var(--ease);
+  }
+  .section-tab:hover { color: var(--fg); }
+  .section-tab[aria-selected='true'] { color: var(--fg); font-weight: 500; }
+  .section-tab[aria-selected='true']::after {
+    content: '';
+    position: absolute;
+    inset: auto 0 -1px 0;
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+    background-color: var(--fg);
   }
 
   /* Room for the fixed live-status badge in the top-right of the shell.
@@ -522,7 +576,7 @@
       color-mix(in oklab, var(--surface) 75%, transparent) 50%,
       transparent 100%
     );
-    border-radius: 16px 16px 10px 10px;
+    border-radius: 12px 12px 8px 8px;
   }
 
   /* The furrow between two lanes: a dotted line in the gap, where the ground
@@ -775,7 +829,7 @@
 .writeup {
   font-family: var(--font-serif);
   font-size: 1.0625rem;
-  line-height: 1.7;
+  line-height: 1.65;
   letter-spacing: 0;
   font-optical-sizing: auto;
   color: var(--fg);
@@ -786,9 +840,12 @@
 .writeup ul,
 .writeup ol {
   font-size: 1.0625rem;
-  line-height: 1.7;
+  line-height: 1.65;
 }
-.writeup p { margin-bottom: 0.9em; }
+.writeup p { margin-bottom: 0.8em; }
+/* Under the subject page's sticky tab bar, a heading reached from the outline
+   lands just below it rather than behind it. */
+.writeup :is(h1, h2, h3) { scroll-margin-top: 3.5rem; }
 .writeup blockquote { font-style: italic; }
 .writeup h1,
 .writeup h2,
@@ -811,7 +868,7 @@
 .writeup-sm li {
   font-family: var(--font-serif);
   font-size: 0.9375rem;
-  line-height: 1.6;
+  line-height: 1.55;
 }
 
 /* ---------------------------------------------------------------------------

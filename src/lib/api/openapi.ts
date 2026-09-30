@@ -20,6 +20,7 @@ import {
   createLabProjectSchema,
   createTagSchema,
   reorderSchema,
+  subjectHumanNoteSchema,
   updateStageSchema,
   updateSubjectSchema,
   updateLabProjectSchema,
@@ -168,6 +169,49 @@ const subjectSchema = {
     created_at: { type: 'string', format: 'date-time' },
     updated_at: { type: 'string', format: 'date-time' },
     archived_at: { type: ['string', 'null'], format: 'date-time' },
+  },
+}
+
+const attachmentSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    filename: { type: 'string' },
+    mime_type: { type: 'string' },
+    size_bytes: { type: 'integer' },
+    preview_url: { type: 'string', description: 'Signed, expires within the hour. Renders inline.' },
+    download_url: { type: 'string', description: 'Signed, expires within the hour. Forces a save.' },
+    content_url: {
+      type: 'string',
+      description: 'Stable: `/api/v1/attachments/{id}/content`, which redirects a signed-in viewer to a fresh preview. What markdown embeds.',
+    },
+    kind: {
+      type: 'string',
+      enum: ['image', 'html', 'pdf', 'video', 'other'],
+      description: '`html` is only ever shown in a sandboxed iframe; /api/files serves it under `Content-Security-Policy: sandbox`.',
+    },
+    uploaded_by: { type: 'string' },
+    created_at: { type: 'string', format: 'date-time' },
+  },
+}
+
+const humanNoteSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    body: { type: 'string' },
+    author: { type: 'object', properties: { id: { type: 'string' }, name: { type: 'string' } } },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
+  },
+}
+
+const multipartFile = {
+  required: true,
+  content: {
+    'multipart/form-data': {
+      schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } }, required: ['file'] },
+    },
   },
 }
 
@@ -569,12 +613,17 @@ export const openapiSpec = () => ({
             description: 'Held by the calling agent (and its session, when it sent one).' },
           { name: 'assignee', in: 'query', schema: { type: 'string' },
             description: 'Owned by: `me`, an email, a display name or a user id.' },
+          { name: 'subject', in: 'query', schema: { type: 'string', example: 'S-12' },
+            description: 'Todos of this subject. An unknown one is `not_found`.' },
+          { name: 'project', in: 'query', schema: { type: 'string' },
+            description: 'Todos whose subject is in this lab project (name or id), `none`, or a comma list. An unknown project is `validation_failed`, listing the real ones in `valid`.' },
           { name: 'limit', in: 'query', schema: { type: 'integer', default: 50, maximum: 200 } },
           { name: 'offset', in: 'query', schema: { type: 'integer', default: 0 } },
         ],
         description:
-          'Each row also carries `cairn_ref`, `cairn_status` (the Cairn task a todo was pushed to) ' +
-          'and `subject_ref` (`S-12`, or null): the lab pairs todos off this list.',
+          'Each row also carries `cairn_ref`, `cairn_status` (the Cairn task a todo was pushed to), ' +
+          '`subject_ref` (`S-12`, or null): the lab pairs todos off this list — and `subject` ' +
+          '(`{ref, number, title, project: {name, color} | null}`, or null).',
         responses: { '200': okResponse('Tasks.'), '404': errorResponse },
       },
       post: {
@@ -848,7 +897,11 @@ export const openapiSpec = () => ({
     },
     '/tasks/{ref}/attachments': {
       parameters: [refParam],
-      get: { summary: 'List attachments', responses: { '200': okResponse('Attachments.') } },
+      get: {
+        summary: 'List attachments',
+        description: 'Each row carries the stored columns and the `Attachment` fields (`kind`, signed `preview_url`/`download_url`, `content_url`).',
+        responses: { '200': okResponse('Attachments.', { type: 'array', items: attachmentSchema }) },
+      },
       post: {
         summary: 'Upload an attachment',
         requestBody: {
@@ -868,8 +921,22 @@ export const openapiSpec = () => ({
     },
     '/attachments/{id}': {
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-      get: { summary: 'Get an attachment with fresh signed URLs', responses: { '200': okResponse('Attachment.') } },
-      delete: { summary: 'Delete an attachment', responses: { '200': okResponse('Deleted.') } },
+      get: {
+        summary: 'Get an attachment with fresh signed URLs',
+        description: "A task's or a subject's. Delete a subject's file through `/subjects/{ref}/attachments/{id}`.",
+        responses: { '200': okResponse('Attachment.', attachmentSchema), '404': errorResponse },
+      },
+      delete: { summary: "Delete a task's attachment", responses: { '200': okResponse('Deleted.') } },
+    },
+    '/attachments/{id}/content': {
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+      get: {
+        summary: 'The stable address of a file',
+        description:
+          'Redirects (302, relative Location) to a freshly signed preview URL. Signed URLs expire within ' +
+          'the hour, so markdown embeds this instead: `![shot](/api/v1/attachments/{id}/content)`.',
+        responses: { '302': { description: 'To a fresh `/api/files` preview.' }, '401': errorResponse, '404': errorResponse },
+      },
     },
     '/activity': {
       get: {
@@ -1173,6 +1240,61 @@ export const openapiSpec = () => ({
           '200': okResponse('Already recorded: `{duplicate: true}`.'),
           '404': errorResponse,
         },
+      },
+    },
+    '/subjects/{ref}/human-notes': {
+      parameters: [{ name: 'ref', in: 'path', required: true, schema: { type: 'string', example: 'S-12' } }],
+      get: {
+        summary: "People's notes on a subject, newest first",
+        responses: { '200': okResponse('SubjectHumanNote[]', { type: 'array', items: humanNoteSchema }), '404': errorResponse },
+      },
+      post: {
+        summary: 'Add a note',
+        description:
+          'Any member. An agent\'s note is attributed to its human, who may then edit or delete it. Markdown; ' +
+          'from an agent a wall of text is refused, and a secret-shaped string always is (`secret_detected`).',
+        requestBody: body(json(subjectHumanNoteSchema)),
+        responses: { '201': okResponse('The note.', humanNoteSchema), '400': errorResponse, '404': errorResponse },
+      },
+    },
+    '/subjects/{ref}/human-notes/{id}': {
+      parameters: [
+        { name: 'ref', in: 'path', required: true, schema: { type: 'string', example: 'S-12' } },
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      patch: {
+        summary: 'Rewrite a note (its author only)',
+        requestBody: body(json(subjectHumanNoteSchema)),
+        responses: { '200': okResponse('The note.', humanNoteSchema), '400': errorResponse, '403': errorResponse, '404': errorResponse },
+      },
+      delete: {
+        summary: 'Delete a note (its author, or an administrator)',
+        responses: { '200': okResponse('`{deleted: true, id}`.'), '403': errorResponse, '404': errorResponse },
+      },
+    },
+    '/subjects/{ref}/attachments': {
+      parameters: [{ name: 'ref', in: 'path', required: true, schema: { type: 'string', example: 'S-12' } }],
+      get: {
+        summary: "A subject's files, oldest first",
+        responses: { '200': okResponse('Attachment[]', { type: 'array', items: attachmentSchema }), '404': errorResponse },
+      },
+      post: {
+        summary: 'Upload a file to a subject',
+        description:
+          "The same allowlist and size limit as a task's files, HTML included (served only sandboxed). " +
+          'An image\'s `content_url` is what the write-up embeds.',
+        requestBody: multipartFile,
+        responses: { '201': okResponse('The file.', attachmentSchema), '400': errorResponse, '404': errorResponse },
+      },
+    },
+    '/subjects/{ref}/attachments/{id}': {
+      parameters: [
+        { name: 'ref', in: 'path', required: true, schema: { type: 'string', example: 'S-12' } },
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      delete: {
+        summary: "Delete a subject's file",
+        responses: { '200': okResponse('`{deleted: true, id}`.'), '404': errorResponse },
       },
     },
     '/subjects/{ref}/todos': {

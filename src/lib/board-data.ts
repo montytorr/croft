@@ -2,6 +2,7 @@ import { admin } from '@/lib/db/client'
 import { byTitle } from '@/lib/utils'
 import { withAssignees, type Person } from '@/lib/api/people'
 import type { TaskPriority, TaskStatus, TaskType } from '@/schemas/task'
+import { withTaskSubjects, type LabTodoSubject } from '@/lib/api/lab-todos'
 
 /**
  * Data loader for the cross-project board (`/board`, CROFT-72).
@@ -43,6 +44,11 @@ export type BoardTask = {
    * happens to own the ref.
    */
   project_keys: string[]
+  /** The subject a todo belongs to (ref, title, lab project). Null on an ordinary task. */
+  subject: LabTodoSubject | null
+  /** The Cairn task a todo was pushed to, and what Cairn last said about it. */
+  cairn_ref: string | null
+  cairn_status: string | null
 }
 
 export type BoardProject = { id: string; key: string; title: string }
@@ -50,7 +56,7 @@ export type BoardProject = { id: string; key: string; title: string }
 const BOARD_COLUMNS =
   'id, number, title, type, status, priority, labels, due_date, position, ' +
   'assignee_user_id, claimed_by, heartbeat_at, blocked_reason, external_ref, updated_at, ' +
-  'resolution_kind, has_resolution, checkpoint_summary, preview:description'
+  'resolution_kind, has_resolution, checkpoint_summary, cairn_ref, cairn_status, preview:description'
 
 const PREVIEW_CHARS = 280
 
@@ -87,7 +93,7 @@ export const listBoardTasks = async (
     admin().from('task_projects').select('task_id, project:projects(key)'),
   ])
 
-  type Row = Omit<BoardTask, 'project_key' | 'assignee'> & { project: { key: string } | { key: string }[] }
+  type Row = Omit<BoardTask, 'project_key' | 'assignee' | 'subject'> & { project: { key: string } | { key: string }[] }
 
   // Link rows are workspace-wide, just like the tasks and projects above.
   const guestKeys = new Map<string, string[]>()
@@ -101,7 +107,7 @@ export const listBoardTasks = async (
     guestKeys.set(row.task_id, [...(guestKeys.get(row.task_id) ?? []), key])
   }
 
-  const tasks = await withAssignees(
+  const tasks = await withTaskSubjects(await withAssignees(
     ((tasksRes.data ?? []) as unknown as Row[]).map((t) => {
       const home = (Array.isArray(t.project) ? t.project[0]?.key : t.project?.key) ?? ''
       return {
@@ -111,7 +117,7 @@ export const listBoardTasks = async (
         project_keys: [home, ...(guestKeys.get(t.id) ?? [])].filter(Boolean),
       }
     }),
-  )
+  ))
 
   return {
     tasks,

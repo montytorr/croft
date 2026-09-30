@@ -1,13 +1,13 @@
 /**
  * The one label style down the task page: every panel heading and every
- * sidebar section. Six panels and eight sections had drifted between two sizes
+ * sidebar section. The app's shared `.pane-label` (globals.css) since v0.3, so
+ * the todo page names its sections the way the subject page does. Six panels and eight sections had drifted between two sizes
  * and two greys, which read as eight different kinds of thing.
  */
-export const LABEL = 'text-fg-subtle text-[0.625rem] font-medium tracking-[0.08em] uppercase'
+export const LABEL = 'pane-label'
 
-/** The count beside a label: a small stone of its own, not a trailing digit. */
-export const COUNT =
-  'bg-surface-raised text-fg-muted rounded-full px-1.5 py-px text-[0.625rem] leading-[1.4] font-medium tracking-normal normal-case tabular-nums'
+/** The count beside a label: the shared `.count` stone, not a trailing digit. */
+export const COUNT = 'count normal-case'
 
 /** A composer's shell: a flat card whose rim turns to the accent, doubled to 2px, while typing. */
 export const COMPOSER =

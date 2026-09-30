@@ -66,6 +66,7 @@ croft subject stage S-12 "<stage>" [--conclusion -|"text"]
 croft subject note S-12 "<text>"|- [--kind finding|decision|attempt|note|handoff]
 croft subject tag S-12 +vector -later     # add and remove tags
 croft subject todo S-12 "<title>" [--body -]
+croft subject notes S-12  |  croft subject attach S-12 <file>  |  croft subject files S-12   # people's notes; files (an image embeds as ![name](url))
 ```
 
 `list` prints: ref, stage, todos open/done, tags, project, `~tokens`, title. `--all` includes

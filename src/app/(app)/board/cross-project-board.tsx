@@ -6,17 +6,29 @@ import {
 } from '@dnd-kit/core'
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronRight } from 'lucide-react'
-import { Card } from '../projects/[key]/board-view'
+import Link from 'next/link'
+import { ArrowUpRight, ChevronRight } from 'lucide-react'
 import { ResolutionDialog } from '../projects/[key]/resolution-dialog'
 import { useMutate } from '@/lib/api/use-mutate'
 import { BoardToolbar } from './board-toolbar'
+import { TodoCard } from './todo-card'
+import { ProjectDot } from '../todos/todo-bits'
+import {
+  labLaneValue,
+  labLanesFor,
+  matchesLabView,
+  parseLabView,
+  withLabParams,
+  type LabBoardTask,
+  type LabBoardView,
+} from './lab-lanes'
 import { COLUMN_PANEL, COLUMN_WIDTH, ColumnCount, DragPreview, DropList, laneTone } from '@/components/board-columns'
 import { EmptyState } from '@/components/empty-state'
 import { cn } from '@/lib/utils'
 import { Avatar, PriorityIcon, ProjectIcon, StatusIcon, TypePill, projectColor } from '@/components/icons'
 import { isTerminal, type ResolutionKind, type TaskPriority, type TaskStatus, type TaskType } from '@/schemas/task'
-import type { BoardProject, BoardTask } from '@/lib/board-data'
+import type { BoardProject } from '@/lib/board-data'
+import type { LabProject } from '@/lib/lab/types'
 import {
   SEP,
   UNASSIGNED,
@@ -31,7 +43,6 @@ import {
   type BoardFilters,
   type ColumnDef,
   type GroupBy,
-  type Swimlane,
 } from '@/lib/board-state'
 
 const ColumnHeading = ({ groupBy, col }: { groupBy: GroupBy; col: ColumnDef }) => {
@@ -63,24 +74,31 @@ const columnTone = (groupBy: GroupBy, value: string) => {
   return undefined
 }
 
+/** A lane: the board's own (a ColumnDef), or the lab's, which carries a subject's ref and colour. */
+type BoardLane = ColumnDef & { color?: string | null; ref?: string; href?: string }
+
 const CardList = ({
   dropId,
   tasks,
   className,
+  showSubject,
+  showProjectBadge,
 }: {
   dropId: string
-  tasks: BoardTask[]
+  tasks: LabBoardTask[]
   className?: string
+  showSubject: boolean
+  showProjectBadge: boolean
 }) => (
   <DropList dropId={dropId} count={tasks.length} className={className}>
     {tasks.map((task) => (
-      <Card key={task.id} task={task} projectKey={task.project_key} showProjectBadge />
+      <TodoCard key={task.id} task={task} showProjectBadge={showProjectBadge} showSubject={showSubject} />
     ))}
   </DropList>
 )
 
 const ColumnHeader = ({ groupBy, col, count }: { groupBy: GroupBy; col: ColumnDef; count: number }) => (
-  <div className="flex h-8 items-center gap-2 px-2.5">
+  <div className="flex h-[1.875rem] items-center gap-2 px-2.5">
     <ColumnHeading groupBy={groupBy} col={col} />
     <ColumnCount count={count} />
   </div>
@@ -91,12 +109,14 @@ const FlatBoard = ({
   groupBy,
   columns,
   tasks,
+  showProjectBadge,
 }: {
   groupBy: GroupBy
   columns: ColumnDef[]
-  tasks: BoardTask[]
+  tasks: LabBoardTask[]
+  showProjectBadge: boolean
 }) => (
-  <div className="flex h-full w-max gap-2.5 p-3">
+  <div className="flex h-full w-max gap-2 p-2.5 md:p-3">
     {columns.map((col) => {
       const cards = tasks.filter((t) => groupValue(t, groupBy) === col.value)
       return (
@@ -106,23 +126,47 @@ const FlatBoard = ({
           style={laneTone(columnTone(groupBy, col.value))}
         >
           <ColumnHeader groupBy={groupBy} col={col} count={cards.length} />
-          <CardList dropId={`all${SEP}${col.value}`} tasks={cards} className="min-h-0 flex-1 overscroll-contain" />
+          <CardList
+            dropId={`all${SEP}${col.value}`}
+            tasks={cards}
+            className="min-h-0 flex-1 overscroll-contain"
+            showSubject
+            showProjectBadge={showProjectBadge}
+          />
         </section>
       )
     })}
   </div>
 )
 
+const LaneName = ({ lane }: { lane: BoardLane }) =>
+  lane.ref ? (
+    <>
+      <ProjectDot color={lane.color} />
+      <span className="text-fg-subtle font-mono text-[0.6875rem]">{lane.ref}</span>
+      <span className="text-fg max-w-[40ch] truncate">{lane.label}</span>
+    </>
+  ) : (
+    <>
+      {lane.color !== undefined ? <ProjectDot color={lane.color} /> : null}
+      <span className="max-w-[40ch] truncate">{lane.label}</span>
+    </>
+  )
+
 const Lane = ({
   lane,
   groupBy,
   columns,
   tasks,
+  showSubject,
+  showProjectBadge,
 }: {
-  lane: ColumnDef
+  lane: BoardLane
   groupBy: GroupBy
   columns: ColumnDef[]
-  tasks: BoardTask[]
+  tasks: LabBoardTask[]
+  showSubject: boolean
+  showProjectBadge: boolean
 }) => {
   const [collapsed, setCollapsed] = useState(false)
 
@@ -130,24 +174,36 @@ const Lane = ({
     <section>
       {/* Sticky on the left so the lane stays named while the board is
           scrolled sideways past its first columns. */}
-      <button
-        type="button"
-        onClick={() => setCollapsed((c) => !c)}
-        aria-expanded={!collapsed}
-        className="text-fg-muted hover:text-fg sticky left-3 mb-1.5 flex w-fit items-center gap-1.5 rounded px-1 py-0.5 text-[0.75rem] font-medium transition-colors duration-[var(--dur-1)]"
-      >
-        <ChevronRight
-          size={13}
-          className={cn('transition-transform duration-[var(--dur-2)] ease-[var(--ease-out)]', !collapsed && 'rotate-90')}
-        />
-        {lane.label}
-        <span className="text-fg-subtle tabular rounded-full bg-[color-mix(in_oklab,var(--fg)_6%,transparent)] px-1.5 text-[0.6875rem] leading-[1.125rem]">
-          {tasks.length}
-        </span>
-      </button>
+      <div className="sticky left-3 mb-1 flex w-fit max-w-[calc(100vw-2rem)] items-center gap-1">
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          aria-expanded={!collapsed}
+          className="text-fg-muted hover:text-fg flex min-w-0 items-center gap-1.5 rounded px-1 py-0.5 text-[0.75rem] font-medium transition-colors duration-[var(--dur-1)]"
+        >
+          <ChevronRight
+            size={13}
+            className={cn('shrink-0 transition-transform duration-[var(--dur-2)] ease-[var(--ease-out)]', !collapsed && 'rotate-90')}
+          />
+          <LaneName lane={lane} />
+          <span className="text-fg-subtle tabular rounded-full bg-[color-mix(in_oklab,var(--fg)_6%,transparent)] px-1.5 text-[0.6875rem] leading-[1.125rem]">
+            {tasks.length}
+          </span>
+        </button>
+        {lane.href ? (
+          <Link
+            href={lane.href}
+            aria-label={`Open ${lane.ref}`}
+            title={`Open ${lane.ref}`}
+            className="text-fg-subtle hover:text-accent hover:bg-surface-hover grid size-[1.25rem] shrink-0 place-items-center rounded transition-colors"
+          >
+            <ArrowUpRight size={12} aria-hidden />
+          </Link>
+        ) : null}
+      </div>
 
       {!collapsed && (
-        <div className="flex gap-2.5">
+        <div className="flex gap-2">
           {columns.map((col) => (
             <div
               key={col.value}
@@ -157,6 +213,8 @@ const Lane = ({
                 dropId={`${lane.value}${SEP}${col.value}`}
                 tasks={tasks.filter((t) => groupValue(t, groupBy) === col.value)}
                 className="max-h-[min(26rem,55dvh)] flex-1"
+                showSubject={showSubject}
+                showProjectBadge={showProjectBadge}
               />
             </div>
           ))}
@@ -176,17 +234,21 @@ const LaneBoard = ({
   groupBy,
   columns,
   lanes,
-  swimlane,
+  laneOf,
   tasks,
+  showSubject,
+  showProjectBadge,
 }: {
   groupBy: GroupBy
   columns: ColumnDef[]
-  lanes: ColumnDef[]
-  swimlane: Swimlane
-  tasks: BoardTask[]
+  lanes: BoardLane[]
+  laneOf: (task: LabBoardTask) => string
+  tasks: LabBoardTask[]
+  showSubject: boolean
+  showProjectBadge: boolean
 }) => (
   <div className="w-max min-w-full pb-3">
-    <div className="bg-bg sticky top-0 z-10 flex gap-2.5 px-3 pt-3 pb-2">
+    <div className="bg-bg sticky top-0 z-10 flex gap-2 px-3 pt-3 pb-2">
       {columns.map((col) => (
         <div
           key={col.value}
@@ -201,14 +263,16 @@ const LaneBoard = ({
         </div>
       ))}
     </div>
-    <div className="flex flex-col gap-4 px-3 pt-1">
+    <div className="flex flex-col gap-3 px-3 pt-1">
       {lanes.map((lane) => (
         <Lane
           key={lane.value}
           lane={lane}
           groupBy={groupBy}
           columns={columns}
-          tasks={tasks.filter((t) => laneValueOf(t, swimlane) === lane.value)}
+          tasks={tasks.filter((t) => laneOf(t) === lane.value)}
+          showSubject={showSubject}
+          showProjectBadge={showProjectBadge}
         />
       ))}
     </div>
@@ -218,10 +282,13 @@ const LaneBoard = ({
 export const CrossProjectBoard = ({
   tasks: initial,
   projects,
+  labProjects,
   initialQuery,
 }: {
-  tasks: BoardTask[]
+  tasks: LabBoardTask[]
   projects: BoardProject[]
+  /** The lab's projects, for the lab-project filter. */
+  labProjects: Pick<LabProject, 'id' | 'name' | 'color'>[]
   /** The request's query string, so the server renders the same view the
    * client hydrates: reading `window.location` alone gave the server the
    * default view and a hydration mismatch whenever a link carried a view. */
@@ -242,19 +309,25 @@ export const CrossProjectBoard = ({
   }
 
   const [filters, setFiltersState] = useState<BoardFilters>(() => parseFilters(initialQuery))
-  const [dragging, setDragging] = useState<BoardTask | null>(null)
-  const [pendingClose, setPendingClose] = useState<{ task: BoardTask; value: string } | null>(null)
+  const [lab, setLabState] = useState<LabBoardView>(() => parseLabView(initialQuery))
+  const [dragging, setDragging] = useState<LabBoardTask | null>(null)
+  const [pendingClose, setPendingClose] = useState<{ task: LabBoardTask; value: string } | null>(null)
 
-  const setFilters = (next: BoardFilters) => {
-    setFiltersState(next)
-    if (typeof window !== 'undefined') {
-      window.history.replaceState(
-        null,
-        '',
-        buildBoardUrl(window.location.pathname, next, window.location.search),
-      )
-    }
+  const syncUrl = (nextFilters: BoardFilters, nextLab: LabBoardView) => {
+    if (typeof window === 'undefined') return
+    window.history.replaceState(
+      null,
+      '',
+      withLabParams(buildBoardUrl(window.location.pathname, nextFilters, window.location.search), nextLab),
+    )
   }
+
+  const setView = (nextFilters: BoardFilters, nextLab: LabBoardView) => {
+    setFiltersState(nextFilters)
+    setLabState(nextLab)
+    syncUrl(nextFilters, nextLab)
+  }
+  const setFilters = (next: BoardFilters) => setView(next, lab)
 
   // A swimlane grouped by the same field the columns already are would just
   // draw a diagonal of one card per cell — redundant rather than useful.
@@ -269,12 +342,28 @@ export const CrossProjectBoard = ({
     useSensor(KeyboardSensor),
   )
 
-  const visible = useMemo(() => tasks.filter((t) => matchesFilters(t, filters)), [tasks, filters])
-  const columns = useMemo(() => columnsFor(filters.groupBy, tasks, projects), [filters.groupBy, tasks, projects])
-  const lanes = useMemo(
-    () => lanesFor(effectiveSwimlane, visible, projects),
-    [effectiveSwimlane, visible, projects],
+  const visible = useMemo(
+    () => tasks.filter((t) => matchesFilters(t, filters) && matchesLabView(t, lab)),
+    [tasks, filters, lab],
   )
+  const columns = useMemo(() => columnsFor(filters.groupBy, tasks, projects), [filters.groupBy, tasks, projects])
+  const lanes = useMemo<BoardLane[]>(
+    () => (lab.lane ? labLanesFor(lab.lane, visible) : lanesFor(effectiveSwimlane, visible, projects)),
+    [lab.lane, effectiveSwimlane, visible, projects],
+  )
+  const subjectOptions = useMemo(() => {
+    const seen = new Map<string, { value: string; label: string }>()
+    for (const t of tasks) {
+      if (t.subject && !seen.has(t.subject.ref)) seen.set(t.subject.ref, { value: t.subject.ref, label: `${t.subject.ref} · ${t.subject.title}` })
+    }
+    return [
+      ...[...seen.values()].sort((a, b) => Number(b.value.slice(2)) - Number(a.value.slice(2))),
+      { value: 'none', label: 'No subject' },
+    ]
+  }, [tasks])
+  // Every todo lives in the one task project in a lab; its badge only earns
+  // its place on a board that genuinely spans several.
+  const showProjectBadge = projects.length > 1
   const agentOptions = useMemo(
     () => [...new Set(tasks.map((t) => t.claimed_by).filter((a): a is string => Boolean(a)))].sort(),
     [tasks],
@@ -288,13 +377,13 @@ export const CrossProjectBoard = ({
   }, [tasks])
 
   const persist = async (
-    task: BoardTask,
+    task: LabBoardTask,
     value: string,
     close?: { resolution: string; kind: ResolutionKind; duplicateOf?: string },
   ) => {
     const previous = tasks
     setTasks((current) =>
-      current.map((t) => (t.id === task.id ? applyGroupValue(t, filters.groupBy, value) : t)),
+      current.map((t) => (t.id === task.id ? { ...t, ...applyGroupValue(t, filters.groupBy, value) } : t)),
     )
 
     const ref = `${task.project_key}-${task.number}`
@@ -340,7 +429,9 @@ export const CrossProjectBoard = ({
     if (!over) return
 
     const task = tasks.find((t) => t.id === active.id)
-    if (!task) return
+    // A pushed todo is Cairn's; its card does not pick up, and a keyboard
+    // drag that got here anyway writes nothing.
+    if (!task || task.cairn_ref) return
 
     const value = String(over.id).split(SEP)[1]
     if (!value || groupValue(task, filters.groupBy) === value) return
@@ -363,7 +454,11 @@ export const CrossProjectBoard = ({
         <BoardToolbar
           filters={filters}
           onChange={setFilters}
+          lab={lab}
+          onViewChange={setView}
           projects={projects}
+          labProjects={labProjects}
+          subjectOptions={subjectOptions}
           agentOptions={agentOptions}
           assigneeOptions={assigneeOptions}
         />
@@ -388,7 +483,10 @@ export const CrossProjectBoard = ({
                 <button
                   type="button"
                   onClick={() =>
-                    setFilters({ ...parseFilters(''), groupBy: filters.groupBy, swimlane: filters.swimlane })
+                    setView(
+                      { ...parseFilters(''), groupBy: filters.groupBy, swimlane: filters.swimlane },
+                      { labProjects: [], subjects: [], lane: lab.lane },
+                    )
                   }
                   className="text-accent text-[0.75rem] hover:underline"
                 >
@@ -396,15 +494,18 @@ export const CrossProjectBoard = ({
                 </button>
               }
             />
-          ) : effectiveSwimlane === 'none' ? (
-            <FlatBoard groupBy={filters.groupBy} columns={columns} tasks={visible} />
+          ) : !lab.lane && effectiveSwimlane === 'none' ? (
+            <FlatBoard groupBy={filters.groupBy} columns={columns} tasks={visible} showProjectBadge={showProjectBadge} />
           ) : (
             <LaneBoard
               groupBy={filters.groupBy}
               columns={columns}
               lanes={lanes}
-              swimlane={effectiveSwimlane}
+              laneOf={(t) => (lab.lane ? labLaneValue(t, lab.lane) : laneValueOf(t, effectiveSwimlane))}
               tasks={visible}
+              // Inside a subject's lane every card is that subject's.
+              showSubject={lab.lane !== 'subject'}
+              showProjectBadge={showProjectBadge}
             />
           )}
         </div>

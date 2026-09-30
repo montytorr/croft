@@ -5,7 +5,7 @@ import { notFound, redirect } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import {
   currentUser, getDuplicateOf, getParent, getTask, listActivity, listAlsoProjects,
-  listAttachments, listProjects,
+  listTaskAttachments, listProjects,
   listChildren, listComments, listNotes, listRelations,
 } from '@/lib/data'
 import { MarkdownEditor } from '@/components/markdown-editor'
@@ -30,6 +30,9 @@ import { RedirectNotice } from '@/components/redirect-notice'
 import { listFormerKeyRecords } from '@/lib/data'
 import { formerRefsOf, renameLine, renamesOf, taskRedirectNotice } from '@/lib/project-rename'
 import { LABEL, PANE } from './styles'
+import { getSubject } from '@/lib/lab/data'
+import { ProjectLabel } from '@/components/lab/project-label'
+import { TODO_PROJECT_KEY } from '@/lib/lab/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,7 +72,7 @@ const Callout = ({
   className?: string
   children: React.ReactNode
 }) => (
-  <div className={cn('surface-card relative mb-5 overflow-hidden py-2 pr-3 pl-3.5', className)}>
+  <div className={cn('surface-card relative mb-4 overflow-hidden py-2 pr-3 pl-3.5', className)}>
     <span aria-hidden className="absolute inset-y-0 left-0 w-[2px]" style={{ backgroundColor: tone }} />
     {children}
   </div>
@@ -117,11 +120,12 @@ const TaskPage = async ({
 
   const [
     notes, comments, attachments, relations, duplicateOf, activity, children, parent,
-    alsoProjects, allProjects, mentioned,
+    alsoProjects, allProjects, mentioned, subject,
   ] = await Promise.all([
     listNotes(task.id),
     listComments(task.id),
-    listAttachments(task.id),
+    // With a kind each and a stable content_url, so previews never expire on an open page.
+    listTaskAttachments(task.id),
     listRelations(task.id),
     task.duplicate_of ? getDuplicateOf(task.duplicate_of) : Promise.resolve(null),
     listActivity(task.id),
@@ -130,6 +134,8 @@ const TaskPage = async ({
     listAlsoProjects(task.id),
     listProjects(user.id),
     mentionsOf(task.id, 8),
+    // For the subject's lab project on the chip above the title.
+    task.subject ? getSubject(task.subject.number).catch(() => null) : Promise.resolve(null),
   ])
 
   // What this task used to be called. An alias that only resolves is half an
@@ -232,20 +238,39 @@ const TaskPage = async ({
 
       <div className="flex min-h-0 flex-1 flex-col-reverse lg:flex-row">
         <div className="min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-[51.25rem] px-4 py-6 sm:px-6 lg:px-8">
+          <div className="max-w-[72rem] px-4 py-5 sm:px-6 lg:px-8">
             {/* The ref and the project, quiet above the title rather than
                 competing with it: the title is the page's one voice. */}
-            <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5">
+            <div className="mb-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
               <span className="border-border bg-surface-raised text-fg-muted inline-flex h-[1.25rem] shrink-0 items-center rounded-md border px-1.5 font-mono text-[0.6875rem]">
                 {ref}
               </span>
-              <Link
-                href="/todos"
-                className="border-border text-fg-muted hover:text-fg hover:border-border-strong hover:bg-surface-hover inline-flex h-[1.25rem] min-w-0 items-center gap-1.5 rounded-full border pr-2 pl-1.5 text-[0.6875rem] transition-colors duration-[var(--dur-1)] ease-[var(--ease-out)]"
-              >
-                <ProjectIcon size={11} projectKey={task.project.key} />
-                <span className="truncate">{task.project.title}</span>
-              </Link>
+              {task.subject ? (
+                // What this todo is for. The todos project every todo lives in
+                // says nothing; the subject says everything.
+                <Link
+                  href={`/subjects/${task.subject.number}`}
+                  className="border-border text-fg-muted hover:text-fg hover:border-border-strong hover:bg-surface-hover inline-flex h-[1.25rem] min-w-0 items-center gap-1.5 rounded-md border pr-2 pl-1.5 text-[0.6875rem] transition-colors duration-[var(--dur-1)] ease-[var(--ease-out)]"
+                  title={`Part of ${task.subject.ref}`}
+                >
+                  <span className="text-fg-subtle font-mono text-[0.6875rem]">{task.subject.ref}</span>
+                  <span className="max-w-[40ch] truncate">{task.subject.title}</span>
+                </Link>
+              ) : null}
+              {subject?.project ? (
+                <Link href={`/?project=${encodeURIComponent(subject.project.name)}`} className="min-w-0">
+                  <ProjectLabel project={subject.project} />
+                </Link>
+              ) : null}
+              {!task.subject || task.project.key !== TODO_PROJECT_KEY ? (
+                <Link
+                  href="/todos"
+                  className="border-border text-fg-muted hover:text-fg hover:border-border-strong hover:bg-surface-hover inline-flex h-[1.25rem] min-w-0 items-center gap-1.5 rounded-full border pr-2 pl-1.5 text-[0.6875rem] transition-colors duration-[var(--dur-1)] ease-[var(--ease-out)]"
+                >
+                  <ProjectIcon size={11} projectKey={task.project.key} />
+                  <span className="truncate">{task.project.title}</span>
+                </Link>
+              ) : null}
             </div>
 
             <EditableTitle taskId={task.id} initial={task.title} />
@@ -280,7 +305,7 @@ const TaskPage = async ({
                 task, the answer is what it came for — so it is the one card on
                 the page edged in its status's colour. */}
             {task.resolution ? (
-              <Callout tone={`var(--status-${task.status})`} className="mb-6 py-3 pr-4 pl-[1.125rem]">
+              <Callout tone={`var(--status-${task.status})`} className="mb-5 py-2.5 pr-4 pl-[1.125rem]">
                 <p className="mb-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[0.6875rem]">
                   <StatusIcon status={task.status} size={12} />
                   <span className="font-medium" style={{ color: `var(--status-${task.status})` }}>
@@ -310,13 +335,13 @@ const TaskPage = async ({
             ) : null}
 
             {task.checkpoint_summary && !task.resolution ? (
-              <Callout tone="var(--fg-subtle)" className="mb-6 py-2.5">
+              <Callout tone="var(--fg-subtle)" className="mb-5 py-2">
                 <p className={cn(LABEL, 'mb-1')}>Last checkpoint</p>
                 <p className="text-fg-muted text-[0.8125rem]">{task.checkpoint_summary}</p>
               </Callout>
             ) : null}
 
-            <div className="mb-6">
+            <div className="mb-5">
               <MarkdownEditor taskId={task.id} initial={task.description ?? ''} />
             </div>
 
@@ -325,7 +350,7 @@ const TaskPage = async ({
                 same job of separating them and reads as structure. Ordered by
                 what a reader wants next: the split, then the evidence, then
                 the conversation, then the audit trail. */}
-            <div className="[&>*+*]:border-border flex flex-col [&>*]:py-5 [&>*+*]:border-t">
+            <div className="[&>*+*]:border-border flex flex-col [&>*]:py-4 [&>*+*]:border-t">
               <MentionsPanel total={mentioned.total} mentions={mentioned.mentions} />
               <ChildrenPanel
                 taskRef={`${task.project.key}-${task.number}`}

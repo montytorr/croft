@@ -106,4 +106,19 @@ describe('pages stay current', () => {
     // Redefined before the tables it no longer reads are dropped.
     expect(start).toBeLessThan(migration.indexOf('drop table if exists sessions'))
   })
+
+  it('watches people\'s notes and files on subjects (075), and keeps every earlier store', () => {
+    const migration = readFileSync(join(process.cwd(), 'migrations/075_subject_notes_and_files.sql'), 'utf8')
+    const start = migration.indexOf('create or replace function croft_pulse')
+    const pulse = migration.slice(start, migration.indexOf('$$;', start))
+    for (const store of [
+      'tasks', 'task_activity_events', 'subjects', 'subject_notes', 'subject_stages', 'tags', 'subject_tags',
+      'lab_projects', 'subject_human_notes', 'subject_attachments',
+    ]) {
+      expect(pulse, `the pulse ignores ${store}`).toMatch(new RegExp(`from ${store}\\b`))
+    }
+    // An edited note must move the pulse, so its updated_at has to move.
+    expect(migration).toMatch(/create trigger subject_human_notes_touch\s+before update on subject_human_notes/)
+    expect(pulse).toMatch(/max\(hn\.updated_at\)/)
+  })
 })

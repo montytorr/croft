@@ -7,6 +7,7 @@ import { TASK_LIST_LAB_FIELDS, withSubjectRefs } from '@/lib/api/tasks'
 import { createTaskInProject } from '@/lib/api/task-create'
 import { resolveProject } from '@/lib/api/project-keys'
 import { resolveAssignee, withAssignees } from '@/lib/api/people'
+import { resolveTodoFilters, withTaskSubjects } from '@/lib/api/lab-todos'
 import { createTaskSchema, TASK_STATUSES, TASK_TYPES } from '@/schemas/task'
 
 export const dynamic = 'force-dynamic'
@@ -38,6 +39,10 @@ const listQuery = z.object({
    * which is what this agent holds right now, this is what a human owns.
    */
   assignee: z.string().trim().min(1).max(320).optional(),
+  /** Todos of one subject: `S-12`, `12` or its id. */
+  subject: z.string().trim().min(1).max(80).optional(),
+  /** Todos whose subject is in this lab project (name or id), `none`, or a comma list. */
+  project: z.string().trim().min(1).max(400).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   offset: z.coerce.number().int().min(0).default(0),
 })
@@ -53,7 +58,10 @@ export const GET = route<{ id: string }>({
 
     const parsed = listQuery.safeParse(Object.fromEntries(url.searchParams))
     if (!parsed.success) return fail('validation_failed', 'Bad query parameters.')
-    const { status, type, label, mine, claimed_by, assignee, limit, offset } = parsed.data
+    const { status, type, label, mine, claimed_by, assignee, subject, project: labProject, limit, offset } = parsed.data
+
+    const todoFilters = await resolveTodoFilters({ subject, project: labProject })
+    if (!todoFilters.ok) return todoFilters.response
 
     let query = admin()
       .from('tasks')
@@ -77,6 +85,14 @@ export const GET = route<{ id: string }>({
     if (type) query = query.eq('type', type)
     if (label) query = query.contains('labels', [label])
     if (claimed_by) query = query.eq('claimed_by', claimed_by)
+    const { subjectId, project: inProjects } = todoFilters.value
+    if (subjectId) query = query.eq('subject_id', subjectId)
+    if (inProjects) {
+      // Ids from the database, so safe to interpolate into the adapter's
+      // PostgREST-style string; an empty list matches nothing.
+      const any = `subject_id.in.(${inProjects.subjectIds.join(',')})`
+      query = query.or(inProjects.none ? `${any},subject_id.is.null` : any)
+    }
     if (assignee) {
       const owner = await resolveAssignee(assignee, actor.userId)
       if (!owner.ok) return fail(owner.code, owner.error)
@@ -117,7 +133,8 @@ export const GET = route<{ id: string }>({
       count,
       offset,
       limit,
-      tasks: await withAssignees(withSubjectRefs(data ?? [])),
+      // `subject_ref` for the CLI's pairing; `subject` (ref, title, lab project) for the lab's lists.
+      tasks: await withTaskSubjects(await withAssignees(withSubjectRefs(data ?? []) as unknown as (Record<string, unknown> & { id: string })[])),
       ...(renamed ? { renamed_from: renamed } : {}),
     })
   },

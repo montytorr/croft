@@ -17,14 +17,14 @@ import { StageGlyph } from './stage'
 import { TagChip } from './tag-chip'
 import { useStageMove } from './use-stage-move'
 
-export const LABEL = 'text-fg-subtle text-[0.625rem] font-medium tracking-[0.08em] uppercase'
+export const LABEL = 'pane-label'
 
 const ROW =
-  'row-hover group/edit relative -mx-2 flex min-h-[2rem] items-center gap-2 rounded-md px-2 ' +
+  'row-hover group/edit relative -mx-2 flex min-h-[1.75rem] items-center gap-2 rounded-md px-2 ' +
   'has-[:focus-visible]:bg-surface-hover has-[:focus-visible]:shadow-[inset_2px_0_0_var(--accent)]'
 
 const RowLabel = ({ children }: { children: React.ReactNode }) => (
-  <span className="text-fg-subtle w-[4.5rem] shrink-0 text-[0.75rem]">{children}</span>
+  <span className="text-fg-subtle w-[4rem] shrink-0 text-[0.75rem]">{children}</span>
 )
 
 const Affordance = () => (
@@ -116,9 +116,9 @@ export const SubjectProperties = ({
   const ownerKnown = subject.owner && people.some((p) => p.id === subject.owner?.id)
 
   return (
-    <div className="flex flex-col gap-6">
-      <section className="flex flex-col gap-0.5">
-        <h2 className={cn(LABEL, 'mb-1.5')}>Properties</h2>
+    <div className="flex flex-col gap-5">
+      <section className="flex flex-col gap-px">
+        <h2 className={cn(LABEL, 'mb-2')}>Properties</h2>
 
         <div className={ROW}>
           <RowLabel>Stage</RowLabel>

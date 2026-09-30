@@ -15,6 +15,8 @@ import {
   type Swimlane,
 } from '@/lib/board-state'
 import type { BoardProject } from '@/lib/board-data'
+import type { LabProject } from '@/lib/lab/types'
+import { LAB_LANES, type LabBoardView, type LabLane } from './lab-lanes'
 
 const GROUP_BY_LABEL: Record<GroupBy, string> = {
   status: 'Status',
@@ -23,6 +25,11 @@ const GROUP_BY_LABEL: Record<GroupBy, string> = {
   project: 'Project',
   agent: 'Agent',
   assignee: 'Assignee',
+}
+
+const LAB_LANE_LABEL: Record<LabLane, string> = {
+  subject: 'Subject',
+  labProject: 'Lab project',
 }
 
 const SWIMLANE_LABEL: Record<Swimlane, string> = {
@@ -124,13 +131,22 @@ const FilterMenu = ({
 export const BoardToolbar = ({
   filters,
   onChange,
+  lab,
+  onViewChange,
   projects,
+  labProjects,
+  subjectOptions,
   agentOptions,
   assigneeOptions,
 }: {
   filters: BoardFilters
   onChange: (next: BoardFilters) => void
+  /** The lab's filters and lanes, which ride in the same URL. */
+  lab: LabBoardView
+  onViewChange: (filters: BoardFilters, lab: LabBoardView) => void
   projects: BoardProject[]
+  labProjects: Pick<LabProject, 'id' | 'name' | 'color'>[]
+  subjectOptions: { value: string; label: string }[]
   agentOptions: string[]
   assigneeOptions: { value: string; label: string }[]
 }) => {
@@ -158,7 +174,7 @@ export const BoardToolbar = ({
     // and board-toolbar.test.ts. Setting one overflow axis to `auto` forces the
     // other from `visible` to `auto`, which is exactly what clipped the bulk
     // bar's own menus out of existence. This row wraps instead.
-    <div className="border-border flex flex-wrap items-center gap-1.5 border-b px-3 py-2">
+    <div className="border-border flex flex-wrap items-center gap-1 border-b px-3 py-1.5">
       <Select
         size="sm"
         value={filters.groupBy}
@@ -173,11 +189,20 @@ export const BoardToolbar = ({
         ))}
       </Select>
 
+      {/* One control for both kinds of lane: the board's own, and the lab's
+          (by subject, by lab project), which live in their own params. */}
       <Select
         size="sm"
-        value={filters.swimlane}
-        onChange={(e) => onChange({ ...filters, swimlane: e.target.value as Swimlane })}
-        className="w-[8.125rem]"
+        value={lab.lane ?? filters.swimlane}
+        onChange={(e) => {
+          const value = e.target.value
+          if ((LAB_LANES as readonly string[]).includes(value)) {
+            onViewChange({ ...filters, swimlane: 'none' }, { ...lab, lane: value as LabLane })
+          } else {
+            onViewChange({ ...filters, swimlane: value as Swimlane }, { ...lab, lane: null })
+          }
+        }}
+        className="w-[9.5rem]"
         aria-label="Swimlanes"
       >
         {SWIMLANE_VALUES.filter((s) => s === 'none' || s !== filters.groupBy).map((s) => (
@@ -185,16 +210,40 @@ export const BoardToolbar = ({
             Lanes: {SWIMLANE_LABEL[s]}
           </option>
         ))}
+        {LAB_LANES.map((l) => (
+          <option key={l} value={l}>
+            Lanes: {LAB_LANE_LABEL[l]}
+          </option>
+        ))}
       </Select>
 
       <span className="bg-border mx-0.5 h-[1rem] w-px shrink-0" aria-hidden />
 
       <FilterMenu
-        label="Project"
-        options={projects.map((p) => ({ value: p.key, label: p.title }))}
-        selected={filters.projects}
-        onChange={(v) => onChange({ ...filters, projects: v })}
+        label="Lab project"
+        options={[
+          ...labProjects.map((p) => ({ value: p.name, label: p.name })),
+          { value: 'none', label: 'No project' },
+        ]}
+        selected={lab.labProjects}
+        onChange={(v) => onViewChange(filters, { ...lab, labProjects: v })}
       />
+      <FilterMenu
+        label="Subject"
+        options={subjectOptions}
+        selected={lab.subjects}
+        onChange={(v) => onViewChange(filters, { ...lab, subjects: v })}
+      />
+      {/* In a lab every todo is filed in the one task project; the filter
+          only means something on a board that spans several. */}
+      {projects.length > 1 || filters.projects.length > 0 ? (
+        <FilterMenu
+          label="Project"
+          options={projects.map((p) => ({ value: p.key, label: p.title }))}
+          selected={filters.projects}
+          onChange={(v) => onChange({ ...filters, projects: v })}
+        />
+      ) : null}
       <FilterMenu
         label="Type"
         options={TASK_TYPES.map((t) => ({ value: t, label: capitalize(t) }))}

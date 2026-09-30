@@ -4,13 +4,22 @@ import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { Menu, X } from 'lucide-react'
 import { AppSidebar } from '@/components/app-sidebar'
+import type { NavProject } from '@/components/app-nav'
 
 /**
  * The whole of navigation on a narrow screen. Until this existed the sidebar
  * was simply `hidden md:flex`, which left a phone with no way to reach any
  * other page at all.
  */
-export const MobileNav = ({ email, role }: { email: string; role: 'admin' | 'member' }) => {
+export const MobileNav = ({
+  email,
+  role,
+  projects,
+}: {
+  email: string
+  role: 'admin' | 'member'
+  projects: NavProject[]
+}) => {
   const [open, setOpen] = useState(false)
   const pathname = usePathname()
 
@@ -55,6 +64,7 @@ export const MobileNav = ({ email, role }: { email: string; role: 'admin' | 'mem
             <AppSidebar
               email={email}
               role={role}
+              projects={projects}
               onNavigate={() => setOpen(false)}
               trailing={
                 <button

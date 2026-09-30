@@ -8,6 +8,35 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+### Added
+
+- **The subject page uses the whole width.** A compact header band (ref, stage, project, title,
+  owner, tags), then tabs: **Write-up · Todos · Notes · Log · Files**, with a slim properties
+  rail. Beside the write-up on wide screens: its outline, the open todos and the latest notes.
+- **Todos live in the page.** List or board (todo · doing · in review · done), drag a card to
+  change its status, add a todo inline. A todo pushed to Cairn shows Cairn's status and link,
+  and cannot be dragged: Cairn owns it.
+- **Human notes.** A space on each subject for people's notes, in markdown, edited or removed by
+  their author. Separate from the write-up and from the log.
+- **Files on subjects and todos.** Images as thumbnails with a lightbox, PDF and video inline,
+  and HTML previewed only in a fully sandboxed frame. Paste or drop an image into the write-up
+  and it is uploaded and inserted. `croft subject attach|files|notes`.
+- **Lab projects in the navigation**, with their subject counts.
+- **`/todos` and `/board` show each todo's subject**, and filter by project and by subject;
+  the board can lay its lanes out by subject.
+
+### Changed
+
+- **Denser and quieter everywhere.** The base size drops from 18px to 16px, and headers, rows and
+  labels are tighter.
+
+### Security
+
+- **Files that could run script are served in a sandbox.** `/api/files` sends
+  `Content-Security-Policy: sandbox` for HTML, SVG and anything that is not plain media, plus
+  `nosniff`. SVG was served without it before, so an SVG opened on its own could run script
+  on Croft's origin.
+
 ## [0.2.0] — 2026-09-30
 
 ### Added

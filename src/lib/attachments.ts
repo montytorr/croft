@@ -25,6 +25,10 @@ const ALLOWED_MIME = new Set([
   'image/gif',
   'image/webp',
   'image/svg+xml',
+  // Reports and prototypes. Only ever rendered sandboxed: /api/files serves it
+  // under `Content-Security-Policy: sandbox`, and the UI frames it without
+  // allow-scripts, so it can never run script on Croft's origin.
+  'text/html',
   'application/pdf',
   'text/plain',
   'text/markdown',
@@ -84,9 +88,86 @@ export const validateUpload = (file: {
   return null
 }
 
+/** What a type-less upload most likely is, by extension. The CLI sends the same map. */
+const MIME_BY_EXTENSION: Record<string, string> = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
+  svg: 'image/svg+xml', html: 'text/html', htm: 'text/html', pdf: 'application/pdf',
+  txt: 'text/plain', log: 'text/plain', md: 'text/markdown', csv: 'text/csv', json: 'application/json',
+  zip: 'application/zip', tar: 'application/x-tar', gz: 'application/gzip', mp4: 'video/mp4', mp3: 'audio/mpeg',
+}
+
+/**
+ * The type an upload is stored and served as. Parameters are dropped
+ * (`text/html; charset=utf-8` is text/html), and a file sent with no type or
+ * as a bare octet-stream — some browsers do that for `.htm` — is read by its
+ * extension. A declared type is never overridden: a `.html` sent as
+ * text/plain stays text/plain, which is the safer of the two.
+ */
+export const effectiveMimeType = (name: string, type: string): string => {
+  const declared = type.toLowerCase().split(';')[0]!.trim()
+  if (declared && declared !== 'application/octet-stream') return declared
+  return MIME_BY_EXTENSION[extensionOf(name)] ?? declared
+}
+
+/**
+ * Types a browser would execute script in if the file were opened directly:
+ * HTML, and SVG (which can carry `<script>`). /api/files serves these under a
+ * sandbox CSP with no allowances, so the document gets an opaque origin and
+ * no script at all, however it is reached.
+ */
+export const ACTIVE_CONTENT_MIME = new Set(['text/html', 'image/svg+xml'])
+
+export const isActiveContent = (mimeType: string) => ACTIVE_CONTENT_MIME.has(mimeType.toLowerCase().split(';')[0]!.trim())
+
+/**
+ * Types that render as media and never as a document that could run script.
+ * Everything else /api/files serves sandboxed — HTML and SVG above all, but
+ * also any type nobody thought of yet. PDF is here because Chrome's viewer
+ * refuses to open in a sandboxed document; it runs in its own process, not
+ * on Croft's origin.
+ */
+const INERT_MIME = /^(?:image\/(?:png|jpeg|gif|webp)|application\/pdf|video\/[\w.+-]+|audio\/[\w.+-]+)$/
+
+/**
+ * Headers every served file carries. `sandbox` with no allowances gives the
+ * document an opaque origin and no script, forms, popups or top navigation —
+ * whether it is opened directly, framed without a sandbox attribute, or
+ * framed by a page that got its attribute wrong.
+ */
+export const servedFileHeaders = (mimeType: string): Record<string, string> => {
+  const mime = mimeType.toLowerCase().split(';')[0]!.trim()
+  const headers: Record<string, string> = {
+    'content-type': mimeType,
+    'x-content-type-options': 'nosniff',
+    // Framed by Croft's own pages (the HTML and PDF previews), nobody else's.
+    'x-frame-options': 'SAMEORIGIN',
+  }
+  if (isActiveContent(mime) || !INERT_MIME.test(mime)) headers['content-security-policy'] = 'sandbox'
+  return headers
+}
+
+export type AttachmentKind = 'image' | 'html' | 'pdf' | 'video' | 'other'
+
+/** How the UI may show a file: inline image, sandboxed iframe, PDF/video player, or download. */
+export const attachmentKind = (mimeType: string): AttachmentKind => {
+  const mime = mimeType.toLowerCase().split(';')[0]!.trim()
+  if (mime === 'text/html') return 'html'
+  if (mime.startsWith('image/')) return 'image'
+  if (mime === 'application/pdf') return 'pdf'
+  if (mime.startsWith('video/')) return 'video'
+  return 'other'
+}
+
+/** The stable, session-authenticated address markdown embeds: it redirects to a fresh signed URL. */
+export const attachmentContentUrl = (id: string) => `/api/v1/attachments/${id}/content`
+
 /** `{projectId}/tasks/{taskId}/{uuid}-{name}` — collision-free and browsable. */
 export const buildStoragePath = (projectId: string, taskId: string, filename: string) =>
   `${projectId}/tasks/${taskId}/${crypto.randomUUID()}-${sanitizeFilename(filename)}`
+
+/** `subjects/{subjectId}/{uuid}-{name}`: a subject has no task project to live under. */
+export const buildSubjectStoragePath = (subjectId: string, filename: string) =>
+  `subjects/${subjectId}/${crypto.randomUUID()}-${sanitizeFilename(filename)}`
 
 export const sha256 = (buffer: Buffer | Uint8Array): string =>
   createHash('sha256').update(buffer).digest('hex')
@@ -108,6 +189,34 @@ export const signUrls = async (storagePath: string, originalName: string, mimeTy
   return {
     previewUrl: make(false),
     downloadUrl: make(true),
+  }
+}
+
+/**
+ * A stored row as the API and pages hand it out: the lab's `Attachment`
+ * shape, with fresh signed URLs and the stable `content_url`.
+ */
+export const toAttachment = async (row: {
+  id: string
+  filename: string
+  mime_type: string
+  size_bytes: number | string
+  storage_path: string
+  uploaded_by: string
+  created_at: string
+}) => {
+  const { previewUrl, downloadUrl } = await signUrls(row.storage_path, row.filename, row.mime_type)
+  return {
+    id: row.id,
+    filename: row.filename,
+    mime_type: row.mime_type,
+    size_bytes: Number(row.size_bytes),
+    preview_url: previewUrl,
+    download_url: downloadUrl,
+    content_url: attachmentContentUrl(row.id),
+    kind: attachmentKind(row.mime_type),
+    uploaded_by: row.uploaded_by,
+    created_at: row.created_at,
   }
 }
 

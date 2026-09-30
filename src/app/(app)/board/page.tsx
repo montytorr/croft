@@ -6,6 +6,7 @@ import { CrossProjectBoard } from './cross-project-board'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { PendingLink } from '@/components/pending-link'
 import { LiveUpdates } from '@/components/live-updates'
+import { listLabProjects } from '@/lib/lab/data'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,16 +42,22 @@ const BoardPage = async ({
   const query = new URLSearchParams(
     Object.entries(params).filter((entry): entry is [string, string] => entry[1] !== undefined),
   ).toString()
-  const { tasks, projects, closedHidden } = await listBoardTasks(user.id, { includeClosed })
+  // Each card carries its subject and Cairn push; the lab projects are the
+  // lab-project filter's options.
+  const [{ tasks, projects, closedHidden }, labProjects] = await Promise.all([
+    listBoardTasks(user.id, { includeClosed }),
+    listLabProjects().catch(() => []),
+  ])
 
   return (
     <div className="flex h-dvh flex-col">
       <header className="page-header border-border flex h-[2.75rem] shrink-0 items-center gap-2 border-b px-2.5 md:px-4 pr-live-status">
         <MobileNavButton />
-        <span className="text-fg shrink-0 text-[0.8125rem] font-medium">Board</span>
+        <span className="text-fg shrink-0 text-[0.8125rem] font-medium">Todo board</span>
         <span className="text-fg-subtle hidden text-[0.8125rem] sm:block">·</span>
         <span className="text-fg-subtle hidden text-[0.8125rem] sm:block">
-          {tasks.length} across {projects.length} projects
+          {tasks.length} {tasks.length === 1 ? 'todo' : 'todos'}
+          {projects.length > 1 ? ` across ${projects.length} projects` : ''}
         </span>
 
         <PendingLink
@@ -65,7 +72,12 @@ const BoardPage = async ({
           inside CrossProjectBoard, per column and per lane cell, so the
           toolbar and column headings never scroll away. */}
       <div className="min-h-0 flex-1">
-        <CrossProjectBoard tasks={tasks} projects={projects} initialQuery={query} />
+        <CrossProjectBoard
+          tasks={tasks}
+          projects={projects}
+          labProjects={labProjects.map(({ id, name, color }) => ({ id, name, color }))}
+          initialQuery={query}
+        />
       </div>
       <LiveUpdates />
     </div>

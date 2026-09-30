@@ -31,6 +31,13 @@ const nextConfig: NextConfig = {
         { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
       ],
     },
+    // Attachments are previewed in Croft's own frames (HTML sandboxed, PDF
+    // inline), which DENY would block. Last match wins for a repeated key.
+    // Safe to frame: the route serves HTML and SVG under `CSP: sandbox`.
+    {
+      source: '/api/files',
+      headers: [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }],
+    },
   ],
 }
 

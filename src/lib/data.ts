@@ -3,7 +3,9 @@ import { byTitle } from '@/lib/utils'
 import { sessionUser } from '@/lib/auth/session'
 import { withAssignee, withAssignees, type Person } from '@/lib/api/people'
 import type { TaskPriority, TaskStatus, TaskType } from '@/schemas/task'
-import { subjectRef } from '@/lib/lab/types'
+import { subjectRef, type Attachment as LabAttachment } from '@/lib/lab/types'
+import { withTaskSubjects, type LabTodoSubject } from '@/lib/api/lab-todos'
+import { toAttachment } from '@/lib/attachments'
 
 export type Task = {
   id: string
@@ -154,6 +156,8 @@ export type TaskListItem = Pick<
    */
   project_key?: string
   guest?: boolean
+  /** The subject a todo belongs to, with its lab project. Null on an ordinary task. */
+  subject?: LabTodoSubject | null
 }
 
 export type TaskPage = {
@@ -260,8 +264,8 @@ export const listTasks = async (
   }))
 
   const [tasks, recentlyClosed] = await Promise.all([
-    withAssignees([...owned, ...guests]),
-    withAssignees((((closedRows as { data?: unknown }).data ?? []) as RawListItem[]).map(clip)),
+    withAssignees([...owned, ...guests]).then(withTaskSubjects),
+    withAssignees((((closedRows as { data?: unknown }).data ?? []) as RawListItem[]).map(clip)).then(withTaskSubjects),
   ])
 
   return {
@@ -457,6 +461,25 @@ export const listAttachments = async (taskId: string): Promise<Attachment[]> => 
   return (data ?? []) as Attachment[]
 }
 
+/**
+ * A task's files in the lab's `Attachment` shape — `kind`, fresh signed
+ * `preview_url`/`download_url` and the stable `content_url` — for a page that
+ * previews them inline. The links expire within the hour; a page re-renders
+ * well before that, and `content_url` never expires.
+ */
+export const listTaskAttachments = async (taskId: string): Promise<LabAttachment[]> => {
+  const { data } = await admin()
+    .from('task_attachments')
+    .select('id, original_name, mime_type, size_bytes, actor_id, storage_path, created_at')
+    .eq('task_id', taskId)
+    .order('created_at')
+  type Row = { id: string; original_name: string; mime_type: string; size_bytes: number; actor_id: string; storage_path: string; created_at: string }
+  return Promise.all(
+    ((data ?? []) as Row[]).map((row) =>
+      toAttachment({ ...row, filename: row.original_name, uploaded_by: row.actor_id }),
+    ),
+  )
+}
 
 /**
  * Every task the user owns, across all projects.
@@ -515,7 +538,7 @@ export const listAllTasks = async (
   // Named in one query across both lists. Without it every row on the home
   // page drew its assignee as "?": the id came back, the person never did.
   const recent = (((closedRows as { data?: unknown }).data ?? []) as Row[]).map(withKey)
-  const named = await withAssignees([...tasks, ...recent])
+  const named = await withTaskSubjects(await withAssignees([...tasks, ...recent]))
 
   return {
     tasks: named.slice(0, tasks.length),

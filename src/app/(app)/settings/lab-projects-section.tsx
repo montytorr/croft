@@ -238,6 +238,7 @@ export const LabProjectsSection = ({ projects: initial, canEdit }: { projects: L
   }
 
   return (
+    <div id="lab-projects" className="scroll-mt-16">
     <SettingsCard
       title="Lab projects"
       flush
@@ -278,5 +279,6 @@ export const LabProjectsSection = ({ projects: initial, canEdit }: { projects: L
         />
       ) : null}
     </SettingsCard>
+    </div>
   )
 }

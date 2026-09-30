@@ -35,6 +35,8 @@ const AppLayout = async ({ children }: { children: React.ReactNode }) => {
     listLabProjects().catch(() => []),
   ])
   const email = user.email ?? 'you'
+  // Only what the sidebar draws crosses to the client.
+  const navProjects = labProjects.map(({ id, name, color, subjects }) => ({ id, name, color, subjects }))
   const projectList = projects.map((p) => ({ key: p.key, title: p.title }))
 
   // Retired keys linkify too. A bare `ACME-42` in a task body or an agent's
@@ -52,10 +54,10 @@ const AppLayout = async ({ children }: { children: React.ReactNode }) => {
         <PeopleProvider people={people} currentUserId={user.id}>
         <TaskCreationProvider projects={projectList}>
         <SubjectCreationProvider stages={stages} tags={tags} projects={labProjects}>
-          <MobileNavProvider email={email} role={user.role}>
+          <MobileNavProvider email={email} role={user.role} projects={navProjects}>
             <div className="bg-bg flex h-dvh">
               <aside className="app-sidebar hidden w-[13.75rem] shrink-0 flex-col md:flex">
-                <AppSidebar email={email} role={user.role} />
+                <AppSidebar email={email} role={user.role} projects={navProjects} />
               </aside>
 
             <div className="app-canvas flex min-w-0 flex-1 flex-col">

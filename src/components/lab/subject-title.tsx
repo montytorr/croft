@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
  * name is the one voice on its page.
  */
 const TITLE =
-  'font-display headline headline-xl text-fg -mx-2 rounded-lg border px-2 text-[1.75rem] leading-[1.15] sm:text-[2.125rem] ' +
+  'font-display headline headline-xl text-fg -mx-2 rounded-lg border px-2 text-[1.5rem] leading-[1.18] sm:text-[1.875rem] ' +
   'transition-[background-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease-out)]'
 
 /** Click-to-edit title; Enter saves, Escape puts it back. */

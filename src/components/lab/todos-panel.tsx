@@ -1,43 +1,216 @@
 'use client'
 
+import {
+  DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor, pointerWithin, rectIntersection, useDraggable, useDroppable,
+  useSensor, useSensors, type CollisionDetection, type DragEndEvent,
+} from '@dnd-kit/core'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { ArrowUpRight, Plus } from 'lucide-react'
-import { StatusIcon } from '@/components/icons'
+import { ArrowUpRight, Columns3, List, Plus } from 'lucide-react'
+import { ResolutionDialog } from '@/app/(app)/projects/[key]/resolution-dialog'
+import { Avatar, StatusIcon } from '@/components/icons'
+import { RelativeTime } from '@/components/relative-time'
 import { Spinner } from '@/components/spinner'
 import { useMutate } from '@/lib/api/use-mutate'
 import { TODO_PROJECT_KEY, type SubjectTodo } from '@/lib/lab/types'
-import type { TaskStatus } from '@/schemas/task'
+import { TASK_STATUSES, type ResolutionKind, type TaskStatus } from '@/schemas/task'
 import { cn } from '@/lib/utils'
-import { LABEL } from './subject-properties'
+import {
+  STATUS_LABEL, boardLanes, cairnTaskUrl, counts, isPushed, laneOf, listGroups, needsResolution, type PageTodo,
+} from './todo-lanes'
 
-const CLOSED = new Set(['done', 'cancelled'])
+export type TodoView = 'list' | 'board'
+
+const todoHref = (todo: PageTodo) => `/projects/${TODO_PROJECT_KEY}/tasks/${todo.number}`
 
 /**
- * Where a todo's work is being done in Cairn, when it was pushed there:
- * `↗ CAIRN-331 · doing`. The status is as of the last sync, which is why it
- * sits in the subtle grey rather than borrowing a status colour it may no
- * longer have.
+ * Where a pushed todo's work is being done: `↗ CAIRN-331 · doing`, linked to
+ * it in Cairn when the connection is known. The status is as of the last
+ * sync, which is why it stays in the subtle ink rather than borrowing a
+ * status colour it may no longer have.
  */
-const CairnBadge = ({ todo }: { todo: SubjectTodo }) =>
-  todo.cairn_ref ? (
-    <span
-      className="border-border text-fg-muted inline-flex h-[1.125rem] shrink-0 items-center gap-1 rounded border px-1.5 font-mono text-[0.625rem]"
-      title={`Pushed to Cairn as ${todo.cairn_ref}${todo.cairn_status ? `; ${todo.cairn_status} at the last sync` : ''}`}
-    >
+const CairnBadge = ({ todo, cairnUrl }: { todo: PageTodo; cairnUrl: string | null }) => {
+  if (!todo.cairn_ref) return null
+  const href = cairnTaskUrl(cairnUrl, todo.cairn_ref)
+  const body = (
+    <>
       <ArrowUpRight size={10} aria-hidden />
       {todo.cairn_ref}
       {todo.cairn_status ? <span className="text-fg-subtle">· {todo.cairn_status}</span> : null}
+    </>
+  )
+  const className =
+    'border-border text-fg-muted relative z-10 inline-flex h-[1.125rem] shrink-0 items-center gap-1 rounded border px-1.5 font-mono text-[0.625rem]'
+  const title = `In Cairn as ${todo.cairn_ref}${todo.cairn_status ? `, ${todo.cairn_status} at the last sync` : ''}. It moves there, not here.`
+  return href ? (
+    <a href={href} target="_blank" rel="noreferrer" title={title} className={cn(className, 'hover:border-border-strong hover:text-fg transition-colors')}>
+      {body}
+    </a>
+  ) : (
+    <span title={title} className={className}>
+      {body}
     </span>
-  ) : null
+  )
+}
+
+const HeldBy = ({ agent }: { agent: string }) => (
+  <span className="text-fg-subtle inline-flex min-w-0 items-center gap-1 text-[0.6875rem]" title={`Claimed by ${agent}`}>
+    <span className="bg-status-doing live-dot size-[0.375rem] shrink-0 rounded-full text-status-doing" aria-hidden />
+    <span className="text-fg-muted truncate font-mono text-[0.65625rem]">{agent}</span>
+  </span>
+)
+
+/** A todo's status, changed in place from its icon; a pushed todo's is Cairn's, so it is shown and not offered. */
+const StatusControl = ({ todo, onChange }: { todo: PageTodo; onChange: (status: TaskStatus) => void }) => {
+  const status = laneOf(todo)
+  if (isPushed(todo)) {
+    return (
+      <span className="grid size-5 shrink-0 place-items-center opacity-60" title="Moves in Cairn">
+        <StatusIcon status={status} size={13} />
+      </span>
+    )
+  }
+  return (
+    <span className="hover:bg-surface-raised relative z-10 grid size-5 shrink-0 place-items-center rounded transition-colors">
+      <StatusIcon status={status} size={13} />
+      <select
+        value={status}
+        aria-label={`Status of ${todo.ref}`}
+        onChange={(e) => onChange(e.target.value as TaskStatus)}
+        className="absolute inset-0 cursor-pointer opacity-0"
+      >
+        {TASK_STATUSES.map((s) => (
+          <option key={s} value={s}>
+            {STATUS_LABEL[s]}
+          </option>
+        ))}
+      </select>
+    </span>
+  )
+}
+
+const closedTitle = (status: string) =>
+  status === 'done' || status === 'cancelled' ? 'text-fg-subtle line-through decoration-fg-subtle/40' : 'text-fg'
+
+const TodoRow = ({ todo, cairnUrl, onStatus }: { todo: PageTodo; cairnUrl: string | null; onStatus: (todo: PageTodo, s: TaskStatus) => void }) => (
+  <li className="group/row row-hover relative flex h-[1.875rem] items-center gap-2 rounded-md px-2">
+    <StatusControl todo={todo} onChange={(s) => onStatus(todo, s)} />
+    <Link href={todoHref(todo)} className="min-w-0 flex-1 truncate text-[0.8125rem] after:absolute after:inset-0">
+      <span className={closedTitle(todo.status)}>{todo.title}</span>
+    </Link>
+    {todo.claimed_by ? <span className="hidden max-w-[10rem] sm:flex"><HeldBy agent={todo.claimed_by} /></span> : null}
+    <CairnBadge todo={todo} cairnUrl={cairnUrl} />
+    {todo.assignee ? (
+      <span title={todo.assignee.name} className="hidden shrink-0 sm:block">
+        <Avatar name={todo.assignee.name} size={16} />
+      </span>
+    ) : null}
+    <span className="text-fg-subtle w-[3.25rem] shrink-0 text-right font-mono text-[0.65625rem]">{todo.ref}</span>
+    <RelativeTime iso={todo.updated_at} className="text-fg-subtle hidden w-[4.5rem] shrink-0 text-right text-[0.6875rem] md:block" />
+  </li>
+)
+
+const TodoCard = ({ todo, cairnUrl, lifted }: { todo: PageTodo; cairnUrl: string | null; lifted?: boolean }) => (
+  <div
+    className={cn(
+      'bg-surface border-border group/card relative flex flex-col gap-1.5 rounded-md border px-2.5 py-2',
+      'transition-[border-color,background-color] duration-[var(--dur-1)] hover:border-border-strong',
+      lifted && 'border-accent/50 rotate-[1.25deg] shadow-lg',
+      isPushed(todo) && 'bg-bg-elevated/60 border-dashed',
+    )}
+  >
+    <Link href={todoHref(todo)} className="text-[0.8125rem] leading-snug after:absolute after:inset-0" draggable={false}>
+      <span className={cn('line-clamp-3', closedTitle(todo.status))}>{todo.title}</span>
+    </Link>
+    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+      <span className="text-fg-subtle font-mono text-[0.625rem]">{todo.ref}</span>
+      {todo.claimed_by ? <HeldBy agent={todo.claimed_by} /> : null}
+      <CairnBadge todo={todo} cairnUrl={cairnUrl} />
+      {todo.assignee ? (
+        <span title={todo.assignee.name} className="ml-auto shrink-0">
+          <Avatar name={todo.assignee.name} size={16} />
+        </span>
+      ) : null}
+    </div>
+  </div>
+)
+
+const DraggableCard = ({ todo, cairnUrl }: { todo: PageTodo; cairnUrl: string | null }) => {
+  const pushed = isPushed(todo)
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: todo.id, disabled: pushed })
+  return (
+    <div
+      ref={setNodeRef}
+      {...(pushed ? {} : listeners)}
+      {...(pushed ? {} : attributes)}
+      className={cn('rounded-md', !pushed && 'cursor-grab', isDragging && 'opacity-40')}
+      title={pushed ? 'Pushed to Cairn: its status moves there.' : undefined}
+    >
+      <TodoCard todo={todo} cairnUrl={cairnUrl} />
+    </div>
+  )
+}
+
+const Lane = ({ status, todos, cairnUrl }: { status: TaskStatus; todos: PageTodo[]; cairnUrl: string | null }) => {
+  const { setNodeRef, isOver } = useDroppable({ id: status })
+  return (
+    <section
+      aria-label={STATUS_LABEL[status]}
+      className="bg-bg-elevated flex min-h-[8rem] min-w-[13.5rem] flex-col rounded-lg"
+    >
+      <header className="flex h-8 shrink-0 items-center gap-1.5 px-2.5">
+        <StatusIcon status={status} size={12} />
+        <span className="text-fg text-[0.75rem] font-medium">{STATUS_LABEL[status]}</span>
+        <span className="count ml-auto">{todos.length}</span>
+      </header>
+      <div
+        ref={setNodeRef}
+        className={cn(
+          'flex flex-1 flex-col gap-1.5 rounded-b-lg px-1.5 pb-1.5',
+          'outline-1 -outline-offset-1 outline-dashed transition-[background-color,outline-color] duration-[var(--dur-2)]',
+          isOver ? 'bg-accent-subtle outline-accent/70' : 'outline-transparent',
+        )}
+      >
+        {todos.length === 0 ? (
+          <p className={cn('text-fg-subtle grid flex-1 place-items-center py-4 text-[0.6875rem]', isOver && 'text-accent')}>
+            {isOver ? 'Drop here' : 'Nothing here'}
+          </p>
+        ) : (
+          todos.map((todo) => <DraggableCard key={todo.id} todo={todo} cairnUrl={cairnUrl} />)
+        )}
+      </div>
+    </section>
+  )
+}
+
+/** The lane under the pointer; a keyboard drag, with no pointer, falls back to overlap. */
+const laneUnderPointer: CollisionDetection = (args) => {
+  const hits = pointerWithin(args)
+  return hits.length > 0 ? hits : rectIntersection(args)
+}
 
 /**
- * A subject's todos: the concrete work it needs. Each is an ordinary task in
- * the `T` project — claimable by an agent, with its own notes and resolution
- * — so each row opens the task page. Adding one is a line and Enter.
+ * A subject's todos, in the page: a list grouped by status, or a board with a
+ * lane per status. Each is an ordinary task in the `T` project — claimable by
+ * an agent, with its own notes and resolution — so each opens its task page.
+ *
+ * Dragging a card (or picking from a row's status icon) patches the task;
+ * closing one asks for its resolution first, as everywhere else. A todo that
+ * was pushed to Cairn is worked there: it shows Cairn's status and link, and
+ * cannot be dragged here.
  */
-export const TodosPanel = ({ subjectRef, todos: initial }: { subjectRef: string; todos: SubjectTodo[] }) => {
+export const TodosPanel = ({
+  subjectRef,
+  todos: initial,
+  cairnUrl = null,
+  initialView = 'list',
+}: {
+  subjectRef: string
+  todos: PageTodo[]
+  cairnUrl?: string | null
+  initialView?: TodoView
+}) => {
   const router = useRouter()
   const request = useMutate()
   const [todos, setTodos] = useState(initial)
@@ -46,93 +219,212 @@ export const TodosPanel = ({ subjectRef, todos: initial }: { subjectRef: string;
     setPrevInitial(initial)
     setTodos(initial)
   }
+  const [view, setViewState] = useState<TodoView>(initialView)
+  const [showCancelled, setShowCancelled] = useState(false)
   const [title, setTitle] = useState('')
-  const [pending, setPending] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [dragging, setDragging] = useState<PageTodo | null>(null)
+  const [closing, setClosing] = useState<{ todo: PageTodo; status: TaskStatus } | null>(null)
+
+  const setView = (next: TodoView) => {
+    setViewState(next)
+    const url = new URL(window.location.href)
+    if (next === 'list') url.searchParams.delete('view')
+    else url.searchParams.set('view', next)
+    window.history.replaceState(window.history.state, '', url)
+  }
+
+  // A touch has to rest on a card before it lifts, so a swipe across the
+  // lanes on a phone scrolls them instead of dragging the first card it meets.
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 6 } }),
+    useSensor(KeyboardSensor),
+  )
 
   const add = async () => {
-    if (!title.trim() || pending) return
-    setPending(true)
+    if (!title.trim() || adding) return
+    setAdding(true)
     const result = await request<SubjectTodo>(`/api/v1/subjects/${subjectRef}/todos`, {
       method: 'POST',
       body: { title: title.trim() },
     })
-    setPending(false)
+    setAdding(false)
     if (!result.ok) return
     setTitle('')
     if (result.data?.id) setTodos((current) => [...current, result.data])
     router.refresh()
   }
 
-  const open = todos.filter((t) => !CLOSED.has(t.status))
-  const closed = todos.filter((t) => CLOSED.has(t.status))
+  const persist = async (
+    todo: PageTodo,
+    status: TaskStatus,
+    close?: { resolution: string; kind: ResolutionKind; duplicateOf?: string },
+  ) => {
+    const previous = todos
+    setTodos((current) => current.map((t) => (t.id === todo.id ? { ...t, status } : t)))
+    const result = await request(`/api/v1/tasks/${todo.ref}`, {
+      method: 'PATCH',
+      body: close
+        ? {
+            status,
+            resolution: close.resolution,
+            resolutionKind: close.kind,
+            ...(close.duplicateOf ? { duplicateOf: close.duplicateOf } : {}),
+          }
+        : { status },
+    })
+    if (!result.ok) {
+      setTodos(previous)
+      return false
+    }
+    router.refresh()
+    return true
+  }
 
-  const row = (todo: SubjectTodo) => (
-    <li key={todo.id}>
-      <Link
-        href={`/projects/${TODO_PROJECT_KEY}/tasks/${todo.number}`}
-        className="row-hover -mx-2 flex min-h-[2.25rem] items-center gap-2 rounded-md px-2 py-1"
-      >
-        <StatusIcon status={todo.status as TaskStatus} size={13} />
-        <span className="min-w-0 flex-1">
-          <span className={cn('block truncate text-[0.8125rem]', CLOSED.has(todo.status) ? 'text-fg-subtle line-through decoration-fg-subtle/40' : 'text-fg')}>
-            {todo.title}
-          </span>
-          {todo.claimed_by || todo.cairn_ref ? (
-            <span className="mt-0.5 flex flex-wrap items-center gap-1.5">
-              {todo.claimed_by ? (
-                <span className="text-fg-subtle truncate text-[0.6875rem]" title={`Held by ${todo.claimed_by}`}>
-                  held by <span className="text-fg-muted">{todo.claimed_by}</span>
-                </span>
-              ) : null}
-              <CairnBadge todo={todo} />
-            </span>
-          ) : null}
-        </span>
-        <span className="text-fg-subtle shrink-0 font-mono text-[0.625rem]">{todo.ref}</span>
-      </Link>
-    </li>
+  const changeStatus = (todo: PageTodo, status: TaskStatus) => {
+    if (isPushed(todo) || laneOf(todo) === status) return
+    if (needsResolution(todo.status, status)) {
+      setClosing({ todo, status })
+      return
+    }
+    void persist(todo, status)
+  }
+
+  const onDragEnd = ({ active, over }: DragEndEvent) => {
+    setDragging(null)
+    const todo = todos.find((t) => t.id === active.id)
+    if (!todo || !over) return
+    changeStatus(todo, over.id as TaskStatus)
+  }
+
+  const tally = counts(todos)
+  const lanes = boardLanes(todos, showCancelled)
+
+  const segment = (value: TodoView, label: string, Icon: typeof List) => (
+    <button
+      type="button"
+      aria-pressed={view === value}
+      onClick={() => setView(value)}
+      className={cn(
+        'flex h-[1.5rem] items-center gap-1.5 rounded-[5px] px-2 text-[0.75rem] transition-colors duration-[var(--dur-1)]',
+        view === value ? 'bg-surface text-fg ring-border shadow-[0_1px_0_var(--border)] ring-1' : 'text-fg-muted hover:text-fg',
+      )}
+    >
+      <Icon size={13} aria-hidden />
+      {label}
+    </button>
   )
 
   return (
-    <section aria-labelledby="todos-heading">
-      <h2 id="todos-heading" className={cn(LABEL, 'mb-2 flex items-center gap-2')}>
-        Todos
-        <span className="bg-surface-raised text-fg-muted rounded-full px-1.5 py-px text-[0.625rem] tracking-normal tabular-nums">
-          {open.length} open · {closed.length} done
-        </span>
-      </h2>
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="border-border focus-within:border-accent bg-surface flex h-[2rem] min-w-[14rem] flex-1 items-center gap-1.5 rounded-md border pr-1 pl-2.5 transition-[border-color,box-shadow] focus-within:shadow-[0_0_0_1px_var(--accent)] sm:max-w-[32rem]">
+          <Plus size={13} aria-hidden className="text-fg-subtle shrink-0" />
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                void add()
+              }
+            }}
+            maxLength={300}
+            placeholder={todos.length ? 'Add a todo…' : 'What is the first concrete thing to do?'}
+            aria-label="New todo"
+            className="text-fg placeholder:text-fg-subtle h-full min-w-0 flex-1 bg-transparent text-[0.8125rem] outline-none"
+          />
+          {adding ? (
+            <span className="text-fg-subtle px-1.5">
+              <Spinner size={12} />
+            </span>
+          ) : title.trim() ? (
+            <kbd className="kbd inline-flex">↵</kbd>
+          ) : null}
+        </div>
 
-      {todos.length > 0 ? (
-        <ul className="mb-2 flex flex-col">
-          {open.map(row)}
-          {closed.map(row)}
-        </ul>
+        <p className="text-fg-subtle text-[0.75rem] tabular-nums">
+          <span className="text-fg-muted">{tally.open}</span> open · {tally.done} done
+        </p>
+
+        <div className="ml-auto flex items-center gap-2">
+          {tally.cancelled > 0 ? (
+            <button
+              type="button"
+              aria-pressed={showCancelled}
+              onClick={() => setShowCancelled((v) => !v)}
+              className={cn('h-[1.5rem] rounded-md px-2 text-[0.75rem] transition-colors', showCancelled ? 'text-fg bg-surface-raised' : 'text-fg-subtle hover:text-fg')}
+            >
+              {showCancelled ? 'Hide' : 'Show'} cancelled <span className="tabular-nums">({tally.cancelled})</span>
+            </button>
+          ) : null}
+          <div className="bg-surface-raised flex items-center gap-0.5 rounded-md p-0.5" role="group" aria-label="View">
+            {segment('list', 'List', List)}
+            {segment('board', 'Board', Columns3)}
+          </div>
+        </div>
+      </div>
+
+      {view === 'list' ? (
+        todos.length === 0 ? (
+          <p className="text-fg-subtle border-border rounded-lg border border-dashed px-4 py-8 text-center text-[0.8125rem]">
+            No todos yet. A todo is one concrete piece of work an agent or a person can pick up.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {listGroups(todos, showCancelled).map((group) => (
+              <section key={group.status} aria-label={STATUS_LABEL[group.status]}>
+                <h3 className="border-border mb-0.5 flex h-7 items-center gap-1.5 border-b px-2">
+                  <StatusIcon status={group.status} size={12} />
+                  <span className="text-fg-muted text-[0.75rem] font-medium">{STATUS_LABEL[group.status]}</span>
+                  <span className="count">{group.todos.length}</span>
+                </h3>
+                <ul className="flex flex-col">
+                  {group.todos.map((todo) => (
+                    <TodoRow key={todo.id} todo={todo} cairnUrl={cairnUrl} onStatus={changeStatus} />
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
+        )
       ) : (
-        <p className="text-fg-subtle mb-2 text-[0.75rem]">No todos yet. What is the first concrete thing to do?</p>
+        <DndContext
+          id={`todos-${subjectRef}`}
+          sensors={sensors}
+          collisionDetection={laneUnderPointer}
+          onDragStart={({ active }) => setDragging(todos.find((t) => t.id === active.id) ?? null)}
+          onDragEnd={onDragEnd}
+          onDragCancel={() => setDragging(null)}
+        >
+          <div className="-mx-4 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0">
+            <div
+              className="grid gap-2"
+              style={{ gridTemplateColumns: `repeat(${lanes.length}, minmax(13.5rem, 1fr))` }}
+            >
+              {lanes.map((status) => (
+                <Lane key={status} status={status} todos={todos.filter((t) => laneOf(t) === status)} cairnUrl={cairnUrl} />
+              ))}
+            </div>
+          </div>
+          <DragOverlay>{dragging ? <TodoCard todo={dragging} cairnUrl={cairnUrl} lifted /> : null}</DragOverlay>
+        </DndContext>
       )}
 
-      <div className="border-border focus-within:border-accent bg-surface flex items-center gap-1.5 rounded-lg border pr-1 pl-2.5 transition-[border-color,box-shadow] focus-within:shadow-[0_0_0_1px_var(--accent)]">
-        <Plus size={13} aria-hidden className="text-fg-subtle shrink-0" />
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              void add()
-            }
+      {closing ? (
+        <ResolutionDialog
+          taskTitle={closing.todo.title}
+          status={closing.status}
+          suggestion={null}
+          onCancel={() => setClosing(null)}
+          onConfirm={async (resolution, kind, duplicateOf) => {
+            const ok = await persist(closing.todo, closing.status, { resolution, kind, duplicateOf })
+            if (ok) setClosing(null)
+            return ok
           }}
-          maxLength={300}
-          placeholder="Add a todo…"
-          aria-label="New todo"
-          className="text-fg placeholder:text-fg-subtle h-[2.125rem] min-w-0 flex-1 bg-transparent text-[0.8125rem] outline-none"
         />
-        {pending ? (
-          <span className="text-fg-subtle px-1.5"><Spinner size={12} /></span>
-        ) : title.trim() ? (
-          <kbd className="kbd inline-flex">↵</kbd>
-        ) : null}
-      </div>
-    </section>
+      ) : null}
+    </div>
   )
 }

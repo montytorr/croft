@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { BrandMark, BrandName } from '@/components/brand'
 import { ThemeToggle } from '@/components/theme-toggle'
-import { AppNav } from '@/components/app-nav'
+import { AppNav, type NavProject } from '@/components/app-nav'
 import { UserMenu } from '@/components/user-menu'
 
 /**
@@ -12,11 +12,14 @@ import { UserMenu } from '@/components/user-menu'
 export const AppSidebar = ({
   email,
   role,
+  projects = [],
   onNavigate,
   trailing,
 }: {
   email: string
   role: 'admin' | 'member'
+  /** The lab's projects, listed under the places with their subject counts. */
+  projects?: NavProject[]
   /** Closes the drawer after a tap. Absent on the desktop rail. */
   onNavigate?: () => void
   /**
@@ -48,7 +51,7 @@ export const AppSidebar = ({
       </span>
     </div>
 
-    <AppNav onNavigate={onNavigate} />
+    <AppNav onNavigate={onNavigate} projects={projects} canManageProjects={role === 'admin'} />
 
     <UserMenu email={email} role={role} onNavigate={onNavigate} />
   </>

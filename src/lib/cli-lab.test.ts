@@ -19,7 +19,7 @@ afterEach(async () => {
   await Promise.all(directories.splice(0).map((d) => rm(d, { recursive: true, force: true })))
 })
 
-type Seen = { method: string; path: string; body?: Record<string, unknown> }
+type Seen = { method: string; path: string; body?: Record<string, unknown>; raw?: string; contentType?: string }
 type Answer = { status?: number; payload: unknown }
 type Reply = (req: Seen) => unknown
 
@@ -30,8 +30,8 @@ const serve = (reply: Reply, seen: Seen[] = []) =>
       let raw = ''
       req.on('data', (c) => { raw += c })
       req.on('end', () => {
-        const entry: Seen = { method: req.method ?? '', path: req.url ?? '' }
-        if (raw) try { entry.body = JSON.parse(raw) } catch { /* not json */ }
+        const entry: Seen = { method: req.method ?? '', path: req.url ?? '', contentType: req.headers['content-type'] }
+        if (raw) try { entry.body = JSON.parse(raw) } catch { entry.raw = raw }
         seen.push(entry)
         const out = reply(entry)
         const answer = out && typeof out === 'object' && 'payload' in out
@@ -134,13 +134,22 @@ describe('croft subject', () => {
     ]
     const seen: Seen[] = []
     const base = await serve((req) => {
+      if (req.path.endsWith('/human-notes')) return [{ id: 'h1', body: 'Marc says per seat', author: { id: 'u1', name: 'Cal' } }]
+      if (req.path.endsWith('/attachments')) return []
       if (req.path.endsWith('/notes')) return notes
       if (req.path.endsWith('/todos')) return todos
       return subject({ body: 'x'.repeat(2000), conclusion: 'Use pgvector with HNSW.' })
     }, seen)
     const { code, stdout, stderr } = await run(['subject', 'show', 's-12'], base)
     expect(code).toBe(0)
-    expect(seen.map((s) => s.path).sort()).toEqual(['/api/v1/subjects/S-12', '/api/v1/subjects/S-12/notes', '/api/v1/subjects/S-12/todos'])
+    expect(seen.map((s) => s.path).sort()).toEqual([
+      '/api/v1/subjects/S-12', '/api/v1/subjects/S-12/attachments', '/api/v1/subjects/S-12/human-notes',
+      '/api/v1/subjects/S-12/notes', '/api/v1/subjects/S-12/todos',
+    ])
+    // Counted, not printed: people's notes are read on purpose.
+    expect(stdout).toContain("people's notes: 1 (croft subject notes S-12)")
+    expect(stdout).not.toContain('Marc says per seat')
+    expect(stdout).not.toContain('files:')
     expect(stdout).toContain('S-12  exploring  pgvector for recall')
     expect(stdout).toContain('Use pgvector with HNSW.')
     expect(stdout).toContain('todos: 2 open / 1 closed')
@@ -155,6 +164,79 @@ describe('croft subject', () => {
     expect(full.stdout).toContain('note 0')
     expect(full.stdout).toContain('Read the paper')
     expect(full.stderr).toBe('')
+  })
+
+  it('show still works against a server with no people\'s notes or files', async () => {
+    const base = await serve((req) => {
+      if (req.path.endsWith('/human-notes') || req.path.endsWith('/attachments')) {
+        return { status: 404, payload: { success: false, error: 'No route', code: 'not_found' } }
+      }
+      if (req.path.endsWith('/notes') || req.path.endsWith('/todos')) return []
+      return subject()
+    })
+    const { code, stdout } = await run(['subject', 'show', 'S-12'], base)
+    expect(code).toBe(0)
+    expect(stdout).toContain('S-12  exploring  pgvector for recall')
+    expect(stdout).not.toContain("people's notes")
+  })
+
+  it('notes prints people\'s notes with author, time and the whole body', async () => {
+    const seen: Seen[] = []
+    const base = await serve(() => [
+      { id: 'h2', body: 'Licence is per seat.\n\n- ask Marc', author: { id: 'u1', name: 'Cal' },
+        created_at: '2026-09-30T09:00:00Z', updated_at: '2026-09-30T10:30:00Z' },
+      { id: 'h1', body: 'first', author: { id: 'u2', name: 'Ana' }, created_at: '2026-09-29T09:00:00Z', updated_at: '2026-09-29T09:00:00Z' },
+    ], seen)
+    const { code, stdout } = await run(['subject', 'notes', 'S-12'], base)
+    expect(code).toBe(0)
+    expect(seen[0]).toMatchObject({ method: 'GET', path: '/api/v1/subjects/S-12/human-notes' })
+    expect(stdout).toContain('2026-09-30 09:00  Cal  (edited 2026-09-30 10:30)')
+    expect(stdout).toContain('    - ask Marc')
+    expect(stdout).toContain('2026-09-29 09:00  Ana\n    first')
+  })
+
+  it('attach uploads to the subject as multipart, HTML typed as text/html, and prints the file row', async () => {
+    const dir = await tempDir('croft-attach-')
+    const file = join(dir, 'report.html')
+    await writeFile(file, '<h1>bench</h1>')
+    const seen: Seen[] = []
+    const base = await serve(() => ({
+      id: 'f1', filename: 'report.html', mime_type: 'text/html', size_bytes: 14, kind: 'html', uploaded_by: 'claude-code',
+      content_url: '/api/v1/attachments/f1/content', preview_url: '/api/files?x', download_url: '/api/files?y', created_at: '',
+    }), seen)
+    const { code, stdout } = await run(['subject', 'attach', 'S-12', file], base)
+    expect(code).toBe(0)
+    expect(seen[0]).toMatchObject({ method: 'POST', path: '/api/v1/subjects/S-12/attachments' })
+    expect(seen[0]!.contentType).toMatch(/^multipart\/form-data/)
+    expect(seen[0]!.raw).toContain('filename="report.html"')
+    expect(seen[0]!.raw).toContain('Content-Type: text/html')
+    expect(stdout).toContain('f1\treport.html\thtml\t14\tclaude-code\t/api/v1/attachments/f1/content')
+
+    // `croft attach S-12 <file>` means the same; a todo's HTML goes up as text/html too.
+    const again: Seen[] = []
+    const base2 = await serve(() => ({ id: 'f2' }), again)
+    expect((await run(['attach', 'S-12', file], base2)).code).toBe(0)
+    expect(again[0]!.path).toBe('/api/v1/subjects/S-12/attachments')
+    const todo: Seen[] = []
+    const base3 = await serve(() => ({ id: 'f3' }), todo)
+    expect((await run(['attach', 'T-41', file], base3)).code).toBe(0)
+    expect(todo[0]!.path).toBe('/api/v1/tasks/T-41/attachments')
+    expect(todo[0]!.raw).toContain('Content-Type: text/html')
+  })
+
+  it('attach names the embed for an image, and files lists the subject\'s files', async () => {
+    const dir = await tempDir('croft-attach-')
+    const file = join(dir, 'shot.png')
+    await writeFile(file, 'png')
+    const base = await serve((req) =>
+      req.method === 'POST'
+        ? { id: 'f1', filename: 'shot.png', kind: 'image', size_bytes: 3, uploaded_by: 'cal', content_url: '/api/v1/attachments/f1/content' }
+        : [{ id: 'f1', filename: 'shot.png', kind: 'image', size_bytes: 3, uploaded_by: 'cal', content_url: '/api/v1/attachments/f1/content' }],
+    )
+    const attached = await run(['subject', 'attach', 'S-12', file], base)
+    expect(attached.stderr).toContain('![shot.png](/api/v1/attachments/f1/content)')
+    const listed = await run(['subject', 'files', 'S-12'], base)
+    expect(listed.stdout.split('\n').slice(0, 3)).toEqual(['#1', 'id\tname\tkind\tbytes\tby\turl', 'f1\tshot.png\timage\t3\tcal\t/api/v1/attachments/f1/content'])
   })
 
   it('stage names the fix when the server wants a conclusion', async () => {

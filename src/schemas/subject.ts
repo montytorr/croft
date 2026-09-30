@@ -60,6 +60,11 @@ export const createSubjectNoteSchema = z.object({
   kind: z.enum(WRITABLE_NOTE_KINDS).default('note'),
 })
 
+/** A person's note on a subject (075). Markdown; the same ceiling as a log note. */
+export const subjectHumanNoteSchema = z.object({
+  body: z.string().trim().min(1).max(100_000),
+})
+
 export const createSubjectTodoSchema = z.object({
   title: z.string().trim().min(1).max(300),
   description: z.string().max(100_000).optional(),
@@ -89,6 +94,15 @@ export const listSubjectsQuery = z.object({
     .transform((v): ArchivedFilter | undefined =>
       v === undefined ? undefined : v === 'include' ? 'include' : v === 'only' || v === 'true' || v === '1' ? 'only' : 'exclude',
     ),
+})
+
+/**
+ * Filters on a todo list: the subject it belongs to (`S-12`), and the lab
+ * project that subject is in (name or id, `none`, or a comma list).
+ */
+export const labTodoFilterQuery = z.object({
+  subject: z.string().trim().min(1).max(80).optional(),
+  project: z.string().trim().min(1).max(400).optional(),
 })
 
 export type ArchivedFilter = 'exclude' | 'include' | 'only'

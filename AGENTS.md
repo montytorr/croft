@@ -39,6 +39,7 @@ croft subject stage S-12 rejected --conclusion -                 # 5. conclude i
 2. **Todos** are ordinary tasks in project `T`. From an agent runtime `subject todo` files
    and **claims** (`--no-start` only files).
 3. **Log** on the subject for what concerns the idea, on the todo for the work itself.
+   People's notes (`croft subject notes S-n`) are theirs to read, not your log; attach files with `croft subject attach S-n <file>`.
 4. **Stages** are curated by admins (`croft stages`). A stage change writes its own log
    entry; do not narrate it.
 5. **Entering a completed or dropped stage requires a conclusion.** A refusal naming

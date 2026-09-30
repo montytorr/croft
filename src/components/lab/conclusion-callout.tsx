@@ -51,7 +51,7 @@ export const ConclusionCallout = ({
   return (
     <aside
       aria-label="Conclusion"
-      className="relative overflow-hidden rounded-xl border px-5 py-4"
+      className="relative overflow-hidden rounded-lg border px-4 py-3"
       style={{
         borderColor: `color-mix(in oklab, ${tone} 35%, var(--border))`,
         backgroundColor: `color-mix(in oklab, ${tone} 7%, var(--surface))`,

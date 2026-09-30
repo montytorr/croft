@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { readAttachment, verifyAttachmentToken } from '@/lib/attachments'
+import { readAttachment, servedFileHeaders, verifyAttachmentToken } from '@/lib/attachments'
 
 export const GET = async (request: Request) => {
   const url = new URL(request.url)
@@ -13,7 +13,9 @@ export const GET = async (request: Request) => {
   }
   try {
     const bytes = await readAttachment(path)
-    const headers = new Headers({ 'cache-control': 'private, max-age=300', 'content-type': mime })
+    // HTML and SVG (and anything not plainly media) under `CSP: sandbox`, so a
+    // file opened straight from its link can never run script on this origin.
+    const headers = new Headers({ 'cache-control': 'private, max-age=300', ...servedFileHeaders(mime) })
     if (download) headers.set('content-disposition', `attachment; filename*=UTF-8''${encodeURIComponent(download)}`)
     return new NextResponse(bytes, { headers })
   } catch (error) {

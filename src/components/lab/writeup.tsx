@@ -2,21 +2,49 @@
 
 import { EditorContent, useEditor } from '@tiptap/react'
 import Placeholder from '@tiptap/extension-placeholder'
+import type { EditorView } from '@tiptap/pm/view'
 import { useRouter } from 'next/navigation'
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Eye, PenLine, X } from 'lucide-react'
+import { Eye, ImagePlus, PenLine, X } from 'lucide-react'
 import { MarkdownView } from '@/components/markdown'
 import { Button } from '@/components/ui/control'
 import { Spinner } from '@/components/spinner'
 import { editorExtensions, richEditLoss } from '@/lib/editor/markdown'
+import { imageFiles, imageMarkdown, insertAt, settlePlaceholder, uploadPlaceholder, uploadSubjectFile } from '@/lib/editor/upload'
 import { mutate } from '@/lib/api/mutate'
 import { cn } from '@/lib/utils'
 
 type Mode = 'rich' | 'source'
 type SaveState = 'idle' | 'saving' | 'error'
 
-const PLACEHOLDER = 'What is it, why does it matter, what have we found? Markdown works; S-12 and T-41 link themselves.'
+const PLACEHOLDER =
+  'What is it, why does it matter, what have we found? Markdown works; S-12 and T-41 link themselves; paste or drop an image to add it.'
+
+type UploadReport = { start: () => void; end: (error: string | null) => void }
+
+/**
+ * Images pasted or dropped into the rich editor: each uploaded to the subject,
+ * then placed as an image node where it was dropped (or at the caret, when
+ * the text moved meanwhile). The node serialises to `![name](content_url)`,
+ * the stable URL, so the write-up never embeds a signed link that expires.
+ */
+const uploadIntoView = async (view: EditorView, files: File[], pos: number, subjectRef: string, report: UploadReport) => {
+  let at = pos
+  for (const file of files) {
+    const before = view.state.doc
+    report.start()
+    const result = await uploadSubjectFile(subjectRef, file)
+    report.end(result.ok ? null : `${file.name}: ${result.error}`)
+    if (!result.ok || view.isDestroyed) continue
+    const node = view.state.schema.nodes.image?.create({ src: result.data.content_url, alt: result.data.filename })
+    if (!node) continue
+    const target = view.state.doc === before ? Math.min(at, view.state.doc.content.size) : view.state.selection.to
+    const tr = view.state.tr.replaceRangeWith(target, target, node)
+    view.dispatch(tr)
+    at = tr.mapping.map(target)
+  }
+}
 
 /**
  * The editor, full width, with the page it will become beside it.
@@ -48,14 +76,46 @@ const Editor = ({
   const [state, setState] = useState<SaveState>('idle')
   const [error, setError] = useState<string | null>(null)
   const [pane, setPane] = useState<'edit' | 'preview'>('edit')
+  const [uploads, setUploads] = useState(0)
   const baseline = useRef(initial)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const source = useRef<HTMLTextAreaElement>(null)
+
+  // Setters only, so the editor's paste and drop handlers can hold it for
+  // the editor's whole life without going stale.
+  const report = useMemo<UploadReport>(
+    () => ({
+      start: () => setUploads((n) => n + 1),
+      end: (message) => {
+        setUploads((n) => n - 1)
+        if (message) setError(message)
+      },
+    }),
+    [],
+  )
 
   const editor = useEditor({
     extensions: [...editorExtensions(), Placeholder.configure({ placeholder: PLACEHOLDER })],
     content: initial,
     immediatelyRender: false,
-    editorProps: { attributes: { class: 'min-h-[60vh] pb-24' } },
+    editorProps: {
+      attributes: { class: 'min-h-[60vh] pb-24' },
+      handlePaste: (view, event) => {
+        const files = imageFiles(event.clipboardData)
+        if (!files.length) return false
+        event.preventDefault()
+        void uploadIntoView(view, files, view.state.selection.to, subjectRef, report)
+        return true
+      },
+      handleDrop: (view, event, _slice, moved) => {
+        const files = moved ? [] : imageFiles(event.dataTransfer)
+        if (!files.length) return false
+        event.preventDefault()
+        const pos = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? view.state.selection.to
+        void uploadIntoView(view, files, pos, subjectRef, report)
+        return true
+      },
+    },
     // Serialising on every keystroke is wasted work on a long write-up; the
     // preview only has to keep up with a reader's eye.
     onUpdate: ({ editor: e }) => {
@@ -70,6 +130,23 @@ const Editor = ({
     () => (mode === 'rich' && editor ? editor.storage.markdown.getMarkdown() : markdown),
     [editor, markdown, mode],
   )
+
+  /** The markdown side of paste and drop: a placeholder at the caret at once, the image in its place when it lands. */
+  const uploadIntoSource = async (files: File[]) => {
+    const el = source.current
+    for (const file of files) {
+      const token = uploadPlaceholder(file.name, Math.random().toString(36).slice(2, 8))
+      setMarkdown((text) => {
+        const { text: next, caret } = insertAt(text, el?.selectionStart ?? text.length, el?.selectionEnd ?? text.length, token)
+        requestAnimationFrame(() => el?.setSelectionRange(caret, caret))
+        return next
+      })
+      report.start()
+      const result = await uploadSubjectFile(subjectRef, file)
+      report.end(result.ok ? null : `${file.name}: ${result.error}`)
+      setMarkdown((text) => settlePlaceholder(text, token, result.ok ? imageMarkdown(result.data) : ''))
+    }
+  }
 
   const switchMode = (next: Mode) => {
     if (next === mode) return
@@ -148,7 +225,16 @@ const Editor = ({
   )
 
   return createPortal(
-    <div role="dialog" aria-modal="true" aria-label={`Editing the write-up of ${title}`} className="bg-bg enter-fade fixed inset-0 z-50 flex flex-col">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Editing the write-up of ${title}`}
+      className="bg-bg enter-fade fixed inset-0 z-50 flex flex-col"
+      // A file let go outside the editor would otherwise replace the page with
+      // itself, and the unsaved write-up with it.
+      onDragOver={(e) => e.dataTransfer.types.includes('Files') && e.preventDefault()}
+      onDrop={(e) => e.dataTransfer.types.includes('Files') && e.preventDefault()}
+    >
       <header className="border-border flex h-[3.25rem] shrink-0 items-center gap-3 border-b px-3 md:px-6">
         <button type="button" onClick={cancel} aria-label="Close the editor" className="text-fg-subtle hover:text-fg hover:bg-surface-hover grid size-8 place-items-center rounded-md transition-colors">
           <X size={16} aria-hidden />
@@ -171,6 +257,15 @@ const Editor = ({
           {pane === 'edit' ? <Eye size={14} aria-hidden /> : <PenLine size={14} aria-hidden />}
           {pane === 'edit' ? 'Preview' : 'Edit'}
         </button>
+        {uploads > 0 ? (
+          <span className="text-fg-muted flex items-center gap-1.5 text-[0.6875rem]" role="status">
+            <Spinner size={11} /> Uploading {uploads === 1 ? 'an image' : `${uploads} images`}…
+          </span>
+        ) : (
+          <span className="text-fg-subtle hidden items-center gap-1 text-[0.6875rem] xl:flex" title="Paste or drop an image into the text">
+            <ImagePlus size={12} aria-hidden /> paste an image
+          </span>
+        )}
         <span className="text-fg-subtle hidden text-[0.6875rem] md:block">⌘↵ save</span>
         <Button variant="ghost" size="sm" onClick={cancel} className="px-3 font-normal">
           Cancel
@@ -182,7 +277,7 @@ const Editor = ({
 
       {error ? (
         <p className="text-danger bg-danger-subtle border-border border-b px-6 py-2 text-[0.75rem]" role="alert">
-          {error} Nothing was saved; your text is still here.
+          {error} {state === 'error' ? 'Nothing was saved; your text is still here.' : 'The rest of your text is untouched.'}
         </p>
       ) : null}
 
@@ -197,8 +292,21 @@ const Editor = ({
             <EditorContent editor={editor} className={cn('prose-editor writeup', mode !== 'rich' && 'hidden')} />
             {mode === 'source' ? (
               <textarea
+                ref={source}
                 value={markdown}
                 onChange={(e) => setMarkdown(e.target.value)}
+                onPaste={(e) => {
+                  const files = imageFiles(e.clipboardData)
+                  if (!files.length) return
+                  e.preventDefault()
+                  void uploadIntoSource(files)
+                }}
+                onDrop={(e) => {
+                  const files = imageFiles(e.dataTransfer)
+                  if (!files.length) return
+                  e.preventDefault()
+                  void uploadIntoSource(files)
+                }}
                 spellCheck
                 placeholder={PLACEHOLDER}
                 className="text-fg placeholder:text-fg-subtle block min-h-[70vh] w-full resize-none bg-transparent font-mono text-[0.8125rem] leading-[1.7] outline-none"
@@ -223,6 +331,13 @@ const Editor = ({
     </div>,
     document.body,
   )
+}
+
+/** "1,240 words · 6 min read", or null for a short one where the count says nothing. */
+const readingLength = (text: string) => {
+  const words = text.replace(/```[\s\S]*?```/g, ' ').split(/\s+/).filter(Boolean).length
+  if (words < 120) return null
+  return `${words.toLocaleString('en-GB')} words · ${Math.max(1, Math.round(words / 230))} min read`
 }
 
 /**
@@ -259,13 +374,15 @@ export const WriteUp = ({
   )
 
   const text = body ?? ''
+  const length = readingLength(text)
 
   return (
     <section aria-labelledby="writeup-heading">
-      <div className="mb-4 flex items-center gap-3">
-        <h2 id="writeup-heading" className="text-fg-subtle text-[0.625rem] font-medium tracking-[0.08em] uppercase">
+      <div className="mb-3 flex h-7 items-center gap-3">
+        <h2 id="writeup-heading" className="pane-label">
           Write-up
         </h2>
+        {length ? <span className="text-fg-subtle text-[0.6875rem] tabular-nums">{length}</span> : null}
         {savedAt ? <span className="enter-rise text-status-done text-[0.6875rem]">saved</span> : null}
         <Button
           variant={text.trim() ? 'secondary' : 'primary'}
@@ -281,7 +398,7 @@ export const WriteUp = ({
         </Button>
       </div>
 
-      <div className="border-border border-l pl-5 md:pl-7">
+      <div id="writeup-body" className="border-border border-l pl-4 md:pl-6">
         {text.trim() ? (
           <MarkdownView prose="writeup">{text}</MarkdownView>
         ) : (

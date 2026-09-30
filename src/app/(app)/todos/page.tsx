@@ -1,12 +1,11 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
-import { admin } from '@/lib/db/client'
-import { currentUser, listAllTasks, listProjects } from '@/lib/data'
-import { ListView } from '../projects/[key]/list-view'
+import { currentUser } from '@/lib/data'
+import { listLabProjects, listLabTodos } from '@/lib/lab/data'
 import { LiveUpdates } from '@/components/live-updates'
 import { MobileNavButton } from '@/components/mobile-nav-context'
-import { PendingLink } from '@/components/pending-link'
-import { EmptyState } from '@/components/empty-state'
+import { TodosView } from './todos-view'
+import { isClosed } from './lab-todos'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,70 +17,48 @@ const Stat = ({ label, value }: { label: string; value: number | string }) => (
   </span>
 )
 
-const TodosPage = async ({ searchParams }: { searchParams: Promise<{ closed?: string }> }) => {
-  const { closed } = await searchParams
+/** Enough for the lab's todos, closed ones included; open ones come first, so a cap drops the oldest closed. */
+const LIMIT = 1500
+
+const TodosPage = async ({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) => {
+  const params = await searchParams
   const user = await currentUser()
   if (!user) redirect('/login')
 
-  const includeClosed = closed === '1'
-  const [projects, { tasks, closedHidden, recentlyClosed }, counts] = await Promise.all([
-    listProjects(user.id),
-    listAllTasks(user.id, { includeClosed }),
-    admin()
-      .from('tasks')
-      .select('id', { count: 'exact', head: true }),
+  // Loaded whole and filtered in the view, so switching project, subject or
+  // grouping answers at once and the counts on the chips stay honest.
+  const [todos, projects] = await Promise.all([
+    listLabTodos({ includeClosed: true, limit: LIMIT }),
+    listLabProjects().catch(() => []),
   ])
 
-  const held = tasks.filter((t) => t.claimed_by).length
-
-  if (projects.length === 0) {
-    return (
-      <div className="mx-auto flex h-dvh max-w-lg flex-col justify-center px-5 sm:px-6">
-        <EmptyState
-          as="h1"
-          title="No todos yet"
-          hint="Todos belong to subjects. Open a subject in the lab and add the first one, or from the CLI:"
-          action={
-            <pre className="surface-card max-w-full overflow-x-auto px-3 py-2.5 text-left font-mono text-[0.75rem]">
-              {`croft subject todo S-1 "try it on the staging data"`}
-            </pre>
-          }
-        />
-      </div>
-    )
-  }
+  const query = new URLSearchParams(
+    Object.entries(params).flatMap(([k, v]) => (typeof v === 'string' ? [[k, v] as [string, string]] : [])),
+  ).toString()
+  const open = todos.filter((t) => !isClosed(t.status))
+  const held = open.filter((t) => t.claimed_by).length
+  const pushed = open.filter((t) => t.cairn_ref).length
 
   return (
     <div className="flex h-dvh flex-col">
       <header className="page-header border-border flex h-[2.75rem] shrink-0 items-center gap-2 border-b px-2.5 md:px-4 pr-live-status">
         <MobileNavButton />
-        <span className="text-fg shrink-0 text-[0.8125rem] font-medium">All todos</span>
+        <span className="text-fg shrink-0 text-[0.8125rem] font-medium">Todos</span>
         <span className="text-fg-subtle hidden text-[0.8125rem] sm:block">·</span>
         {/* The counts are the first thing to go on a phone — the list itself
             says more than a tally of it. */}
-        <span className="hidden items-center gap-2 sm:flex">
-          <Stat label="open" value={tasks.filter((t) => !['done', 'cancelled'].includes(t.status)).length} />
-          <Stat label="total" value={counts.count ?? 0} />
+        <span className="hidden items-center gap-2.5 sm:flex">
+          <Stat label="open" value={open.length} />
           {held > 0 ? <Stat label="held by an agent" value={held} /> : null}
+          {pushed > 0 ? <Stat label="in Cairn" value={pushed} /> : null}
         </span>
-
-        <PendingLink
-          href={includeClosed ? '/todos' : '/todos?closed=1'}
-          className="text-fg-subtle hover:text-fg ml-auto flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[0.75rem] transition-colors"
-        >
-          {includeClosed ? 'Hide closed' : `Show ${closedHidden} closed`}
-        </PendingLink>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {/* Cross-project, so each row carries its project. Same component as
-            the per-project list — one list implementation, not two. */}
-        <ListView
-          tasks={tasks}
-          recentlyClosed={recentlyClosed}
-          projectKey=""
-          showProject
-          projects={projects.map((p) => ({ key: p.key, title: p.title }))}
+        <TodosView
+          todos={todos}
+          projects={projects.map(({ id, name, color }) => ({ id, name, color }))}
+          initialQuery={query}
         />
       </div>
 

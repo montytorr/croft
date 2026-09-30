@@ -1945,6 +1945,7 @@ const request = async (method, path, body, { soft = false, onError } = {}) => {
 const MIME_BY_EXT = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
   webp: 'image/webp', svg: 'image/svg+xml', pdf: 'application/pdf',
+  html: 'text/html', htm: 'text/html',
   txt: 'text/plain', log: 'text/plain', md: 'text/markdown', csv: 'text/csv',
   json: 'application/json', zip: 'application/zip', tar: 'application/x-tar',
   gz: 'application/gzip', mp4: 'video/mp4', mp3: 'audio/mpeg',
@@ -2385,6 +2386,16 @@ const todoRow = (t) => ({
   title: truncate(t.title, 70),
 })
 
+const FILE_COLUMNS = ['id', 'name', 'kind', 'bytes', 'by', 'url']
+const fileRow = (a) => ({
+  id: a.id ?? '',
+  name: cellOf(a.filename ?? a.original_name),
+  kind: a.kind ?? '',
+  bytes: a.size_bytes ?? '',
+  by: cellOf(a.uploaded_by ?? a.actor_id),
+  url: a.content_url ?? '',
+})
+
 const DAY = (at) => (typeof at === 'string' ? at.slice(0, 16).replace('T', ' ') : '')
 
 /**
@@ -2393,7 +2404,7 @@ const DAY = (at) => (typeof at === 'string' ? at.slice(0, 16).replace('T', ' ') 
  * default — every finding and decision, the last few of everything else, a
  * clipped body — and a line on stderr saying what was withheld.
  */
-const renderSubject = (s, notes, todos, { full }) => {
+const renderSubject = (s, notes, todos, { full, humanNotes = [], files = [] }) => {
   const out = [`${s.ref}  ${cellOf(s.stage)}  ${s.title}`]
   const facts = [
     s.owner?.name ? `owner ${s.owner.name}` : 'no owner',
@@ -2410,6 +2421,16 @@ const renderSubject = (s, notes, todos, { full }) => {
   for (const t of full ? todos : open) {
     const row = todoRow(t)
     out.push(`  ${row.ref}  ${row.status}${row.held ? `  held by ${row.held}` : ''}  ${row.title}${row.cairn ? `  [Cairn ${row.cairn}]` : ''}`)
+  }
+  // Counts only: people's notes and files are read on purpose, not in every digest.
+  if (humanNotes.length || files.length) {
+    out.push(
+      '',
+      [
+        humanNotes.length ? `people's notes: ${humanNotes.length} (croft subject notes ${s.ref})` : '',
+        files.length ? `files: ${files.length} (croft subject files ${s.ref})` : '',
+      ].filter(Boolean).join(' · '),
+    )
   }
 
   const BODY_CLIP = 1500
@@ -2650,6 +2671,9 @@ const HELP = `croft — the lab board: subjects to explore and prove, their todo
                                    dropped stage) need a --conclusion
     croft subject note S-12 "<text>"|- [--kind finding|decision|attempt|note|handoff]
     croft subject tag S-12 +x -y           add x, remove y
+    croft subject notes S-12       people's notes (the board's Notes tab); write to the log with note
+    croft subject attach S-12 <file>  |  croft subject files S-12
+                                   images, HTML reports, PDFs…; an image embeds as ![name](url)
     croft subject todo S-12 "<title>" [--body -] [--no-start]
                                    files a todo (T-n) under it; agents claim it
     croft stages                   the pipeline, in order, with each stage's category
@@ -3811,7 +3835,7 @@ const commands = {
    */
   async subject() {
     const verb = positional[0]
-    const usage = 'usage: croft subject add|list|show|edit|stage|note|tag|todo …  (croft help)'
+    const usage = 'usage: croft subject add|list|show|edit|stage|note|notes|attach|files|tag|todo …  (croft help)'
 
     if (verb === 'add') {
       const title = need(positional[1], 'usage: croft subject add "<title>" [--stage S] [--tag t] [--project P] [--owner me] [--body -]')
@@ -3846,13 +3870,28 @@ const commands = {
     if (verb === 'show') {
       const ref = subjectArg(positional[1], 'usage: croft subject show S-12 [--full]')
       const full = Boolean(flags.full)
-      const [subject, notes, todos] = await Promise.all([
+      const [subject, notes, todos, humanNotes, files] = await Promise.all([
         request('GET', `/api/v1/subjects/${ref}`),
         request('GET', `/api/v1/subjects/${ref}/notes`, undefined, { soft: true }),
         request('GET', `/api/v1/subjects/${ref}/todos`, undefined, { soft: true }),
+        // Soft: a server older than 0.3 has neither, and the digest stands without them.
+        request('GET', `/api/v1/subjects/${ref}/human-notes`, undefined, { soft: true }),
+        request('GET', `/api/v1/subjects/${ref}/attachments`, undefined, { soft: true }),
       ])
-      if (FORMAT !== 'tsv') return emit({ ...subject, notes: asList(notes, 'notes'), todos: asList(todos, 'todos') })
-      const { text, withheld } = renderSubject({ ...subject, ref: subject.ref ?? ref }, asList(notes, 'notes'), asList(todos, 'todos'), { full })
+      if (FORMAT !== 'tsv') {
+        return emit({
+          ...subject,
+          notes: asList(notes, 'notes'),
+          todos: asList(todos, 'todos'),
+          human_notes: asList(humanNotes, 'notes'),
+          files: asList(files, 'files'),
+        })
+      }
+      const { text, withheld } = renderSubject({ ...subject, ref: subject.ref ?? ref }, asList(notes, 'notes'), asList(todos, 'todos'), {
+        full,
+        humanNotes: asList(humanNotes, 'notes'),
+        files: asList(files, 'files'),
+      })
       process.stdout.write(text)
       if (withheld) {
         process.stderr.write(
@@ -3898,6 +3937,40 @@ const commands = {
         )
       }
       return
+    }
+
+    if (verb === 'notes') {
+      // People's notes (the board's Notes tab), not the work log: read them, write to the log.
+      const ref = subjectArg(positional[1], 'usage: croft subject notes S-12')
+      const list = asList(await request('GET', `/api/v1/subjects/${ref}/human-notes`), 'notes')
+      return emit(list, {
+        lines: (d) =>
+          d.length === 0
+            ? [`no notes from people on ${ref}`]
+            : d.flatMap((n) => [
+                `${DAY(n.created_at)}  ${n.author?.name ?? ''}${n.updated_at && n.updated_at !== n.created_at ? `  (edited ${DAY(n.updated_at)})` : ''}`,
+                ...indent(String(n.body ?? ''), '    '),
+              ]),
+      })
+    }
+
+    if (verb === 'attach') {
+      const ref = subjectArg(positional[1], 'usage: croft subject attach S-12 <file>')
+      const file = need(positional[2], `usage: croft subject attach ${ref} <file>`)
+      if (!existsSync(file)) die(`no such file: ${file}`)
+      process.stderr.write(`uploading ${basename(file)} (${statSync(file).size} bytes, ${mimeOf(file)})\n`)
+      const added = await upload(`/api/v1/subjects/${ref}/attachments`, file)
+      if (FORMAT !== 'tsv') return emit(added)
+      if (added?.kind === 'image' && added.content_url) {
+        process.stderr.write(`embed it in the write-up with ![${added.filename}](${added.content_url})\n`)
+      }
+      return emit([added], { rows: (d) => d.map(fileRow), columns: FILE_COLUMNS })
+    }
+
+    if (verb === 'files') {
+      const ref = subjectArg(positional[1], 'usage: croft subject files S-12')
+      const list = await request('GET', `/api/v1/subjects/${ref}/attachments`)
+      return emit(list, { rows: (d) => asList(d, 'files').map(fileRow), columns: FILE_COLUMNS })
     }
 
     if (verb === 'tag') {
@@ -4710,7 +4783,7 @@ if (!commands[command]) {
 
 /**
  * S-12 is a subject, and a subject is not a task: its routes are /subjects.
- * `show` and `note` mean the same thing for both, so they go where the ref
+ * `show`, `note`, `attach` and `files` mean the same thing for both, so they go where the ref
  * says; any other task verb is told which verbs a subject takes.
  */
 const TASK_VERBS = new Set([
@@ -4719,12 +4792,12 @@ const TASK_VERBS = new Set([
   'blockedby', 'unblockedby',
 ])
 if (/^[Ss]-\d+$/.test(positional[0] ?? '')) {
-  if (command === 'show' || command === 'note') {
+  if (command === 'show' || command === 'note' || command === 'attach' || command === 'files') {
     positional.unshift(command)
     command = 'subject'
   } else if (TASK_VERBS.has(command)) {
     const ref = positional[0].toUpperCase()
-    die(`${ref} is a subject, not a todo — subjects take: croft subject show|edit|stage|note|tag|todo ${ref}`)
+    die(`${ref} is a subject, not a todo — subjects take: croft subject show|edit|stage|note|notes|attach|files|tag|todo ${ref}`)
   }
 }
 

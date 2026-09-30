@@ -302,7 +302,8 @@ describe('the lab board', () => {
     const listed = await call(listProjectTasksRoute, 'GET', '/projects/T/tasks?limit=200', { id: 'T' })
     const row = listed.json.data.tasks.find((t: { number: number }) => `T-${t.number}` === todoRef)
     expect(row).toMatchObject({ subject_ref: ref, cairn_ref: null, cairn_status: null })
-    expect(row).not.toHaveProperty('subject')
+    // The raw `{number}` embed is folded into subject_ref; `subject` is the lab's shape (0.3).
+    expect(row.subject).toEqual({ ref, number: Number(ref.slice(2)), title: `Evaluate ${WORD} for semantic recall`, project: null })
 
     const page = await getTask(adminId, 'T', Number(todoRef.slice(2)))
     expect(page?.subject).toEqual({ ref, number: Number(ref.slice(2)), title: `Evaluate ${WORD} for semantic recall` })

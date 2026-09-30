@@ -99,3 +99,39 @@ export type CairnConnection = {
   key_set: boolean
   last_synced_at: string | null
 }
+
+/**
+ * A person's note on a subject: free markdown, editable and removable by its
+ * author. Separate from the write-up (one shared document) and from the log
+ * (append-only, what was found and tried, mostly written by agents).
+ */
+export type SubjectHumanNote = {
+  id: string
+  body: string
+  author: { id: string; name: string }
+  created_at: string
+  updated_at: string
+}
+
+/** A file on a subject or a todo. URLs are signed and expire within the hour. */
+export type Attachment = {
+  id: string
+  filename: string
+  mime_type: string
+  size_bytes: number
+  preview_url: string
+  download_url: string
+  /** Stable, session-authenticated URL (redirects to a fresh signed preview): what markdown embeds. */
+  content_url: string
+  /** image = shown inline; html = sandboxed iframe only; other = download. */
+  kind: 'image' | 'html' | 'pdf' | 'video' | 'other'
+  uploaded_by: string
+  created_at: string
+}
+
+/** A todo row as the lab shows it: the task plus the subject it belongs to. */
+export type LabTodo = SubjectTodo & {
+  priority: string
+  assignee: { id: string; name: string } | null
+  subject: { ref: string; number: number; title: string; project: { name: string; color: string } | null } | null
+}
