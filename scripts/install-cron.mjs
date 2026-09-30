@@ -76,7 +76,29 @@ const SYNC = env(
     ? join(homedir(), '.croft/maintenance/sync-agent-files.mjs')
     : '/opt/croft-maintenance/sync-agent-files.mjs',
 )
-const RAW = env('CROFT_RAW_BASE', 'https://raw.githubusercontent.com/montytorr/croft/main')
+/**
+ * The release this installer belongs to, read from the CLI shipped beside it.
+ *
+ * The agent-files job repairs every copy to whatever RAW serves, every 15
+ * minutes on a Mac, with the user's own rights. Pointed at `main`, that makes
+ * any push to `main` code that runs on every connected machine within the
+ * quarter hour, including a push nobody meant to ship. Pointed at the tag of
+ * the release `croft setup` installed, the job still does its job (a copy that
+ * drifted from the release is put back) but moving to a newer version stays a
+ * decision: re-running `croft setup`. A host that wants to track `main` (the
+ * server, repaired by every deploy) says so with CROFT_RAW_BASE.
+ */
+const RELEASE_VERSION = (() => {
+  try {
+    return readFileSync(join(HERE, '..', 'cli', 'croft.mjs'), 'utf8').match(/^const VERSION = '([^']+)'/m)?.[1] ?? null
+  } catch {
+    return null
+  }
+})()
+const RAW = env(
+  'CROFT_RAW_BASE',
+  `https://raw.githubusercontent.com/montytorr/croft/${RELEASE_VERSION ? `v${RELEASE_VERSION}` : 'main'}`,
+)
 
 /**
  * An env override that ends up, unquoted for cron's own purposes, in a
