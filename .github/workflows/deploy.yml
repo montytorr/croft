@@ -153,7 +153,14 @@ jobs:
           CROFT_DOMAIN: ${{ vars.CROFT_DOMAIN }}
         run: |
           set -euo pipefail
-          code=$(curl -s -o /dev/null -w '%{http_code}' "https://${CROFT_DOMAIN}/api/v1/health")
+          # Retried: on a new domain the first request is what makes Traefik
+          # ask Let's Encrypt, and curl fails TLS (exit 60) until it answers.
+          code=000
+          for _ in $(seq 1 12); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://${CROFT_DOMAIN}/api/v1/health" || true)
+            [ "$code" = "200" ] && break
+            sleep 10
+          done
           [ "$code" = "200" ] || { echo "health endpoint returned $code"; exit 1; }
           echo "deployed $DEPLOY_SHA"
 
