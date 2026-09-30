@@ -66,7 +66,7 @@ const fileEnv = (path) => {
  * old was found writing under the wrong identity exactly once, which was
  * enough.
  */
-const VERSION = '0.4.0'
+const VERSION = '0.4.1'
 
 /**
  * Which Croft this command talks to, on a machine that uses more than one.
