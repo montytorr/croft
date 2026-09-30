@@ -72,18 +72,20 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: notify push and deploy start
+      - name: notify deploy start
+        # Pushes and releases are announced by notify.yml; this says a deploy began.
         env:
-          PUSHER: ${{ github.actor }}
+          DISCORD_WEBHOOK: ${{ secrets.CROFT_DISCORD_WEBHOOK }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           short="${DEPLOY_SHA::7}"
-          subject="$(git log -1 --pretty=%s | head -c 180)"
-          subject="${subject//@/＠}"
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          printf -v message '📦 **Croft pushed** `%s` to `main` by %s\n%s\n🚀 Deploy started · <%s>' \
-            "$short" "$PUSHER" "$subject" "$run_url"
-          sudo /usr/local/bin/croft-discord-send "$message" || echo "::warning::Discord start notification failed"
+          message="🚀 **Croft deploy started** \`${short}\` · <${run_url}>"
+          if [ -z "${DISCORD_WEBHOOK:-}" ]; then echo "::warning::CROFT_DISCORD_WEBHOOK is not set"; exit 0; fi
+          # allowed_mentions: none, so a commit subject can never ping the channel.
+          jq -n --arg c "$message" '{content: $c, allowed_mentions: {parse: []}}' \
+            | curl -fsS -m 10 -H 'Content-Type: application/json' -d @- "$DISCORD_WEBHOOK" >/dev/null \
+            || echo "::warning::Discord start notification failed"
 
       - name: link runtime configuration
         # Secrets live outside the workspace, owned by the runner user, and
@@ -268,13 +270,18 @@ jobs:
         if: always()
         env:
           DEPLOY_STATUS: ${{ job.status }}
+          CROFT_DOMAIN: ${{ vars.CROFT_DOMAIN }}
+          DISCORD_WEBHOOK: ${{ secrets.CROFT_DISCORD_WEBHOOK }}
         run: |
           set -u
           short="${DEPLOY_SHA::7}"
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           case "$DEPLOY_STATUS" in
-            success) message="✅ **Croft deployed** \`${short}\` · healthy and smoke-tested · <${run_url}>" ;;
+            success) message="✅ **Croft deployed** \`${short}\` · healthy and smoke-tested · <https://${CROFT_DOMAIN}> · <${run_url}>" ;;
             cancelled) message="⚠️ **Croft deploy cancelled** \`${short}\` · <${run_url}>" ;;
             *) message="❌ **Croft deploy failed** \`${short}\` · rollback attempted · <${run_url}>" ;;
           esac
-          sudo /usr/local/bin/croft-discord-send "$message" || echo "::warning::Discord result notification failed"
+          if [ -z "${DISCORD_WEBHOOK:-}" ]; then echo "::warning::CROFT_DISCORD_WEBHOOK is not set"; exit 0; fi
+          jq -n --arg c "$message" '{content: $c, allowed_mentions: {parse: []}}' \
+            | curl -fsS -m 10 -H 'Content-Type: application/json' -d @- "$DISCORD_WEBHOOK" >/dev/null \
+            || echo "::warning::Discord result notification failed"
