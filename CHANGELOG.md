@@ -8,6 +8,8 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-09-30
+
 ### Added
 
 - **The subject page uses the whole width.** A compact header band (ref, stage, project, title,
@@ -89,6 +91,7 @@ Forked from Cairn v0.12.1 (1ef3556).
 
 - A field notebook: paper and peat grounds, a heather accent, Schibsted Grotesk and Newsreader, and runrig strips for a mark.
 
-[Unreleased]: https://github.com/montytorr/croft/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/montytorr/croft/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/montytorr/croft/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/montytorr/croft/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/montytorr/croft/releases/tag/v0.1.0
