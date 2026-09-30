@@ -138,7 +138,7 @@ jobs:
           # Branding: the stock icons are served without a session, and once an
           # administrator names the instance and picks a colour, every surface follows.
           base=http://127.0.0.1:3102
-          curl -fsS $base/brand/icon | grep -q '#7b86e8' || { echo '::error::/brand/icon is not the stock mark'; exit 1; }
+          curl -fsS $base/brand/icon | grep -q '#d89bc4' || { echo '::error::/brand/icon is not the stock mark'; exit 1; }
           curl -fsS -o /dev/null -w '%{content_type}' $base/brand/apple-icon | grep -q '^image/png' || { echo '::error::/brand/apple-icon is not a PNG'; exit 1; }
           curl -fsS -c /tmp/jar -o /dev/null -X POST $base/api/auth/login -H 'content-type: application/json' \
             -H "origin: $base" -d '{"email":"ci@example.test","password":"a-long-ci-password"}'
@@ -149,5 +149,5 @@ jobs:
           echo "$page" | grep -q '<title>Sign in · CI Croft</title>' || { echo '::error::the login page title does not carry the name'; exit 1; }
           echo "$page" | grep -q 'html:root{--accent:#01519b' || { echo '::error::the accent is not applied'; exit 1; }
           if echo "$page" | grep -q 'single-user'; then echo '::error::the login page still says single-user'; exit 1; fi
-          if curl -fsS $base/brand/icon | grep -q '#7b86e8'; then echo '::error::the favicon did not take the accent'; exit 1; fi
+          if curl -fsS $base/brand/icon | grep -q '#d89bc4'; then echo '::error::the favicon did not take the accent'; exit 1; fi
           curl -fsS -o /dev/null -w '%{content_type}' $base/opengraph-image | grep -q '^image/png' || { echo '::error::the link preview did not render'; exit 1; }
