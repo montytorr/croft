@@ -2779,6 +2779,9 @@ const HELP = `croft — the lab board: subjects to explore and prove, their todo
                                    hooks and the agent-files job. Safe to re-run
     croft setup --name <instance>  names the new one on a machine with several
     croft setup --runtimes claude-code,codex,openclaw   default: detected
+                                   (~/.claude, ~/.codex, an OpenClaw gateway).
+                                   Only these get keys, hooks and skills; Hermes
+                                   is never detected — add it: --runtimes …,hermes
     croft setup --no-skill | --no-hooks | --no-jobs     skip one step
                                    (the job repairs the CLI, hook and skill to
                                    the installed release's tag; CROFT_REPO=
@@ -4388,6 +4391,13 @@ const commands = {
     const say = (s) => process.stdout.write(s)
     const line = (s) => say(`${s}\n`)
 
+    line(
+      dry
+        ? 'croft setup --dry-run: the plan for connecting this machine to Croft. Nothing is changed.'
+        : 'croft setup: connects this machine to Croft — keys, the CLI, the skill, the hooks and the agent-files job.',
+    )
+    if (!dry) line('  (croft setup --dry-run shows the plan without changing anything.)')
+
     const assertHttpUrl = (u) => {
       try {
         if (!['http:', 'https:'].includes(new URL(u).protocol)) throw new Error()
@@ -4487,6 +4497,15 @@ const commands = {
     if (flags.maintenance && !runtimes.includes('maintenance')) runtimes.push('maintenance')
     if (!runtimes.length) {
       die('croft setup found no runtime on this machine (looked for ~/.claude, ~/.codex, openclaw) — pass --runtimes a,b')
+    }
+    // maintenance is a key, not a runtime: it has no hooks and no skill.
+    const hookRuntimes = runtimes.filter((r) => r !== 'maintenance')
+    line(`✓ runtimes  ${runtimes.join(', ')} (${flags.runtimes ? 'from --runtimes' : 'detected'}) — only these get keys, hooks and skills`)
+    // Hermes is never detected (e170fce): a runtime the person did not choose
+    // gets a sentence saying how to add it, not a hook.
+    if (onSetupPath('hermes') && !runtimes.includes('hermes')) {
+      line('– hermes    found on PATH, not set up — setup wires only the runtimes it pairs keys for.')
+      line(`   To add it: croft setup --url <instance> --runtimes ${[...hookRuntimes, 'hermes'].join(',')}`)
     }
 
     const existingEnv = fileEnv(envPath)
@@ -4615,7 +4634,7 @@ const commands = {
 
       // --- 7. skill ----------------------------------------------------------------
       if (flags['no-skill']) {
-        line('– skill     skipped (--no-skill)')
+        line('– skill     skipped (--no-skill) · re-run without it to install it')
       } else {
         const skillSource = join(releaseDir, 'skills', 'croft', 'SKILL.md')
         const skillSourceBuf = existsSync(skillSource) ? readFileSync(skillSource) : null
@@ -4648,13 +4667,15 @@ const commands = {
 
       // --- 8. hooks ------------------------------------------------------------------
       if (flags['no-hooks']) {
-        line('– hooks     skipped (--no-hooks)')
+        line('– hooks     skipped (--no-hooks) · re-run without it to wire them')
+      } else if (!hookRuntimes.length) {
+        line('– hooks     none to wire — no agent runtime is set up here (maintenance only)')
       } else {
         // Only the runtimes this setup paired keys for: a hook in a runtime with no
         // key cannot run, and a runtime the person did not choose is not ours to edit.
         const result = spawnSync(
           process.execPath,
-          [join(releaseDir, 'scripts', 'install-hooks.mjs'), '--runtimes', runtimes.join(','), ...(dry ? ['--dry-run'] : [])],
+          [join(releaseDir, 'scripts', 'install-hooks.mjs'), '--runtimes', hookRuntimes.join(','), ...(dry ? ['--dry-run'] : [])],
           { encoding: 'utf8' },
         )
         line(`${dry ? '!' : '✓'} hooks     ${dry ? 'would install:' : 'installed:'}`)
@@ -4663,7 +4684,7 @@ const commands = {
 
       // --- 9. maintenance jobs ---------------------------------------------------------
       if (flags['no-jobs']) {
-        line('– jobs      skipped (--no-jobs)')
+        line('– jobs      skipped (--no-jobs) · re-run without it to install the agent-files job')
       } else {
         const jobs = ['agent-files', ...(flags.maintenance ? ['reconcile'] : [])]
         // What the one job every machine gets actually does, said before it is
@@ -4680,7 +4701,14 @@ const commands = {
         line(`   --no-jobs skips it; node ${tilde(join(releaseDir, 'scripts', 'install-cron.mjs'))} --remove --only agent-files takes it out`)
         const result = spawnSync(
           process.execPath,
-          [join(releaseDir, 'scripts', 'install-cron.mjs'), ...(dry ? [] : ['--install']), '--only', jobs.join(',')],
+          [
+            join(releaseDir, 'scripts', 'install-cron.mjs'),
+            ...(dry ? [] : ['--install']),
+            '--only',
+            jobs.join(','),
+            // Only the runtimes set up here get their skill copies kept (CROFT-14).
+            ...(hookRuntimes.length ? ['--runtimes', hookRuntimes.join(',')] : []),
+          ],
           { encoding: 'utf8' },
         )
         line(`${dry ? '!' : '✓'} jobs      ${jobs.join(', ')}${dry ? ' (plan):' : ':'}`)
@@ -4690,10 +4718,22 @@ const commands = {
 
     // --- 10. verify ------------------------------------------------------------------
     const match = !serverInfo?.version || serverInfo.version === VERSION
-    line(
-      `${match ? '✓' : '!'} croft ${VERSION} ${match ? '↔' : '≠'} server ${serverInfo?.version ?? '?'}` +
-        ' — restart your agent sessions to load the hooks',
-    )
+    line(`${match ? '✓' : '!'} croft ${VERSION} ${match ? '↔' : '≠'} server ${serverInfo?.version ?? '?'}`)
+
+    // What a person needs after the last line, said here rather than left to
+    // the README: the next step, that re-running is the upgrade, and how to
+    // take each piece back out — there is no uninstaller, so the steps are it.
+    line('')
+    line(dry ? 'Nothing was changed. Run it again without --dry-run to apply this plan.' : 'Next: restart your agent sessions so they load the hooks.')
+    line('Re-run `croft setup` any time: it is the upgrade path, and it changes only what differs.')
+    if (!dry) {
+      line('To undo:')
+      line(`  job     node ${tilde(join(releaseDir, 'scripts', 'install-cron.mjs'))} --remove --only agent-files`)
+      line('  hooks   delete the entries naming ~/.croft/hooks in ~/.claude/settings.json, ~/.codex/hooks.json' +
+        (hookRuntimes.includes('hermes') ? ' and `hermes config get hooks`' : ''))
+      line(`  cli     rm ${tilde(join(HOME, '.local', 'bin', 'croft'))}   skill: rm -r ~/.claude/skills/croft ~/.codex/skills/croft`)
+      line(`  keys    remove them from ${tilde(envPath)}, and revoke them at ${url}/settings/keys`)
+    }
   },
 
   async map() {

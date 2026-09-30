@@ -512,3 +512,65 @@ describe('croft setup — the agent-files job', () => {
     expect(bad.stderr).toContain('is not <owner>/<name>')
   })
 })
+
+/**
+ * Setup says which runtimes it set up and never wires one it did not (e170fce);
+ * a `hermes` on PATH gets a sentence, not a hook. A fake `hermes` records every
+ * call so a write would show.
+ */
+describe('croft setup — runtimes, Hermes and the closing block', () => {
+  const withHermes = async () => {
+    const { mkdir, writeFile, chmod } = await import('node:fs/promises')
+    const HOME = await home()
+    const bin = join(HOME, 'bin')
+    await mkdir(bin)
+    await mkdir(join(HOME, '.claude'))
+    const log = join(HOME, 'hermes.log')
+    await writeFile(join(bin, 'hermes'), `#!/bin/sh\necho "$*" >> "${log}"\nif [ "$1 $2" = "config get" ]; then echo '{}'; fi\n`)
+    await chmod(join(bin, 'hermes'), 0o755)
+    const calls = async () => (await readFile(log, 'utf8').catch(() => '')).split('\n').filter(Boolean)
+    return { HOME, env: { PATH: `${bin}:${process.env.PATH}` }, calls }
+  }
+  const keys = [{ agentName: 'claude-code', key: 'sk_claude' }]
+
+  it('names the runtimes, leaves Hermes unwired, and says how to add it', async () => {
+    const base = await serve({ status: 'approved', keys })
+    const { HOME, env, calls } = await withHermes()
+    const { code, stdout } = await run(['setup', '--url', base, '--no-jobs'], HOME, env)
+    expect(code, stdout).toBe(0)
+    expect(stdout).toContain('✓ runtimes  claude-code (detected) — only these get keys, hooks and skills')
+    expect(stdout).toContain('– hermes    found on PATH, not set up')
+    expect(stdout).toContain('--runtimes claude-code,hermes')
+    expect((await calls()).filter((c) => c.startsWith('config set'))).toEqual([])
+  })
+
+  it('opens with what it does and ends with the next step and how to undo it', async () => {
+    const base = await serve({ status: 'approved', keys })
+    const { HOME, env } = await withHermes()
+    const { stdout } = await run(['setup', '--url', base, '--no-jobs'], HOME, env)
+    expect(stdout.split('\n')[0]).toMatch(/^croft setup: connects this machine to Croft/)
+    expect(stdout).toContain('croft setup --dry-run shows the plan without changing anything')
+    expect(stdout).toContain('– jobs      skipped (--no-jobs) · re-run without it to install the agent-files job')
+    expect(stdout).toContain('Next: restart your agent sessions so they load the hooks.')
+    expect(stdout).toMatch(/To undo:\n {2}job {5}node .*install-cron\.mjs --remove --only agent-files/)
+    expect(stdout).toContain(`${base}/settings/keys`)
+  })
+
+  it('renders the agent-files job with the runtimes it set up (CROFT-14)', async () => {
+    const base = await serve()
+    const HOME = await home()
+    const { writeFile } = await import('node:fs/promises')
+    const script = join(HOME, 'sync.mjs')
+    await writeFile(script, '')
+    const { code, stdout } = await run(
+      ['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--dry-run'],
+      HOME,
+      { CROFT_SYNC_SCRIPT: script, CROFT_NODE_PATH: process.execPath, CROFT_LOG_DIR: HOME },
+    )
+    expect(code, stdout).toBe(0)
+    const words = stdout.replace(/<\/?string>/g, ' ').replace(/'/g, ' ').replace(/\s+/g, ' ')
+    expect(words).toContain('--runtimes claude-code')
+    expect(stdout.split('\n')[0]).toMatch(/^croft setup --dry-run: the plan/)
+    expect(stdout).toContain('Nothing was changed. Run it again without --dry-run to apply this plan.')
+  })
+})
