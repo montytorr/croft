@@ -348,3 +348,33 @@ describe('install.sh CROFT_REPO', () => {
     },
   )
 })
+
+/**
+ * CROFT-14: `croft setup --runtimes claude-code` used to leave a job that still
+ * wrote the Codex skill wherever ~/.codex existed.
+ */
+describe.skipIf(SYSTEM_TARGETS)('sync-agent-files --runtimes', () => {
+  it('writes only the skill copies of the runtimes it is given', async () => {
+    const { raw } = await serve()
+    const { home } = await machine()
+    await mkdir(join(home, '.codex'), { recursive: true })
+
+    const result = await sync(home, ['--source', `${raw}/v1.2.3`, '--runtimes', 'claude-code'])
+
+    expect(result.code, result.stdout).toBe(0)
+    expect(existsSync(join(home, '.claude/skills/croft/SKILL.md'))).toBe(true)
+    expect(existsSync(join(home, '.codex/skills/croft/SKILL.md'))).toBe(false)
+    expect(result.stdout).toContain('(codex was not set up here)')
+  })
+
+  it('without --runtimes, writes every runtime whose directory exists, as before', async () => {
+    const { raw } = await serve()
+    const { home } = await machine()
+    await mkdir(join(home, '.codex'), { recursive: true })
+
+    const result = await sync(home, ['--source', `${raw}/v1.2.3`])
+
+    expect(result.code, result.stdout).toBe(0)
+    expect(existsSync(join(home, '.codex/skills/croft/SKILL.md'))).toBe(true)
+  })
+})

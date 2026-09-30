@@ -42,8 +42,20 @@ const arg = (name) => {
 
 const home = homedir()
 
+/**
+ * `--runtimes claude-code,codex`: the runtimes `croft setup` set up. A target
+ * that belongs to one not listed is left alone even where its directory
+ * exists — a ~/.codex that is there for some other reason is not a request for
+ * Croft's skill, and `--runtimes claude-code` used to get a Codex skill written
+ * anyway (CROFT-14). Absent, every target whose directory exists applies, as
+ * it always has.
+ */
+const RUNTIMES = arg('--runtimes')
+  ? new Set(arg('--runtimes').split(',').map((r) => r.trim()).filter(Boolean))
+  : null
+
 /** A target applies only if the directory its runtime reads already exists. */
-const at = (path, needs) => ({ path, needs: needs ?? dirname(path) })
+const at = (path, needs, runtime) => ({ path, needs: needs ?? dirname(path), runtime })
 
 const ARTEFACTS = [
   {
@@ -51,8 +63,8 @@ const ARTEFACTS = [
     file: 'skills/croft/SKILL.md',
     mode: 0o644,
     targets: [
-      at(join(home, '.claude/skills/croft/SKILL.md'), join(home, '.claude')),
-      at(join(home, '.codex/skills/croft/SKILL.md'), join(home, '.codex')),
+      at(join(home, '.claude/skills/croft/SKILL.md'), join(home, '.claude'), 'claude-code'),
+      at(join(home, '.codex/skills/croft/SKILL.md'), join(home, '.codex'), 'codex'),
     ],
   },
   {
@@ -437,6 +449,10 @@ for (const artefact of ARTEFACTS) {
   )
 
   for (const target of unique) {
+    if (RUNTIMES && target.runtime && !RUNTIMES.has(target.runtime)) {
+      console.log(`  skipped   ${target.path}  (${target.runtime} was not set up here)`)
+      continue
+    }
     if (!existsSync(target.needs)) {
       console.log(`  skipped   ${target.path}  (no ${target.needs} here)`)
       continue
