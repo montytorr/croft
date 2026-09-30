@@ -29,6 +29,10 @@ import { POST as cairnSyncRoute } from '@/app/api/v1/integrations/cairn/sync/rou
 import { POST as cairnLinkRoute } from '@/app/api/v1/tasks/[ref]/cairn-link/route'
 import { GET as showTaskRoute } from '@/app/api/v1/tasks/[ref]/route'
 import { GET as searchRoute } from '@/app/api/v1/search/route'
+import { GET as listProjectTasksRoute } from '@/app/api/v1/projects/[id]/tasks/route'
+import { PATCH as patchTagRoute } from '@/app/api/v1/tags/[id]/route'
+import { GET as listStagesRoute } from '@/app/api/v1/stages/route'
+import { getTask } from '@/lib/data'
 
 const databaseUrl = process.env.DATABASE_URL
 if (!databaseUrl) throw new Error('DATABASE_URL is required for integration tests')
@@ -209,7 +213,17 @@ describe('the lab board', () => {
   it('is found by search, and by its ref', async () => {
     const byWord = await call(searchRoute, 'GET', `/search?q=${WORD}`)
     expect(byWord.status).toBe(200)
-    expect(byWord.json.data.results[0]).toMatchObject({ kind: 'subject', ref, status: 'exploring' })
+    // The conclusion survived the move back to exploring; `croft check` reads
+    // it as answered, with the stage and the cost of opening the subject.
+    expect(byWord.json.data.results[0]).toMatchObject({
+      kind: 'subject',
+      ref,
+      status: 'exploring',
+      stage: 'exploring',
+      resolved: true,
+      conclusion: 'Recall improved on the eval set.',
+      tokens: Math.ceil(('A write-up.'.length + 'Recall improved on the eval set.'.length) / 4),
+    })
 
     const byRef = await call(searchRoute, 'GET', `/search?q=${ref}`)
     expect(byRef.json.data.results[0]).toMatchObject({ kind: 'subject', ref })
@@ -223,6 +237,10 @@ describe('the lab board', () => {
     expect(byTag.json.data.map((s: { ref: string }) => s.ref)).toEqual([ref])
 
     const brief = await call(briefRoute, 'GET', '/subjects/brief')
+    // Keyed by stage NAME, every stage present (zeros too) — what the CLI renders.
+    const stages = (await call(listStagesRoute, 'GET', '/stages')).json.data as { name: string }[]
+    expect(Object.keys(brief.json.data.counts).sort()).toEqual(stages.map((st) => st.name).sort())
+    expect(Object.values(brief.json.data.counts).every((n) => typeof n === 'number')).toBe(true)
     expect(brief.json.data.counts.exploring).toBeGreaterThanOrEqual(1)
     expect(brief.json.data.mine.map((s: { ref: string }) => s.ref)).toContain(ref)
   })
@@ -246,6 +264,31 @@ describe('the lab board', () => {
     const deleted = await call(deleteStageRoute, 'DELETE', `/stages/${stage.json.data.id}`, { id: stage.json.data.id })
     expect(deleted.status).toBe(200)
     stageIds.pop()
+  })
+
+  it('refuses a server sync with cairn_not_configured when no Cairn is connected', async () => {
+    await pool().query('delete from cairn_connection where id')
+    const refused = await call(cairnSyncRoute, 'POST', '/integrations/cairn/sync')
+    expect(refused.status).toBe(409)
+    expect(refused.json).toMatchObject({ success: false, code: 'cairn_not_configured', reason: 'not_connected' })
+  })
+
+  it('shows a todo with its subject and Cairn pairing, and lists them per row', async () => {
+    const shown = await call(showTaskRoute, 'GET', `/tasks/${todoRef}`, { ref: todoRef })
+    expect(shown.json.data.subject).toEqual({ ref, number: Number(ref.slice(2)), title: `Evaluate ${WORD} for semantic recall` })
+    expect(shown.json.data).toMatchObject({ cairn_ref: null, cairn_status: null, cairn_synced_at: null })
+
+    const digest = await call(showTaskRoute, 'GET', `/tasks/${todoRef}?view=digest`, { ref: todoRef })
+    expect(digest.json.data.subject).toMatchObject({ ref })
+    expect(digest.json.data).not.toHaveProperty('cairn_ref')
+
+    const listed = await call(listProjectTasksRoute, 'GET', '/projects/T/tasks?limit=200', { id: 'T' })
+    const row = listed.json.data.tasks.find((t: { number: number }) => `T-${t.number}` === todoRef)
+    expect(row).toMatchObject({ subject_ref: ref, cairn_ref: null, cairn_status: null })
+    expect(row).not.toHaveProperty('subject')
+
+    const page = await getTask(adminId, 'T', Number(todoRef.slice(2)))
+    expect(page?.subject).toEqual({ ref, number: Number(ref.slice(2)), title: `Evaluate ${WORD} for semantic recall` })
   })
 
   it('links a todo to Cairn and writes the outcome to the log exactly once', async () => {
@@ -275,8 +318,22 @@ describe('the lab board', () => {
     const first = await call(cairnSyncRoute, 'POST', '/integrations/cairn/sync')
     expect(first.status).toBe(200)
     expect(requests.find((r) => r.url === `https://cairn.example/api/v1/tasks/${cairnRef}`)?.auth).toBe('Bearer sk_test_12345678')
+    // One line per todo, beside the counts: what `croft sync` prints.
+    expect(first.json.data.results.find((r: { ref: string }) => r.ref === todoRef)).toEqual({
+      ref: todoRef,
+      cairnRef,
+      cairnStatus: 'done',
+      result: 'was todo · noted · closed',
+    })
+    expect(first.json.data.closed).toBeGreaterThanOrEqual(1)
     const second = await call(cairnSyncRoute, 'POST', '/integrations/cairn/sync')
     expect(second.status).toBe(200)
+    expect(second.json.data.results.find((r: { ref: string }) => r.ref === todoRef)).toEqual({
+      ref: todoRef,
+      cairnRef,
+      cairnStatus: 'done',
+      result: 'unchanged',
+    })
 
     const notes = await call(listNotesRoute, 'GET', `/subjects/${ref}/notes`, { ref })
     const outcome = notes.json.data.filter((n: { note: string }) => n.note.startsWith(`${cairnRef} done`))
@@ -284,7 +341,102 @@ describe('the lab board', () => {
     expect(outcome[0]).toMatchObject({ kind: 'finding', note: `${cairnRef} done: Shipped the index.` })
     expect(notes.json.data.some((n: { kind: string; note: string }) => n.kind === 'handoff' && n.note.includes(cairnRef))).toBe(true)
 
+    // Cairn owns a pushed todo's status: its close closed the todo, once.
     const task = await call(showTaskRoute, 'GET', `/tasks/${todoRef}`, { ref: todoRef })
-    expect(task.json.data.cairn_status).toBe('done')
+    expect(task.json.data).toMatchObject({
+      cairn_status: 'done',
+      status: 'done',
+      resolution: `Closed in Cairn as ${cairnRef}: Shipped the index.`,
+      resolution_kind: 'verified',
+      claimed_by: null,
+    })
+    const resolved = await pool().query(
+      `select count(*)::int as n from task_activity_events where task_id = $1 and event = 'resolved'`,
+      [task.json.data.id],
+    )
+    expect(resolved.rows[0].n).toBe(1)
+    expect((await call(showSubjectRoute, 'GET', `/subjects/${ref}`, { ref })).json.data.todos).toEqual({ open: 0, done: 1 })
+
+    const listed = await call(listProjectTasksRoute, 'GET', '/projects/T/tasks?limit=200', { id: 'T' })
+    expect(listed.json.data.tasks.find((t: { number: number }) => `T-${t.number}` === todoRef)).toMatchObject({
+      subject_ref: ref,
+      cairn_ref: cairnRef,
+      cairn_status: 'done',
+    })
+  })
+
+  it('takes an ended status through cairn-link the way sync does: the note once, the todo closed', async () => {
+    auth.actor = actorFor(adminId, 'admin', 'agent')
+    const todo = await call(addTodoRoute, 'POST', `/subjects/${ref}/todos`, { ref }, { title: 'Wire the flag' })
+    const localRef = todo.json.data.ref as string
+    const cairnRef = `CAIRN-${100_000 + Math.floor(Math.random() * 900_000)}`
+    await call(cairnLinkRoute, 'POST', `/tasks/${localRef}/cairn-link`, { ref: localRef }, { cairnRef, cairnStatus: 'doing' })
+
+    const ended = await call(cairnLinkRoute, 'POST', `/tasks/${localRef}/cairn-link`, { ref: localRef }, {
+      cairnRef,
+      cairnStatus: 'cancelled',
+      cairnResolution: 'Superseded by the new pipeline.',
+      cairnResolutionKind: 'superseded',
+    })
+    expect(ended.status).toBe(200)
+    expect(ended.json.data).toMatchObject({ ref: localRef, cairn_status: 'cancelled', status: 'cancelled', noted: true, closed: true })
+
+    const again = await call(cairnLinkRoute, 'POST', `/tasks/${localRef}/cairn-link`, { ref: localRef }, {
+      cairnRef,
+      cairnStatus: 'cancelled',
+      cairnResolution: 'Reworded in Cairn later.',
+    })
+    expect(again.json.data).toMatchObject({ noted: false, closed: false, status: 'cancelled' })
+
+    const notes = await call(listNotesRoute, 'GET', `/subjects/${ref}/notes`, { ref })
+    const outcome = notes.json.data.filter((n: { note: string }) => n.note.startsWith(`${cairnRef} cancelled`))
+    expect(outcome).toEqual([expect.objectContaining({ kind: 'note', note: `${cairnRef} cancelled: Superseded by the new pipeline.` })])
+
+    const task = await call(showTaskRoute, 'GET', `/tasks/${localRef}`, { ref: localRef })
+    expect(task.json.data).toMatchObject({
+      status: 'cancelled',
+      resolution: `Closed in Cairn as ${cairnRef}: Superseded by the new pipeline.`,
+      resolution_kind: 'superseded',
+    })
+  })
+
+  it('lists archived subjects on request, and filters by any of several tags', async () => {
+    const other = await call(createTagRoute, 'POST', '/tags', {}, { name: `other-${RUN}` })
+    tagIds.push(other.json.data.id)
+    const archived = await call(createSubjectRoute, 'POST', '/subjects', {}, { title: `Archived ${WORD}`, tags: [`other-${RUN}`] })
+    subjectIds.push(archived.json.data.id)
+    const archivedRef = archived.json.data.ref as string
+    await call(patchSubjectRoute, 'PATCH', `/subjects/${archivedRef}`, { ref: archivedRef }, { archived: true })
+
+    const refs = async (query: string) =>
+      (await call(listSubjectsRoute, 'GET', `/subjects?${query}`)).json.data.map((x: { ref: string }) => x.ref) as string[]
+    const tags = `tag=lab-${RUN},other-${RUN}`
+
+    expect(await refs(tags)).toEqual([ref])
+    expect((await refs(`${tags}&archived=include`)).sort()).toEqual([ref, archivedRef].sort())
+    expect(await refs(`${tags}&archived=only`)).toEqual([archivedRef])
+    // `true` keeps meaning archived only.
+    expect(await refs(`${tags}&archived=true`)).toEqual([archivedRef])
+    expect(await refs(`tag=other-${RUN}&archived=include`)).toEqual([archivedRef])
+    expect((await call(listSubjectsRoute, 'GET', '/subjects?archived=sometimes')).status).toBe(400)
+  })
+
+  it('moves the live-update pulse on every lab change', async () => {
+    const pulse = async () => (await pool().query('select croft_pulse(null) as p')).rows[0].p as string
+    const changes: [string, () => Promise<unknown>][] = [
+      ['a note', () => call(addNoteRoute, 'POST', `/subjects/${ref}/notes`, { ref }, { note: `pulse ${randomUUID()}` })],
+      ['a subject edit', () => call(patchSubjectRoute, 'PATCH', `/subjects/${ref}`, { ref }, { title: `Evaluate ${WORD} again` })],
+      ['a tag rename', () => call(patchTagRoute, 'PATCH', `/tags/${tagIds[0]}`, { id: tagIds[0]! }, { color: '#123456' })],
+      // A no-op write still moves updated_at, so the board's real stages are left as they were.
+      ['a stage change', () => pool().query(`update subject_stages set color = color where name = 'rejected'`)],
+      ['a subject re-tagged', () => pool().query('delete from subject_tags where subject_id = $1', [subjectIds[0]])],
+    ]
+    for (const [what, change] of changes) {
+      const before = await pulse()
+      // Timestamps have microsecond resolution; a beat keeps two writes apart.
+      await new Promise((r) => setTimeout(r, 5))
+      await change()
+      expect(await pulse(), `the pulse missed ${what}`).not.toBe(before)
+    }
   })
 })

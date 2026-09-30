@@ -86,6 +86,7 @@ export const GET = route({
       const { rows, widened } = await searchAll(actor.userId, q, { project, kinds }, limit)
 
       const results = rows.map(unifiedResult)
+      await attachConclusions(rows, results)
       // The refs exactly as the caller was handed them, in rank order. Recorded
       // from the mapped results rather than the raw rows so what is stored is
       // what the agent saw — an event nobody can replay measures nothing.
@@ -97,6 +98,26 @@ export const GET = route({
     }
   },
 })
+
+/**
+ * A subject's conclusion is its recorded answer — what a task's resolution is
+ * to a task — so a subject hit carries it, clipped, where the index row only
+ * had room for a 120-character subtitle. One query for every subject hit.
+ */
+const CONCLUSION_CLIP = 500
+const attachConclusions = async (rows: SearchAllRow[], results: ReturnType<typeof unifiedResult>[]) => {
+  const ids = rows.filter((r) => r.kind === 'subject').map((r) => r.id)
+  if (ids.length === 0) return
+  const { data } = await admin().from('subjects').select('id, conclusion').in('id', ids)
+  const byId = new Map(((data ?? []) as { id: string; conclusion: string | null }[]).map((s) => [s.id, s.conclusion]))
+  rows.forEach((row, i) => {
+    const result = results[i]
+    if (row.kind !== 'subject' || !result) return
+    const conclusion = byId.get(row.id)?.trim() || null
+    result.conclusion =
+      conclusion && conclusion.length > CONCLUSION_CLIP ? `${conclusion.slice(0, CONCLUSION_CLIP)}…` : conclusion
+  })
+}
 
 /**
  * Marks knowledge rows whose files have moved since the fact was confirmed.
@@ -188,4 +209,11 @@ const unifiedResult = (row: SearchAllRow) => ({
   unverified_days: null as number | null,
   // The exact-ref row only, when the ref went through a retired key.
   ...(row.renamed_from ? { requestedRef: row.requested_ref, renamedFrom: row.renamed_from } : {}),
+  /**
+   * Subjects only: the stage (also in `status`, which is where every kind
+   * keeps its state) and the conclusion, filled in by `attachConclusions`.
+   * `tokens` above is the write-up plus the conclusion, estimated the way a
+   * task's description plus resolution is.
+   */
+  ...(row.kind === 'subject' ? { stage: row.status, conclusion: null as string | null } : {}),
 })

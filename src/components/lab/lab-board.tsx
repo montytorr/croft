@@ -1,8 +1,8 @@
 'use client'
 
 import {
-  DndContext, DragOverlay, KeyboardSensor, PointerSensor, useDraggable, useSensor, useSensors,
-  type DragEndEvent, type DragStartEvent,
+  DndContext, DragOverlay, KeyboardSensor, PointerSensor, pointerWithin, rectIntersection, useDraggable,
+  useSensor, useSensors, type CollisionDetection, type DragEndEvent, type DragStartEvent,
 } from '@dnd-kit/core'
 import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
@@ -34,6 +34,12 @@ const Draggable = ({ subject }: { subject: SubjectSummary }) => {
  * lit, a furrow dotted between it and the next (`.rig-lane`, `.rig-furrow`).
  * The stage's colour is the headland across its top.
  */
+/** A lane is the one under the pointer; a keyboard drag, with no pointer, falls back to overlap. */
+const laneUnderPointer: CollisionDetection = (args) => {
+  const hits = pointerWithin(args)
+  return hits.length > 0 ? hits : rectIntersection(args)
+}
+
 const Lane = ({ stage, subjects }: { stage: Stage; subjects: SubjectSummary[] }) => (
   <section
     className={cn('rig-lane rig-furrow relative flex h-full shrink-0 snap-start flex-col', LANE_WIDTH)}
@@ -112,6 +118,7 @@ export const LabBoard = ({ subjects: initial, stages }: { subjects: SubjectSumma
       <DndContext
         id="lab-board"
         sensors={sensors}
+        collisionDetection={laneUnderPointer}
         onDragStart={({ active }: DragStartEvent) => setDragging(subjects.find((s) => s.id === active.id) ?? null)}
         onDragEnd={onDragEnd}
         onDragCancel={() => setDragging(null)}

@@ -52,6 +52,24 @@ declare module '@tiptap/core' {
 export const headlessEditor = (markdown: string) =>
   new Editor({ extensions: editorExtensions(), content: markdown })
 
+const FENCED = /^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1[ \t]*$/gm
+const TABLE_DELIMITER = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/m
+const RAW_HTML = /<\/?[a-z][a-z0-9-]*(\s[^>]*)?>/i
+
+/**
+ * Why the rich editor would lose part of this markdown, or null when it would not.
+ *
+ * The schema above has no tables, and raw HTML is dropped on purpose, so a body
+ * holding either would come back from a rich edit without it. Such a body is
+ * edited as markdown instead. Fenced code is ignored: a pipe inside it is text.
+ */
+export const richEditLoss = (markdown: string): string | null => {
+  const prose = markdown.replace(FENCED, '').replace(/`[^`\n]*`/g, '')
+  if (TABLE_DELIMITER.test(prose)) return 'It has a table, which the rich editor would flatten.'
+  if (RAW_HTML.test(prose)) return 'It has raw HTML, which the rich editor would drop.'
+  return null
+}
+
 /** markdown -> ProseMirror -> markdown. The trip a human edit makes. */
 export const roundTrip = (markdown: string): string => {
   const editor = headlessEditor(markdown)

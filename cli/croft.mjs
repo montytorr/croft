@@ -2513,19 +2513,29 @@ const CAIRN_TYPES = { feature: 'feature', bug: 'bug', improvement: 'improvement'
 
 /** Every todo paired with a Cairn task: one listing of T, or subject by subject. */
 const linkedTodos = async () => {
-  const listed = await request('GET', `/api/v1/projects/${TODO_KEY}/tasks?limit=500`, undefined, { soft: true })
-  const tasks = listed?.tasks ?? []
+  // The list pages at 200, the most the server takes.
+  const PAGE = 200
+  const tasks = []
+  for (let offset = 0; ; offset += PAGE) {
+    const listed = await request('GET', `/api/v1/projects/${TODO_KEY}/tasks?limit=${PAGE}&offset=${offset}`, undefined, { soft: true })
+    const page = listed?.tasks ?? []
+    tasks.push(...page)
+    if (page.length < PAGE || (typeof listed?.count === 'number' && tasks.length >= listed.count)) break
+  }
   if (tasks.length && tasks.some((t) => 'cairn_ref' in t)) {
     return tasks.filter((t) => t.cairn_ref).map((t) => ({ ...t, ref: refOfTask(t) ?? `${TODO_KEY}-${t.number}` }))
   }
-  const subjects = asList(await request('GET', '/api/v1/subjects?archived=1', undefined, { soft: true }), 'subjects')
+  const subjects = asList(await request('GET', '/api/v1/subjects?archived=include', undefined, { soft: true }), 'subjects')
   const todos = await Promise.all(
     subjects.map((s) => request('GET', `/api/v1/subjects/${s.ref}/todos`, undefined, { soft: true })),
   )
   return todos.flatMap((list) => asList(list, 'todos')).filter((t) => t.cairn_ref)
 }
 
-const CAIRN_NOT_CONFIGURED = new Set(['cairn_not_configured', 'not_configured', 'no_connection', 'integration_not_configured'])
+/** The server's code for "no Cairn connection": `croft sync` then goes through this machine's cairn CLI. */
+const CAIRN_NOT_CONFIGURED = new Set(['cairn_not_configured'])
+/** Done and cancelled, in Croft and in Cairn alike. */
+const TERMINAL = new Set(['done', 'cancelled'])
 
 /**
  * The briefing in at most five lines, for a SessionStart hook — Croft's own,
@@ -3769,7 +3779,8 @@ const commands = {
       const tags = splitList(flags.tag)
       if (tags.length) params.set('tag', tags.join(','))
       if (flags.mine) params.set('owner', 'me')
-      if (flags.all) params.set('archived', '1')
+      // `include`: live and archived. (`1`/`true` would be archived ONLY.)
+      if (flags.all) params.set('archived', 'include')
       const list = await request('GET', `/api/v1/subjects${String(params) ? `?${params}` : ''}`)
       return emitSubjects(list)
     }
@@ -3984,10 +3995,18 @@ const commands = {
     })
     if (data) {
       if (FORMAT !== 'tsv' || !Array.isArray(data.results)) return emit(data)
-      return emit(data.results, {
+      emit(data.results, {
         rows: (d) => d.map((r) => ({ ref: r.ref ?? '', cairn: r.cairnRef ?? r.cairn_ref ?? '', status: r.cairnStatus ?? r.cairn_status ?? '', result: r.result ?? '' })),
         columns: ['ref', 'cairn', 'status', 'result'],
       })
+      if (typeof data.checked === 'number') {
+        const unread = Array.isArray(data.failed) ? data.failed.length : 0
+        process.stderr.write(
+          `${data.checked} checked, ${data.updated ?? 0} changed, ${data.concluded ?? 0} noted, ${data.closed ?? 0} closed` +
+            `${unread ? `, ${unread} unread` : ''}\n`,
+        )
+      }
+      return
     }
     const notConfigured =
       status === 404 || CAIRN_NOT_CONFIGURED.has(refusal?.code) || /not configured|no cairn connection/i.test(refusal?.error ?? '')
@@ -4013,12 +4032,27 @@ const commands = {
         rows.push({ ref: todo.ref, cairn: todo.cairn_ref, status: todo.cairn_status ?? '', result: `unread: ${truncate(why, 60)}` })
         continue
       }
-      if (cairnStatus === todo.cairn_status) {
+      // An ended Cairn task whose todo is still open is sent again: the
+      // server closes the todo (Cairn owns its status once pushed).
+      const ended = TERMINAL.has(cairnStatus)
+      const stillOpen = ended && todo.status !== undefined && !TERMINAL.has(todo.status)
+      if (cairnStatus === todo.cairn_status && !stillOpen) {
         rows.push({ ref: todo.ref, cairn: todo.cairn_ref, status: cairnStatus, result: 'unchanged' })
         continue
       }
-      await request('POST', `/api/v1/tasks/${todo.ref}/cairn-link`, { cairnRef: todo.cairn_ref, cairnStatus })
-      rows.push({ ref: todo.ref, cairn: todo.cairn_ref, status: cairnStatus, result: `was ${todo.cairn_status ?? 'unknown'}` })
+      const link = { cairnRef: todo.cairn_ref, cairnStatus }
+      // What the server's sync would have written: `CAIRN-331 done: <resolution>`.
+      if (ended && cairnTask.resolution) link.cairnResolution = String(cairnTask.resolution)
+      if (ended && (cairnTask.resolution_kind ?? cairnTask.resolutionKind)) {
+        link.cairnResolutionKind = String(cairnTask.resolution_kind ?? cairnTask.resolutionKind)
+      }
+      const linked = await request('POST', `/api/v1/tasks/${todo.ref}/cairn-link`, link)
+      const result = [
+        cairnStatus === todo.cairn_status ? 'unchanged' : `was ${todo.cairn_status ?? 'unknown'}`,
+        linked?.noted ? 'noted' : '',
+        linked?.closed ? 'closed' : '',
+      ].filter(Boolean).join(' · ')
+      rows.push({ ref: todo.ref, cairn: todo.cairn_ref, status: cairnStatus, result })
     }
     emit(rows, { columns: ['ref', 'cairn', 'status', 'result'] })
   },

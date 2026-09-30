@@ -9,14 +9,21 @@ export const dynamic = 'force-dynamic'
  * first time Cairn reports it done or cancelled, writes the outcome into the
  * subject's log. Open to any member — it reveals nothing and uses the stored
  * key server-side. One unreachable Cairn task is reported, not fatal.
+ *
+ * A Cairn task that ended also closes its todo here (Cairn owns a todo's
+ * status once it is pushed). `results` is one line per todo, for printing.
  */
 export const POST = route({
   handler: async ({ actor }) => {
     const synced = await syncCairn(actor)
     if (!synced.ok) {
-      return fail('conflict', 'Cairn is not connected. An administrator can connect it in Settings.', {
-        reason: synced.reason,
-      })
+      // Its own code, not `conflict`: `croft sync` reads it as "sync through
+      // this machine's cairn CLI instead", which no other 409 means.
+      return fail(
+        'cairn_not_configured',
+        'Cairn is not connected. An administrator can connect it in Settings.',
+        { reason: synced.reason },
+      )
     }
     return ok(synced.report)
   },

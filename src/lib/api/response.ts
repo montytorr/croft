@@ -42,6 +42,7 @@ export type ApiError =
   | 'resolution_required'
   | 'conclusion_required'
   | 'stage_in_use'
+  | 'cairn_not_configured'
   | 'secret_detected'
   | 'rate_limited'
   | 'internal_error'
@@ -57,6 +58,7 @@ const STATUS: Record<ApiError, number> = {
   resolution_required: 400,
   conclusion_required: 400,
   stage_in_use: 409,
+  cairn_not_configured: 409,
   secret_detected: 400,
   rate_limited: 429,
   internal_error: 500,

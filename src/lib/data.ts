@@ -3,6 +3,7 @@ import { byTitle } from '@/lib/utils'
 import { sessionUser } from '@/lib/auth/session'
 import { withAssignee, withAssignees, type Person } from '@/lib/api/people'
 import type { TaskPriority, TaskStatus, TaskType } from '@/schemas/task'
+import { subjectRef } from '@/lib/lab/types'
 
 export type Task = {
   id: string
@@ -287,19 +288,29 @@ export const listAlsoProjects = async (taskId: string): Promise<string[]> => {
     .sort()
 }
 
+/** The subject a todo is part of, for "part of S-12". Null on an ordinary task. */
+export type TaskSubject = { ref: string; number: number; title: string }
+
 export const getTask = async (
   _userId: string,
   key: string,
   number: number,
-): Promise<(Task & { project: Project }) | null> => {
+): Promise<(Task & { project: Project; subject: TaskSubject | null }) | null> => {
   const { data } = await admin()
     .from('tasks')
-    .select('*, project:projects!project_id!inner(id, key, title, description, status, task_counter)')
+    .select(
+      '*, project:projects!project_id!inner(id, key, title, description, status, task_counter), ' +
+        'subject:subjects!subject_id(number, title)',
+    )
     .eq('projects.key', key.toUpperCase())
     .eq('number', number)
     .maybeSingle()
   if (!data) return null
-  return await withAssignee(data as unknown as Task & { project: Project })
+  const row = data as unknown as Task & { project: Project; subject: { number: number; title: string } | null }
+  const subject = row.subject
+    ? { ref: subjectRef(row.subject.number), number: row.subject.number, title: row.subject.title }
+    : null
+  return await withAssignee({ ...row, subject })
 }
 
 /**

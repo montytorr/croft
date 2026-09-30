@@ -161,13 +161,24 @@ const TaskPage = async ({
           <BrandName />
         </Link>
         <ChevronRight size={13} className="text-fg-subtle hidden lg:block" aria-hidden />
-        <Link
-          href={`/projects/${task.project.key}`}
-          className="text-fg-muted hover:text-fg flex min-w-0 shrink items-center gap-1.5 text-[0.8125rem] transition-colors"
-        >
-          <ProjectIcon size={13} projectKey={task.project.key} />
-          <span className="truncate">{task.project.title}</span>
-        </Link>
+        {task.subject ? (
+          <Link
+            href={`/subjects/${task.subject.number}`}
+            className="text-fg-muted hover:text-fg flex min-w-0 shrink items-center gap-1.5 text-[0.8125rem] transition-colors"
+            title={`Part of ${task.subject.ref}`}
+          >
+            <span className="font-mono text-[0.75rem]">{task.subject.ref}</span>
+            <span className="truncate">{task.subject.title}</span>
+          </Link>
+        ) : (
+          <Link
+            href={`/projects/${task.project.key}`}
+            className="text-fg-muted hover:text-fg flex min-w-0 shrink items-center gap-1.5 text-[0.8125rem] transition-colors"
+          >
+            <ProjectIcon size={13} projectKey={task.project.key} />
+            <span className="truncate">{task.project.title}</span>
+          </Link>
+        )}
         <ChevronRight size={13} className="text-fg-subtle hidden shrink-0 sm:block" aria-hidden />
         {parent ? (
           <>

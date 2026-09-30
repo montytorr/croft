@@ -18,7 +18,8 @@ export const listSubjects = (filters?: {
   tag?: string
   ownerId?: string
   q?: string
-  archived?: boolean
+  /** `true` or `'only'`: archived only. `'include'`: live and archived. Omitted: live only. */
+  archived?: boolean | 'exclude' | 'include' | 'only'
 }): Promise<SubjectSummary[]> => subjects.listSubjects(filters ?? {})
 
 export const getSubject = (number: number): Promise<Subject | null> => subjects.getSubjectByNumber(number)

@@ -115,7 +115,8 @@ describe('croft subject', () => {
     expect(params.get('stage')).toBe('exploring')
     expect(params.get('tag')).toBe('db')
     expect(params.get('owner')).toBe('me')
-    expect(params.get('archived')).toBe('1')
+    // `include`, not `1`: the server reads `1`/`true` as archived ONLY.
+    expect(params.get('archived')).toBe('include')
     expect(stdout.split('\n')[0]).toBe('#2')
     expect(stdout).toContain('S-13\tto explore\t2/1')
   })
@@ -282,6 +283,45 @@ describe('croft check', () => {
     expect(lines[2]).toBe('subject\tS-12\texploring\t\t\t~120\tpgvector for recall')
     expect(lines[4]).toBe('widget\tW-1\todd\t\t\t\tSomething with a tab')
   })
+
+  it('renders the server\'s real /search payload: a concluded subject is answered, with its stage and tokens', async () => {
+    // Shaped exactly as `unifiedResult` + `attachConclusions` in
+    // src/app/api/v1/search/route.ts build it.
+    const payload = {
+      count: 3,
+      query: 'pgvector',
+      widened: false,
+      results: [
+        {
+          kind: 'subject', ref: 'S-12', title: 'pgvector for recall', subtitle: 'Recall improved on the eval set.',
+          project: null, type: 'subject', status: 'done', resolved: true, updatedAt: '2026-09-30T10:00:00Z',
+          loose: false, tokens: 312, stale: false, unverified_days: null,
+          stage: 'done', conclusion: 'Recall improved on the eval set.',
+        },
+        {
+          kind: 'subject', ref: 'S-14', title: 'pgvector on the read replica', subtitle: null,
+          project: null, type: 'subject', status: 'exploring', resolved: false, updatedAt: '2026-09-29T10:00:00Z',
+          loose: true, tokens: 0, stale: false, unverified_days: null, stage: 'exploring', conclusion: null,
+        },
+        {
+          kind: 'task', ref: 'T-41', title: 'Benchmark the index', subtitle: null, project: 'T', type: 'spike',
+          status: 'doing', resolved: false, updatedAt: '2026-09-30T09:00:00Z', loose: false, tokens: 80,
+          stale: false, unverified_days: null,
+        },
+      ],
+    }
+    const base = await serve(() => payload)
+    const { code, stdout, stderr } = await run(['check', 'pgvector'], base)
+    expect(code).toBe(0)
+    expect(stdout.trim().split('\n')).toEqual([
+      '#3',
+      'kind\tref\tstatus\ttype\tanswered\ttokens\ttitle',
+      'subject\tS-12\tdone\tsubject\tyes\t~312\tpgvector for recall',
+      'subject\tS-14\texploring\tsubject\t\t~0\tpgvector on the read replica',
+      'task\tT-41\tdoing\tspike\t\t~80\tBenchmark the index',
+    ])
+    expect(stderr).toBe('2 precise, 1 loose\n')
+  })
 })
 
 /** A stand-in for Cairn's CLI: records its argv and stdin, answers like `cairn add` / `cairn show --json`. */
@@ -352,13 +392,39 @@ describe('croft push --to', () => {
 })
 
 describe('croft sync', () => {
-  it('asks the server when it has a Cairn connection', async () => {
+  it('asks the server when it has a Cairn connection, and prints its results as a table', async () => {
     const seen: Seen[] = []
-    const base = await serve(() => ({ results: [{ ref: 'T-41', cairnRef: 'CAIRN-331', cairnStatus: 'done', result: 'noted' }] }), seen)
-    const { code, stdout } = await run(['sync'], base)
+    // The server's SyncReport, as `syncCairn` builds it.
+    const report = {
+      checked: 3,
+      updated: 1,
+      concluded: 1,
+      closed: 1,
+      failed: [{ ref: 'T-43', cairn_ref: 'CAIRN-333', error: 'No task CAIRN-333.' }],
+      results: [
+        { ref: 'T-41', cairnRef: 'CAIRN-331', cairnStatus: 'done', result: 'was doing · noted · closed' },
+        { ref: 'T-42', cairnRef: 'CAIRN-332', cairnStatus: 'doing', result: 'unchanged' },
+        { ref: 'T-43', cairnRef: 'CAIRN-333', cairnStatus: 'todo', result: 'unread: No task CAIRN-333.' },
+      ],
+      last_synced_at: '2026-09-30T10:00:00.000Z',
+    }
+    const base = await serve(() => report, seen)
+    const { code, stdout, stderr } = await run(['sync'], base)
     expect(code).toBe(0)
     expect(seen[0]).toMatchObject({ method: 'POST', path: '/api/v1/integrations/cairn/sync' })
-    expect(stdout).toContain('T-41\tCAIRN-331\tdone\tnoted')
+    const lines = stdout.trim().split('\n')
+    expect(lines[0]).toBe('#3')
+    expect(lines[1]).toBe('ref\tcairn\tstatus\tresult')
+    expect(lines[2]).toBe('T-41\tCAIRN-331\tdone\twas doing · noted · closed')
+    expect(lines[4]).toBe('T-43\tCAIRN-333\ttodo\tunread: No task CAIRN-333.')
+    expect(stderr).toContain('3 checked, 1 changed, 1 noted, 1 closed, 1 unread')
+  })
+
+  it('does not fall back on a refusal that is not "not configured"', async () => {
+    const base = await serve(() => ({ status: 403, payload: { success: false, error: 'Forbidden.', code: 'forbidden' } }))
+    const { code, stderr } = await run(['sync'], base)
+    expect(code).toBe(1)
+    expect(stderr).toContain('croft sync: Forbidden.')
   })
 
   it('syncs through the local cairn CLI when the server has no connection', async () => {
@@ -367,28 +433,73 @@ describe('croft sync', () => {
     const seen: Seen[] = []
     const base = await serve((req) => {
       if (req.path === '/api/v1/integrations/cairn/sync') {
-        return { status: 409, payload: { success: false, error: 'No Cairn connection is configured', code: 'cairn_not_configured' } }
+        // The server's refusal exactly as the sync route sends it.
+        return {
+          status: 409,
+          payload: {
+            success: false,
+            error: 'Cairn is not connected. An administrator can connect it in Settings.',
+            code: 'cairn_not_configured',
+            reason: 'not_connected',
+          },
+        }
       }
       if (req.path.startsWith('/api/v1/projects/T/tasks')) {
+        // The list row's lab fields as the server adds them (TASK_LIST_LAB_FIELDS).
+        const row = { status: 'todo', subject_ref: 'S-12' }
         return {
+          count: 3,
+          offset: 0,
+          limit: 200,
           tasks: [
-            { number: 41, project: { key: 'T' }, cairn_ref: 'CAIRN-331', cairn_status: 'doing' },
-            { number: 42, project: { key: 'T' }, cairn_ref: 'CAIRN-332', cairn_status: 'doing' },
-            { number: 43, project: { key: 'T' }, cairn_ref: null, cairn_status: null },
+            { ...row, number: 41, project: { key: 'T' }, cairn_ref: 'CAIRN-331', cairn_status: 'doing' },
+            { ...row, number: 42, project: { key: 'T' }, cairn_ref: 'CAIRN-332', cairn_status: 'doing' },
+            { ...row, number: 43, project: { key: 'T' }, cairn_ref: null, cairn_status: null },
           ],
         }
       }
+      if (req.path.endsWith('/cairn-link')) return { ref: 'T-41', status: 'done', noted: true, closed: true }
       return {}
     }, seen)
     const { code, stdout, stderr } = await run(['sync'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
     expect(code, stderr).toBe(0)
     expect(stderr).toContain('syncing through this machine')
     expect((await cairn.calls()).map((c) => c.args)).toEqual([['show', 'CAIRN-331', '--json'], ['show', 'CAIRN-332', '--json']])
+    expect(new URL(seen.find((s) => s.path.startsWith('/api/v1/projects/T/tasks'))!.path, base).searchParams.get('limit')).toBe('200')
+    // The resolution travels, so the server writes `CAIRN-331 done: shipped` and closes the todo.
     expect(posts(seen, '/cairn-link').map((s) => [s.path, s.body])).toEqual([
-      ['/api/v1/tasks/T-41/cairn-link', { cairnRef: 'CAIRN-331', cairnStatus: 'done' }],
+      ['/api/v1/tasks/T-41/cairn-link', { cairnRef: 'CAIRN-331', cairnStatus: 'done', cairnResolution: 'shipped' }],
     ])
-    expect(stdout).toContain('T-41\tCAIRN-331\tdone\twas doing')
+    expect(stdout).toContain('T-41\tCAIRN-331\tdone\twas doing · noted · closed')
     expect(stdout).toContain('T-42\tCAIRN-332\tdoing\tunchanged')
+  })
+
+  it('sends an ended Cairn task again while its todo is still open, so the server closes it', async () => {
+    const dir = await tempDir('croft-cairn-')
+    const cairn = await fakeCairn(dir)
+    const seen: Seen[] = []
+    const base = await serve((req) => {
+      if (req.path === '/api/v1/integrations/cairn/sync') {
+        return { status: 409, payload: { success: false, error: 'Cairn is not connected.', code: 'cairn_not_configured' } }
+      }
+      if (req.path.startsWith('/api/v1/projects/T/tasks')) {
+        return {
+          count: 2,
+          tasks: [
+            // Status already recorded as done, todo still open: sent again.
+            { number: 41, project: { key: 'T' }, status: 'todo', cairn_ref: 'CAIRN-331', cairn_status: 'done', subject_ref: 'S-12' },
+            // Status recorded and the todo closed: nothing to do.
+            { number: 44, project: { key: 'T' }, status: 'done', cairn_ref: 'CAIRN-331', cairn_status: 'done', subject_ref: 'S-12' },
+          ],
+        }
+      }
+      return { ref: 'T-41', status: 'done', noted: false, closed: true }
+    }, seen)
+    const { code, stdout, stderr } = await run(['sync'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
+    expect(code, stderr).toBe(0)
+    expect(posts(seen, '/cairn-link').map((s) => s.path)).toEqual(['/api/v1/tasks/T-41/cairn-link'])
+    expect(stdout).toContain('T-41\tCAIRN-331\tdone\tunchanged · closed')
+    expect(stdout).toContain('T-44\tCAIRN-331\tdone\tunchanged')
   })
 })
 
@@ -414,6 +525,43 @@ describe('croft context --brief', () => {
     expect(lines[2]).toBe('  S-13 exploring  Try Bun — 1 todo')
     expect(lines[3]).toBe('  S-14 exploring  pgvector for recall')
     expect(lines[4]).toBe('Exploring or proving an idea → croft check first; changing a repo for real → a Cairn task (croft push).')
+  })
+
+  it('reads the server\'s real /subjects/brief and /stages payloads', async () => {
+    // As `subjectBrief` returns it: every stage by NAME, zeros included, and
+    // SubjectSummary rows (no body, no concluded_at) with the stage as an object.
+    const seeded = [
+      ['to explore', 'planned'], ['exploring', 'active'], ['done', 'completed'], ['rejected', 'dropped'],
+      ['to implement', 'planned'], ['implementing', 'active'], ['internal testing', 'active'],
+      ['ready for rollout', 'active'], ['rolled out', 'completed'],
+    ].map(([name, category], position) => ({
+      id: `00000000-0000-4000-8000-00000000000${position}`, name, color: '#8a8792', category, position,
+    }))
+    const summary = (over: Record<string, unknown>) => {
+      const { body: _body, concluded_at: _concluded, ...rest } = subject(over)
+      return { ...rest, archived_at: null }
+    }
+    const brief = {
+      counts: {
+        'to explore': 0, exploring: 2, done: 5, rejected: 1, 'to implement': 1, implementing: 1,
+        'internal testing': 0, 'ready for rollout': 0, 'rolled out': 3,
+      },
+      mine: [
+        summary({ ref: 'S-20', number: 20, title: 'Streaming ingest', stage: seeded[5], todos: { open: 3, done: 1 } }),
+        summary({ ref: 'S-21', number: 21, title: 'Try Bun', stage: seeded[4], todos: { open: 0, done: 0 } }),
+      ],
+    }
+    const base = await serve((req) => (req.path === '/api/v1/stages' ? seeded : brief))
+    const { code, stdout, stderr } = await run(['context', '--brief'], base)
+    expect(code).toBe(0)
+    expect(stderr).toBe('')
+    expect(stdout.trimEnd().split('\n')).toEqual([
+      // Stage order, open lanes only: completed and dropped ones are history.
+      'Croft — lab: 2 exploring · 1 to implement · 1 implementing',
+      '  S-20 implementing  Streaming ingest — 3 todos',
+      '  S-21 to implement  Try Bun',
+      'Exploring or proving an idea → croft check first; changing a repo for real → a Cairn task (croft push).',
+    ])
   })
 
   it('is silent, exit 0, when the lab has nothing open', async () => {

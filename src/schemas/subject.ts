@@ -67,14 +67,23 @@ export const createSubjectTodoSchema = z.object({
 
 export const listSubjectsQuery = z.object({
   stage: z.string().trim().min(1).max(80).optional(),
-  tag: z.string().trim().min(1).max(40).optional(),
+  /** One tag, or a comma list: subjects carrying any of them. */
+  tag: z.string().trim().min(1).max(400).optional(),
   owner: z.string().trim().min(1).max(320).optional(),
   q: z.string().trim().min(1).max(500).optional(),
+  /**
+   * `include`: live and archived. `only` (or `true`/`1`): archived only.
+   * Omitted, `false` or `0`: live only.
+   */
   archived: z
-    .enum(['true', 'false', '1', '0'])
+    .enum(['include', 'only', 'true', 'false', '1', '0'])
     .optional()
-    .transform((v) => (v === undefined ? undefined : v === 'true' || v === '1')),
+    .transform((v): ArchivedFilter | undefined =>
+      v === undefined ? undefined : v === 'include' ? 'include' : v === 'only' || v === 'true' || v === '1' ? 'only' : 'exclude',
+    ),
 })
+
+export type ArchivedFilter = 'exclude' | 'include' | 'only'
 
 export const createStageSchema = z.object({
   name: z.string().trim().min(1).max(40),
@@ -138,4 +147,8 @@ export const cairnLinkSchema = z.object({
     .transform((v) => v.toUpperCase())
     .pipe(z.string().regex(CAIRN_REF, 'expected a Cairn task ref like CAIRN-331')),
   cairnStatus: z.string().trim().min(1).max(40).optional(),
+  /** With a done or cancelled status: Cairn's resolution, for the subject's log and the todo's close. */
+  cairnResolution: z.string().trim().max(20_000).optional(),
+  /** Cairn's resolution kind. One Croft does not have closes the todo as `verified`. */
+  cairnResolutionKind: z.string().trim().min(1).max(40).optional(),
 })

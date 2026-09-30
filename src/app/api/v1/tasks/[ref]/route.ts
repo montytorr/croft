@@ -4,7 +4,16 @@ import { ok, fail } from '@/lib/api/response'
 import { failFromDb } from '@/lib/api/db-errors'
 import { admin } from '@/lib/db/client'
 import { diffTaskEvents, recordActivity } from '@/lib/api/activity'
-import { findTask, noSuchTaskMessage, refuseArchived, renameFields, resolveParent, resolveTask } from '@/lib/api/tasks'
+import {
+  findTask,
+  noSuchTaskMessage,
+  RELEASED_CLAIM,
+  refuseArchived,
+  renameFields,
+  resolveParent,
+  resolveTask,
+  subjectOfTask,
+} from '@/lib/api/tasks'
 import { formerKeysByProject, formerRefsOf, projectsForKeys, resolveProject } from '@/lib/api/project-keys'
 import { buildDigest } from '@/lib/api/digest'
 import { mentionsOf } from '@/lib/api/mentions'
@@ -37,14 +46,23 @@ export const GET = route<{ ref: string }>({
       formerKeys,
     )
     const told = { ...renameFields(resolved), ...(former_refs.length > 0 ? { former_refs } : {}) }
+    // A todo says which subject it is part of, by ref, so nobody has to map a uuid.
+    const subject = await subjectOfTask(task.subject_id)
 
     // `full` stays the default so nothing already calling this changes
     // behaviour. The CLI asks for the digest explicitly.
     if (url.searchParams.get('view') === 'digest') {
-      return ok({ ...(await buildDigest(task)), ...told })
+      // Only on the tasks that have them: the digest is the cheapest view.
+      const lab = {
+        ...(subject ? { subject } : {}),
+        ...(task.cairn_ref
+          ? { cairn_ref: task.cairn_ref, cairn_status: task.cairn_status, cairn_synced_at: task.cairn_synced_at }
+          : {}),
+      }
+      return ok({ ...(await buildDigest(task)), ...lab, ...told })
     }
     const mentioned = await mentionsOf(task.id as string, 50)
-    return ok({ ...task, ...told, mentioned_in: mentioned.mentions, mentioned_in_total: mentioned.total })
+    return ok({ ...task, subject, ...told, mentioned_in: mentioned.mentions, mentioned_in_total: mentioned.total })
   },
 })
 
@@ -171,16 +189,9 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
       }
     }
 
-    // Finishing a task releases it. Without this the claim outlives the work,
-    // and a board where done tasks still show a holder makes the one field an
-    // agent checks before picking something up untrustworthy.
+    // Finishing a task releases it (see RELEASED_CLAIM; `closeTask` does the same).
     if (body.status && isTerminal(body.status) && task.claimed_by) {
-      patch.claimed_by = null
-      // The session goes with the claim. Left behind, it answers "which
-      // session holds this" with one that finished the work and moved on.
-      patch.claimed_session = null
-      patch.claimed_at = null
-      patch.heartbeat_at = null
+      Object.assign(patch, RELEASED_CLAIM)
     }
 
     /**

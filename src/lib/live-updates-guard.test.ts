@@ -78,4 +78,18 @@ describe('pages stay current', () => {
       expect(migration, `the pulse ignores ${store}`).toContain(store)
     }
   })
+
+  it('watches the lab: subjects, their notes and tags, stages and tags', () => {
+    // The board and subject pages subscribe unscoped; a pulse made of tasks
+    // would never fire for a subject filed, noted, moved or re-tagged.
+    const migration = readFileSync(join(process.cwd(), 'migrations/071_lab_live_updates.sql'), 'utf8')
+    const pulse = migration.slice(migration.indexOf('create or replace function croft_pulse'))
+    for (const store of ['tasks', 'sessions', 'knowledge', 'task_activity_events', 'subjects', 'subject_notes', 'subject_stages', 'tags', 'subject_tags']) {
+      expect(pulse, `the pulse ignores ${store}`).toMatch(new RegExp(`from ${store}\\b`))
+    }
+    // Stages and tags have no timestamp that moves on an edit without these.
+    expect(migration).toMatch(/create trigger subject_stages_touch\s+before update on subject_stages/)
+    expect(migration).toMatch(/create trigger tags_touch\s+before update on tags/)
+    expect(migration).toMatch(/after insert or delete on subject_tags/)
+  })
 })

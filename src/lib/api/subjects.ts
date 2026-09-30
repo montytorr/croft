@@ -126,19 +126,24 @@ const toSummary = (row: SubjectRow): SubjectSummary => {
 export type SubjectFilters = {
   /** Stage name (any case) or id. */
   stage?: string
-  /** Tag name (any case) or id. */
+  /** Tag name (any case) or id, or a comma list of them: subjects carrying any. */
   tag?: string
   ownerId?: string
   q?: string
-  /** true: only archived subjects. Otherwise only live ones. */
-  archived?: boolean
+  /**
+   * `'include'`: live and archived. `'only'` or `true`: archived only.
+   * Anything else: live only.
+   */
+  archived?: boolean | 'exclude' | 'include' | 'only'
 }
 
 const escapeLike = (value: string) => value.replace(/[\\%_]/g, (c) => `\\${c}`)
 
 /** The board: lanes in order, then each lane's own order. */
 export const listSubjects = async (filters: SubjectFilters = {}, db: Db = pool()): Promise<SubjectSummary[]> => {
-  const where: string[] = [filters.archived ? 's.archived_at is not null' : 's.archived_at is null']
+  const archived = filters.archived === true ? 'only' : filters.archived || 'exclude'
+  const where: string[] =
+    archived === 'include' ? [] : [archived === 'only' ? 's.archived_at is not null' : 's.archived_at is null']
   const values: unknown[] = []
   const bind = (value: unknown) => {
     values.push(value)
@@ -149,10 +154,12 @@ export const listSubjects = async (filters: SubjectFilters = {}, db: Db = pool()
     const v = bind(filters.stage.trim())
     where.push(`(st.id::text = ${v} or lower(st.name) = lower(${v}))`)
   }
-  if (filters.tag) {
-    const v = bind(filters.tag.trim())
+  const tags = (filters.tag ?? '').split(',').map((t) => t.trim()).filter(Boolean)
+  if (tags.length) {
+    const v = bind(tags)
     where.push(`exists (select 1 from subject_tags x join tags t on t.id = x.tag_id
-                         where x.subject_id = s.id and (t.id::text = ${v} or t.name = lower(${v})))`)
+                         where x.subject_id = s.id
+                           and (t.id::text = any(${v}::text[]) or t.name = any(select lower(u) from unnest(${v}::text[]) u)))`)
   }
   if (filters.ownerId) {
     if (!isUuid(filters.ownerId)) return []
@@ -166,7 +173,7 @@ export const listSubjects = async (filters: SubjectFilters = {}, db: Db = pool()
 
   const result = await db.query(
     `${SUBJECT_SELECT}
-      where ${where.join(' and ')}
+      ${where.length ? `where ${where.join(' and ')}` : ''}
       order by st.position, s.position, s.number desc`,
     values,
   )
@@ -208,11 +215,11 @@ const resolveOwner = async (
   return person.ok ? { ok: true, value: person.person.id } : { ok: false, response: fail(person.code, person.error) }
 }
 
-const conclusionRequired = (stage: Stage) =>
+const conclusionRequired = (stage: Stage, ref = 'S-<n>') =>
   fail(
     'conclusion_required',
     `${stage.name} is a ${stage.category} stage: say what was learned. Send a conclusion with the move ` +
-      '(croft subject stage S-<n> "<stage>" --conclusion "<what we learned>").',
+      `(croft subject stage ${ref} "${stage.name}" --conclusion "<what we learned>").`,
     { stage: stage.name, category: stage.category },
   )
 
@@ -314,7 +321,7 @@ export const updateSubject = async (
       conclusion,
     })
   ) {
-    return { ok: false, response: conclusionRequired(target) }
+    return { ok: false, response: conclusionRequired(target, subject.ref) }
   }
 
   let tags: Tag[] | undefined

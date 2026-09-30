@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { conclusionMissing, nextConcludedAt, noteContentHash, stageNoteHash, stageNoteText } from './subjects'
-import { cairnOutcomeHash, cairnOutcomeNote, describeConnection } from './cairn-link'
+import {
+  cairnOutcomeHash,
+  cairnOutcomeNote,
+  closedInCairnKind,
+  closedInCairnResolution,
+  describeConnection,
+} from './cairn-link'
 import { parseRef } from './tasks'
 import { parseSubjectRef, subjectRef, isConcluding } from '@/lib/lab/types'
 import { PROJECT_KEY_RULE } from '@/lib/project-rename'
@@ -111,6 +117,15 @@ describe('cairn', () => {
   it('keys the outcome on ref and status, so a revised resolution is not a second note', () => {
     expect(cairnOutcomeHash('CAIRN-331', 'done')).toBe(cairnOutcomeHash('CAIRN-331', 'done'))
     expect(cairnOutcomeHash('CAIRN-331', 'done')).not.toBe(cairnOutcomeHash('CAIRN-331', 'cancelled'))
+  })
+
+  it('closes a todo saying where it was closed, with Cairn\'s kind or `verified`', () => {
+    expect(closedInCairnResolution('CAIRN-331', ' Shipped in v2. ')).toBe('Closed in Cairn as CAIRN-331: Shipped in v2.')
+    expect(closedInCairnResolution('CAIRN-331', null)).toBe('Closed in Cairn as CAIRN-331')
+    expect(closedInCairnKind('wont-fix')).toBe('wont-fix')
+    // A kind Croft does not have, or none, must not fail the close.
+    expect(closedInCairnKind('shipped')).toBe('verified')
+    expect(closedInCairnKind(null)).toBe('verified')
   })
 
   it('never describes the key, only whether one is set', () => {

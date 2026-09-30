@@ -6,7 +6,7 @@
  * what survives and what does not, so a regression is visible.
  */
 import { describe, expect, it } from 'vitest'
-import { roundTrip } from './markdown'
+import { richEditLoss, roundTrip } from './markdown'
 
 /** Stable means a second trip changes nothing — that is what makes editing safe. */
 const expectIdempotent = (input: string) => {
@@ -98,5 +98,23 @@ describe('GFM tables are NOT supported by this extension set', () => {
     const table = '| a | b |\n| - | - |\n| 1 | 2 |'
     const out = roundTrip(table)
     expect(out).not.toContain('| - |')
+  })
+})
+
+describe('richEditLoss', () => {
+  it('names a table, which the rich editor would flatten', () => {
+    expect(richEditLoss('| a | b |\n|---|---|\n| 1 | 2 |')).toMatch(/table/)
+  })
+
+  it('names raw HTML, which the rich editor would drop', () => {
+    expect(richEditLoss('Before <details><summary>x</summary>y</details>')).toMatch(/HTML/)
+  })
+
+  it('ignores pipes and tags inside fenced code', () => {
+    expect(richEditLoss('```\n| a | b |\n|---|---|\n<div>\n```\n\nPlain text.')).toBeNull()
+  })
+
+  it('passes ordinary markdown', () => {
+    expect(richEditLoss('## Why\n\n- one | two\n- `<T>` generic')).toBeNull()
   })
 })

@@ -55,7 +55,7 @@ const errorResponse = {
             enum: [
               'unauthorized', 'forbidden', 'not_found', 'validation_failed',
               'conflict', 'already_claimed', 'session_closed', 'resolution_required',
-              'conclusion_required', 'stage_in_use',
+              'conclusion_required', 'stage_in_use', 'cairn_not_configured',
               'secret_detected', 'rate_limited', 'internal_error',
             ],
           },
@@ -776,6 +776,9 @@ export const openapiSpec = () => ({
           { name: 'limit', in: 'query', schema: { type: 'integer', default: 50, maximum: 200 } },
           { name: 'offset', in: 'query', schema: { type: 'integer', default: 0 } },
         ],
+        description:
+          'Each row also carries `cairn_ref`, `cairn_status` (the Cairn task a todo was pushed to) ' +
+          'and `subject_ref` (`S-12`, or null): the lab pairs todos off this list.',
         responses: { '200': okResponse('Tasks.'), '404': errorResponse },
       },
       post: {
@@ -829,6 +832,15 @@ export const openapiSpec = () => ({
                 example: ['AC-113'],
                 description: 'Refs this task was issued under before its project was renamed.',
               },
+              subject: {
+                type: ['object', 'null'],
+                description: 'The lab subject a todo is part of; null for an ordinary task. In the digest only when set.',
+                properties: { ref: { type: 'string', example: 'S-12' }, number: { type: 'integer' }, title: { type: 'string' } },
+              },
+              subject_id: { type: ['string', 'null'], format: 'uuid' },
+              cairn_ref: { type: ['string', 'null'], example: 'CAIRN-331', description: 'The Cairn task `croft push` handed it to. In the digest only when set.' },
+              cairn_status: { type: ['string', 'null'], description: "Cairn's status at the last sync." },
+              cairn_synced_at: { type: ['string', 'null'], format: 'date-time' },
             },
           }),
           '404': errorResponse,
@@ -1476,13 +1488,13 @@ export const openapiSpec = () => ({
         summary: 'List subjects on the lab board',
         description:
           'Ordered by stage position, then position within the stage. Archived subjects are ' +
-          'left out unless `archived=true`, which returns only archived ones.',
+          'left out unless `archived=include` (live and archived) or `archived=only` (`true`/`1` too: archived only).',
         parameters: [
           { name: 'stage', in: 'query', schema: { type: 'string' }, description: 'Stage name (any case) or id.' },
-          { name: 'tag', in: 'query', schema: { type: 'string' }, description: 'Tag name or id.' },
+          { name: 'tag', in: 'query', schema: { type: 'string' }, description: 'Tag name or id, or a comma list: subjects carrying any of them.' },
           { name: 'owner', in: 'query', schema: { type: 'string' }, description: '`me`, a user id, an email or a display name.' },
           { name: 'q', in: 'query', schema: { type: 'string' }, description: 'Full text over title, write-up and conclusion.' },
-          { name: 'archived', in: 'query', schema: { type: 'string', enum: ['true', 'false'] } },
+          { name: 'archived', in: 'query', schema: { type: 'string', enum: ['include', 'only', 'true', 'false', '1', '0'] } },
         ],
         responses: { '200': okResponse('SubjectSummary[]', { type: 'array', items: subjectSchema }), '400': errorResponse },
       },
@@ -1636,8 +1648,11 @@ export const openapiSpec = () => ({
         summary: "Pull every pushed todo's status from Cairn",
         description:
           'Updates `cairn_status` on each linked todo. The first time Cairn reports one done or cancelled, ' +
-          'the outcome (`CAIRN-331 done: <resolution>`) is appended to the subject log, once. A Cairn task ' +
-          'that cannot be read is listed in `failed` and does not stop the rest. 409 when not connected.',
+          'the outcome (`CAIRN-331 done: <resolution>`) is appended to the subject log, once, and the todo is ' +
+          'closed with the same status (resolution `Closed in Cairn as CAIRN-331: <resolution>`) unless it ' +
+          'already is: once pushed, Cairn owns its status. A Cairn task that cannot be read is listed in ' +
+          '`failed` and does not stop the rest. `results` has one line per todo. 409 `cairn_not_configured` ' +
+          'when no connection is set (the CLI then syncs through its own cairn CLI).',
         responses: {
           '200': okResponse('What the sync did.', {
             type: 'object',
@@ -1645,11 +1660,24 @@ export const openapiSpec = () => ({
               checked: { type: 'integer' },
               updated: { type: 'integer' },
               concluded: { type: 'integer' },
+              closed: { type: 'integer', description: 'Todos closed because their Cairn task ended.' },
               failed: {
                 type: 'array',
                 items: {
                   type: 'object',
                   properties: { ref: { type: 'string' }, cairn_ref: { type: 'string' }, error: { type: 'string' } },
+                },
+              },
+              results: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    ref: { type: 'string', example: 'T-41' },
+                    cairnRef: { type: 'string', example: 'CAIRN-331' },
+                    cairnStatus: { type: ['string', 'null'] },
+                    result: { type: 'string', example: 'was doing · noted · closed' },
+                  },
                 },
               },
               last_synced_at: { type: ['string', 'null'], format: 'date-time' },
@@ -1663,6 +1691,10 @@ export const openapiSpec = () => ({
       parameters: [{ name: 'ref', in: 'path', required: true, schema: { type: 'string', example: 'T-41' } }],
       post: {
         summary: 'Record that this task was filed in Cairn (`croft push`)',
+        description:
+          'Also how `croft sync` reports a status it read through a local cairn CLI. With a done or ' +
+          'cancelled `cairnStatus` it does what the server sync does: the once-only ' +
+          '`CAIRN-331 done: <cairnResolution>` subject note, and the todo closed unless it already is.',
         requestBody: body(json(cairnLinkSchema)),
         responses: { '200': okResponse('The link.'), '400': errorResponse, '404': errorResponse, '409': errorResponse },
       },

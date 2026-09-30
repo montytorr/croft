@@ -44,10 +44,19 @@ describe('subject schemas', () => {
     })
   })
 
-  it('reads archived from the query string', () => {
-    expect(listSubjectsQuery.parse({ archived: 'true' }).archived).toBe(true)
-    expect(listSubjectsQuery.parse({ archived: '0' }).archived).toBe(false)
+  it('reads archived from the query string: include, only, or live by default', () => {
+    expect(listSubjectsQuery.parse({ archived: 'include' }).archived).toBe('include')
+    expect(listSubjectsQuery.parse({ archived: 'only' }).archived).toBe('only')
+    // `true`/`1` keep their old meaning: archived only.
+    expect(listSubjectsQuery.parse({ archived: 'true' }).archived).toBe('only')
+    expect(listSubjectsQuery.parse({ archived: '1' }).archived).toBe('only')
+    expect(listSubjectsQuery.parse({ archived: '0' }).archived).toBe('exclude')
     expect(listSubjectsQuery.parse({}).archived).toBeUndefined()
+    expect(listSubjectsQuery.safeParse({ archived: 'all' }).success).toBe(false)
+  })
+
+  it('takes a comma list of tags', () => {
+    expect(listSubjectsQuery.parse({ tag: 'db,search' }).tag).toBe('db,search')
   })
 })
 
@@ -69,6 +78,13 @@ describe('cairn schemas', () => {
     expect(cairnLinkSchema.parse({ cairnRef: 'cairn-331' }).cairnRef).toBe('CAIRN-331')
     // Croft's own single-letter refs are not Cairn refs.
     expect(cairnLinkSchema.safeParse({ cairnRef: 'T-41' }).success).toBe(false)
+  })
+
+  it('carries Cairn\'s resolution and kind with an ended status, both optional', () => {
+    expect(
+      cairnLinkSchema.parse({ cairnRef: 'CAIRN-331', cairnStatus: 'done', cairnResolution: ' Shipped. ', cairnResolutionKind: 'fixed' }),
+    ).toEqual({ cairnRef: 'CAIRN-331', cairnStatus: 'done', cairnResolution: 'Shipped.', cairnResolutionKind: 'fixed' })
+    expect(cairnLinkSchema.parse({ cairnRef: 'CAIRN-331' })).toEqual({ cairnRef: 'CAIRN-331' })
   })
 
   it('trims a trailing slash from the URL and keeps the key optional', () => {

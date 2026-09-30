@@ -9,7 +9,7 @@ import { Eye, PenLine, X } from 'lucide-react'
 import { MarkdownView } from '@/components/markdown'
 import { Button } from '@/components/ui/control'
 import { Spinner } from '@/components/spinner'
-import { editorExtensions } from '@/lib/editor/markdown'
+import { editorExtensions, richEditLoss } from '@/lib/editor/markdown'
 import { mutate } from '@/lib/api/mutate'
 import { cn } from '@/lib/utils'
 
@@ -38,8 +38,9 @@ const Editor = ({
   initial: string
   onClose: (saved: boolean) => void
 }) => {
-  const [mode, setMode] = useState<Mode>('rich')
+  const [mode, setMode] = useState<Mode>(() => (richEditLoss(initial) ? 'source' : 'rich'))
   const [markdown, setMarkdown] = useState(initial)
+  const richLoss = mode === 'source' ? richEditLoss(markdown) : null
   const [state, setState] = useState<SaveState>('idle')
   const [error, setError] = useState<string | null>(null)
   const [pane, setPane] = useState<'edit' | 'preview'>('edit')
@@ -68,6 +69,7 @@ const Editor = ({
 
   const switchMode = (next: Mode) => {
     if (next === mode) return
+    if (next === 'rich' && richLoss) return
     if (next === 'source' && editor) {
       clearTimeout(timer.current)
       setMarkdown(editor.storage.markdown.getMarkdown())
@@ -128,9 +130,12 @@ const Editor = ({
     <button
       type="button"
       aria-pressed={mode === value}
+      disabled={value === 'rich' && !!richLoss}
+      title={value === 'rich' && richLoss ? `${richLoss} Edit it as markdown.` : undefined}
       onClick={() => switchMode(value)}
       className={cn(
         'h-[1.625rem] rounded-md px-2.5 text-[0.75rem] transition-colors duration-[var(--dur-1)]',
+        'disabled:cursor-not-allowed disabled:opacity-45',
         mode === value ? 'bg-surface text-fg ring-border ring-1' : 'text-fg-muted hover:text-fg',
       )}
     >

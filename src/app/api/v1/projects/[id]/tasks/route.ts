@@ -3,7 +3,7 @@ import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { failFromDb } from '@/lib/api/db-errors'
 import { admin } from '@/lib/db/client'
-import { TASK_LIST_FIELDS } from '@/lib/api/tasks'
+import { TASK_LIST_LAB_FIELDS, withSubjectRefs } from '@/lib/api/tasks'
 import { createTaskInProject } from '@/lib/api/task-create'
 import { resolveProject } from '@/lib/api/project-keys'
 import { resolveAssignee, withAssignees } from '@/lib/api/people'
@@ -57,7 +57,7 @@ export const GET = route<{ id: string }>({
 
     let query = admin()
       .from('tasks')
-      .select(TASK_LIST_FIELDS, { count: 'exact' })
+      .select(TASK_LIST_LAB_FIELDS, { count: 'exact' })
 
     // A task filed elsewhere can still belong here. Its home project keeps the
     // ref; these links only widen where it shows up, so the list is the union.
@@ -113,7 +113,13 @@ export const GET = route<{ id: string }>({
       .range(offset, offset + limit - 1)
 
     if (error) return failFromDb(error)
-    return ok({ count, offset, limit, tasks: await withAssignees(data ?? []), ...(renamed ? { renamed_from: renamed } : {}) })
+    return ok({
+      count,
+      offset,
+      limit,
+      tasks: await withAssignees(withSubjectRefs(data ?? [])),
+      ...(renamed ? { renamed_from: renamed } : {}),
+    })
   },
 })
 

@@ -1,5 +1,7 @@
 import { admin } from '@/lib/db/client'
 import type { Actor } from './auth'
+import { diffTaskEvents, recordActivity } from './activity'
+import { subjectRef } from '@/lib/lab/types'
 import { issuedUnderFormerKey, lookupFormerKey, renameDay, type KeyRename } from './project-keys'
 import { fail } from './response'
 
@@ -26,6 +28,21 @@ export const TASK_LIST_FIELDS =
   // project_id as well as the embed: an activity row records the project by id,
   // and it is the only scope that survives the task being deleted.
   'resolution, updated_at, project_id, project:projects!project_id!inner(key, status)'
+
+/**
+ * A project's task list also says, per row, which subject a todo is part of
+ * and which Cairn task it was handed to: `croft sync` pairs todos off this
+ * list. `subject` is folded into `subject_ref` by `withSubjectRefs`.
+ */
+export const TASK_LIST_LAB_FIELDS =
+  `${TASK_LIST_FIELDS}, cairn_ref, cairn_status, subject:subjects!subject_id(number)`
+
+/** `subject: {number}` (or null) becomes `subject_ref: 'S-12'` (or null). */
+export const withSubjectRefs = <T extends Record<string, unknown>>(rows: T[]) =>
+  rows.map(({ subject, ...row }) => {
+    const embedded = (Array.isArray(subject) ? subject[0] : subject) as { number?: number } | null | undefined
+    return { ...row, subject_ref: typeof embedded?.number === 'number' ? subjectRef(embedded.number) : null }
+  })
 
 export type TaskRef = { key: string; number: number } | { id: string }
 
@@ -243,4 +260,62 @@ export const resolveParent = async (
     return { error: `${raw} is already nested beneath this task — that would be a loop.` }
   }
   return { id: parent.id }
+}
+
+/**
+ * A claim let go. Finishing a task releases it — without this the claim
+ * outlives the work, and a board where done tasks still show a holder makes
+ * the one field an agent checks before picking something up untrustworthy.
+ * The session goes with the claim: left behind, it answers "which session
+ * holds this" with one that finished the work and moved on.
+ */
+export const RELEASED_CLAIM = {
+  claimed_by: null,
+  claimed_session: null,
+  claimed_at: null,
+  heartbeat_at: null,
+} as const
+
+export type CloseInput = {
+  status: 'done' | 'cancelled'
+  resolution: string
+  resolutionKind: string
+}
+
+type ClosableTask = {
+  id: string
+  status: string
+  resolution?: string | null
+  resolution_kind?: string | null
+  claimed_by?: string | null
+}
+
+/**
+ * Closes a task the way `PATCH /tasks/{ref}` does — a status, the answer and
+ * who gave it, the claim released — and records the same events. For a close
+ * that is a consequence rather than a request: a todo whose Cairn task ended.
+ */
+export const closeTask = async (actor: Actor, task: ClosableTask, close: CloseInput) => {
+  const patch: Record<string, unknown> = {
+    status: close.status,
+    resolution: close.resolution,
+    resolution_kind: close.resolutionKind,
+    resolved_at: new Date().toISOString(),
+    resolved_by: actor.actorId,
+    ...(task.claimed_by ? RELEASED_CLAIM : {}),
+  }
+  const { error } = await admin().from('tasks').update(patch).eq('id', task.id)
+  if (error) throw new Error(`closing ${task.id} failed: ${error.message}`)
+  await recordActivity(diffTaskEvents(actor, task.id, task, patch), actor.userId, actor.host)
+}
+
+export type TaskSubject = { ref: string; number: number; title: string }
+
+/** The subject a todo belongs to — "part of S-12" — or null for an ordinary task. */
+export const subjectOfTask = async (subjectId: unknown): Promise<TaskSubject | null> => {
+  if (typeof subjectId !== 'string' || !subjectId) return null
+  const { data, error } = await admin().from('subjects').select('number, title').eq('id', subjectId).maybeSingle()
+  if (error || !data) return null
+  const row = data as { number: number; title: string }
+  return { ref: subjectRef(row.number), number: row.number, title: row.title }
 }
