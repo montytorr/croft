@@ -721,8 +721,21 @@ const SESSION = (() => {
  * and the server records it where a row already has room for it. An older
  * server ignores the header.
  */
+/**
+ * CROFT_SHARE_LOCATION=off, in the environment or the instance's env file,
+ * keeps this machine's layout on this machine: no working directory, no git
+ * remote and no hostname leave it. Paths name clients and projects; on a
+ * shared instance every member can read what arrives with them. `context`
+ * then resolves the project only from `croft map` or --project, and an
+ * explicit CROFT_HOST is still sent, since it is a label someone chose.
+ */
+const SHARE_LOCATION = !/^(off|0|false|no)$/i.test(
+  String(process.env.CROFT_SHARE_LOCATION ?? FILE_ENV.CROFT_SHARE_LOCATION ?? 'on').trim(),
+)
+
 const HOST = (() => {
   let raw = process.env.CROFT_HOST
+  if (raw === undefined && !SHARE_LOCATION) return null
   if (raw === undefined) {
     try { raw = hostname() } catch { raw = '' }
   }
@@ -2626,7 +2639,7 @@ const brief = async () => {
     }
   }
   const [data, stages] = await Promise.all([
-    get(`/api/v1/subjects/brief?${new URLSearchParams({ cwd })}`),
+    get(`/api/v1/subjects/brief${SHARE_LOCATION ? `?${new URLSearchParams({ cwd })}` : ''}`),
     get('/api/v1/stages'),
   ])
   if (!data) return
@@ -3032,7 +3045,9 @@ const pairDevice = async ({ baseUrl, runtimes, write }) => {
       // The server takes a hostname's characters and no others: it goes on the
       // approval card and into every key's name.
       body: JSON.stringify({
-        host: hostname().replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 100) || 'unknown-host',
+        // CROFT_HOST names it when set; with CROFT_SHARE_LOCATION=off the real
+        // hostname stays on this machine here too.
+        host: (HOST ?? (SHARE_LOCATION ? hostname() : 'private-host')).replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 100) || 'unknown-host',
         runtimes,
         cliVersion: VERSION,
       }),
@@ -4201,7 +4216,7 @@ const commands = {
     if (flags.brief) return brief()
     const cwd = flags.cwd ?? process.cwd()
     const params = new URLSearchParams()
-    params.set('cwd', cwd)
+    if (SHARE_LOCATION) params.set('cwd', cwd)
     const project = flags.project ?? projectForDir(cwd)
     if (project) params.set('project', project)
     if (flags.scope !== undefined) {
@@ -4210,7 +4225,7 @@ const commands = {
     }
     // Costs one local git call and answers where the map cannot: a second
     // clone, a moved directory, a worktree.
-    const repo = gitRemote(cwd)
+    const repo = SHARE_LOCATION ? gitRemote(cwd) : null
     if (repo) params.set('repo', repo)
     if (flags.file) params.set('file', flags.file)
     const data = await request('GET', `/api/v1/context?${params}`)
