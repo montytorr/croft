@@ -8,6 +8,8 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+Thanks to @domnumb, whose report and pull requests #1–#3 started this release.
+
 ### Security
 
 - **The agent-files job is pinned to the release `croft setup` installed.** It used to repair the
