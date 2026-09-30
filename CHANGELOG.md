@@ -1,6 +1,14 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+Notable changes, newest first. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+versions follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
+
+Croft is pre-1.0: the schema, API and CLI may still change in a minor release. Anything that would
+break an existing install is called out under **Breaking** with what to do about it.
+
+## [Unreleased]
+
+## [0.1.0] — 2026-09-30
 
 Forked from Cairn v0.12.1 (1ef3556).
 
@@ -31,3 +39,6 @@ Forked from Cairn v0.12.1 (1ef3556).
 ### Look
 
 - A field notebook: paper and peat grounds, a heather accent, Schibsted Grotesk and Newsreader, and runrig strips for a mark.
+
+[Unreleased]: https://github.com/montytorr/croft/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/montytorr/croft/releases/tag/v0.1.0
