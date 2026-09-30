@@ -6,7 +6,7 @@ import type { TaskPriority, TaskStatus, TaskType } from '@/schemas/task'
 import { subjectRef, type Attachment as LabAttachment, type SubjectVisibility } from '@/lib/lab/types'
 import { withTaskSubjects, type LabTodoSubject } from '@/lib/api/lab-todos'
 import { toAttachment } from '@/lib/attachments'
-import { isTaskIdVisible, isTaskVisible, restrictTo, visibleTasksOr, type Viewer } from '@/lib/api/visibility'
+import { isTaskIdVisible, isTaskVisible, restrictTo, visibleTasksOr, withoutHiddenLinks, type Viewer } from '@/lib/api/visibility'
 
 export type Task = {
   id: string
@@ -330,7 +330,8 @@ export const getTask = async (
         visibility: row.subject.visibility,
       }
     : null
-  return await withAssignee({ ...row, subject })
+  // The row goes to a client component whole: no ids of hidden tasks in it.
+  return await withAssignee(await withoutHiddenLinks({ ...row, subject }, viewer.id))
 }
 
 /**

@@ -56,7 +56,8 @@ its members list). The rule:
   subject and they are on its list, or — the one admin exception — when they are an
   **active administrator and the owner is gone** (deactivated, deleted, or none). Otherwise
   an administrator does not see someone's private subject: the role manages people and
-  keys, not other people's work. An agent key sees what its human sees.
+  keys, not other people's work (though it can act as someone; see Known limitations). An
+  agent key sees what its human sees.
 - A todo inherits its subject's visibility, with everything hanging off it: notes,
   comments, attachments, activity (tombstones of deleted todos included), mentions it makes
   of other tasks, and dependencies. A task with no subject is visible to everyone.
@@ -95,9 +96,19 @@ What this does **not** hide, by design:
 - **Workspace-wide vocabularies.** Tag names, stage names and lab-project names are shared
   by everyone; a tag created on a private subject exists for the whole workspace.
 - **Counts in refusals and admin screens.** An administrator's "in use" counts (a stage,
-  tag or lab project that subjects still use, a person's open tasks) are workspace-wide,
-  and refusing to delete a task that still has children says how many it has, hidden ones
-  included. They reveal a number, never a title or content.
+  tag or lab project that subjects still use, a person's open tasks) are workspace-wide;
+  refusing to delete a task that still has children or dependants says how many, hidden
+  ones included; and a project holding tasks you cannot see refuses to be deleted by you
+  (deleting it would delete them), saying how many. They reveal a number, never a title
+  or content.
+- **Waiting on hidden work.** A task blocked by a todo you cannot see is still held back
+  from `croft next`, though its dependency list shows you nothing.
+- **The maintenance sweep.** An administrator's `maintenance` key releases quiet claims
+  across the workspace, private todos included, and reports those by ref alone — not who
+  held them or when they last moved.
+- **Workspace-wide operations.** Archiving a project freezes every task in it, private
+  todos included, until someone restores it; handing a disabled person's open tasks to
+  someone else moves their private todos too, to someone who may not be able to see them.
 - **Timing.** Changes that affect only what someone else can see do not move your pulse,
   but a request's latency is not constant-time.
 
@@ -133,6 +144,12 @@ What this does **not** hide, by design:
   keep their own count.
 - Workspace isolation is not tenant isolation: a member who must not see another member's
   projects needs a separate Croft deployment.
+- Private subjects keep work from colleagues, not from an administrator set on reading
+  it. An administrator can act as anyone: issuing an agent key for someone (the key sees
+  what they see), resetting their password, or disabling them (which brings their private
+  subjects under the admin exception) and restoring them afterwards. Each leaves a trace
+  the person can find — a key in **Your agent keys**, a sign-out, a disabled spell — but
+  none of them is refused.
 - Lab subject write-ups, logs and todo bodies are rendered as markdown and shared with every
   workspace member. Do not admit identities that should not be trusted with that content.
   Private and members-only subjects narrow who can read a subject, not who can reach the

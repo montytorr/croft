@@ -75,11 +75,14 @@ export const visibleSubjectIds = async (subjectIds: readonly string[], viewerId:
  */
 export const visibleTasksOr = async (viewerId: string, column = 'subject_id'): Promise<string | null> => {
   const result = await pool().query<{ hidden: number; visible: string[] | null }>(
+    // Every hidden subject counts, todos or not: counting only those with
+    // todos turned the filter off while a private subject was still empty,
+    // and a first todo filed before this request's own query ran showed.
     `select count(*) filter (where not v)::int as hidden,
-            array_agg(id) filter (where v) as visible
-       from (select s.id, ${subjectVisibleSql('s.id', '$1')} as v
-               from subjects s
-              where exists (select 1 from tasks t where t.subject_id = s.id)) x`,
+            array_agg(id) filter (where v and has_todos) as visible
+       from (select s.id, ${subjectVisibleSql('s.id', '$1')} as v,
+                    exists (select 1 from tasks t where t.subject_id = s.id) as has_todos
+               from subjects s) x`,
     [viewerId],
   )
   const row = result.rows[0]
@@ -99,3 +102,19 @@ export const restrictTo = <Q extends { or: (expression: string) => Q }>(query: Q
 /** Whether the task with this id exists and the viewer may see it. */
 export const isTaskIdVisible = async (taskId: string, viewerId: string): Promise<boolean> =>
   (await visibleTaskIds([taskId], viewerId)).has(taskId)
+
+/**
+ * A task row with its `parent_id` and `duplicate_of` blanked when they point
+ * at a task the viewer may not see. A lab task can hang under, or duplicate,
+ * a private todo (its owner sees both), and the bare uuid would tell everyone
+ * else that a hidden task exists — a missing one would be null.
+ */
+export const withoutHiddenLinks = async <T>(row: T, viewerId: string): Promise<T> => {
+  if (!row || typeof row !== 'object') return row
+  const record = row as Record<string, unknown>
+  const links = (['parent_id', 'duplicate_of'] as const).filter((column) => typeof record[column] === 'string')
+  if (links.length === 0) return row
+  const visible = await visibleTaskIds(links.map((column) => record[column] as string), viewerId)
+  const hidden = links.filter((column) => !visible.has(record[column] as string))
+  return hidden.length ? ({ ...record, ...Object.fromEntries(hidden.map((column) => [column, null])) } as T) : row
+}

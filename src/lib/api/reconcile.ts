@@ -1,7 +1,7 @@
 import { admin } from '@/lib/db/client'
 import type { Actor } from './auth'
 import { isUntouchedAutoCheckpoint } from '@/lib/checkpoint-origin'
-import { restrictTo, visibleTasksOr } from './visibility'
+import { restrictTo, visibleTaskIds, visibleTasksOr } from './visibility'
 
 /**
  * The backstop for claims that outlive the session that took them.
@@ -53,7 +53,7 @@ export type Reconciled = {
   scope: 'workspace' | 'own'
   released: {
     ref: string
-    holder: string
+    holder: string | null
     heldForMinutes: number
     hadCheckpoint: boolean
     reopened: boolean
@@ -166,6 +166,10 @@ export const reconcileClaims = async (
   if (error) throw new Error(error.message)
 
   const held = (data ?? []) as unknown as HeldClaim[]
+  // The sweep acts on todos its caller cannot see, and names them by ref
+  // only: not who held one, nor when it last moved.
+  const seen = workspace ? await visibleTaskIds(held.map((t) => t.id), actor.userId) : null
+  const named = (task: HeldClaim) => !seen || seen.has(task.id)
 
   const lastNotes = await lastNoteTimes(held.map((t) => t.id))
   const lastEvidence = await lastEvidenceTimes(held)
@@ -215,7 +219,7 @@ export const reconcileClaims = async (
 
     released.push({
       ref,
-      holder: task.claimed_by,
+      holder: named(task) ? task.claimed_by : null,
       heldForMinutes,
       hadCheckpoint: Boolean(task.checkpoint_summary),
       reopened: reopen,
@@ -229,7 +233,7 @@ export const reconcileClaims = async (
       .filter((task) => !stale.includes(task))
       .map((task) => ({
         ref: `${task.project.key}-${task.number}`,
-        lastNoteAt: lastNotes.get(task.id) ?? null,
+        lastNoteAt: named(task) ? (lastNotes.get(task.id) ?? null) : null,
       })),
   }
 }

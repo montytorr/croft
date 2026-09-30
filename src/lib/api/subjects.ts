@@ -529,6 +529,25 @@ export type UpdateSubjectInput = {
  * exactly who may edit it. Who sees it — visibility and owner — is the
  * owner's alone (`canManageSubject`).
  */
+/**
+ * Whether the subject still has the visibility and owner the caller read,
+ * with its row locked until the transaction ends. Who may see a subject is
+ * decided from that read, and two requests can interleave: a stale "make it
+ * members" landing after a publish would take a lab subject back out of the
+ * lab, which publishing promises can never happen.
+ */
+const stillAsRead = async (client: PoolClient, subject: Pick<Subject, 'id' | 'visibility' | 'owner'>) => {
+  const { rows: locked } = await client.query<{ visibility: string; owner_user_id: string | null }>(
+    'select visibility, owner_user_id from subjects where id = $1 for update',
+    [subject.id],
+  )
+  const row = locked[0]
+  return Boolean(row) && row!.visibility === subject.visibility && row!.owner_user_id === (subject.owner?.id ?? null)
+}
+
+const changedMeanwhile = (subject: Pick<Subject, 'ref'>) =>
+  fail('conflict', `${subject.ref} changed while this was being applied. Read it again, then retry.`)
+
 export const updateSubject = async (
   actor: Actor,
   subject: Subject,
@@ -620,7 +639,9 @@ export const updateSubject = async (
     set.push(`position = (select coalesce(max(position) + 1, 0) from subjects where stage_id = $${values.length})`)
   }
 
-  await transaction(async (client) => {
+  const guarded = visibilityChanging || ownerId !== undefined
+  const applied = await transaction(async (client) => {
+    if (guarded && !(await stillAsRead(client, subject))) return false
     if (set.length > 0) {
       await client.query(`update subjects set ${set.join(', ')} where id = $1`, values)
     }
@@ -655,7 +676,9 @@ export const updateSubject = async (
         ],
       )
     }
+    return true
   })
+  if (!applied) return { ok: false, response: changedMeanwhile(subject) }
 
   return { ok: true, value: await reloadSubject(subject.id) }
 }
@@ -684,7 +707,8 @@ export const addSubjectMember = async (actor: Actor, subject: Subject, userRef: 
     }
   }
 
-  await transaction(async (client) => {
+  const applied = await transaction(async (client) => {
+    if (!(await stillAsRead(client, subject))) return false
     const added = await client.query(
       `insert into subject_members (subject_id, user_id, added_by) values ($1, $2, $3)
        on conflict do nothing returning user_id`,
@@ -695,7 +719,9 @@ export const addSubjectMember = async (actor: Actor, subject: Subject, userRef: 
     if (added.rowCount || flipping) {
       await writeVisibilityNote(client, actor, subject.id, `shared with ${person.person.name}`)
     }
+    return true
   })
+  if (!applied) return { ok: false, response: changedMeanwhile(subject) }
   return { ok: true, value: await reloadSubject(subject.id) }
 }
 
