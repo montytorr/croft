@@ -8,6 +8,34 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+Thanks to @domnumb for proposing the shape in #4.
+
+### Added
+
+- **Private and member-scoped subjects** (#4).
+  - **Visibility:** a subject is `private`, `members` (with a member list) or `lab`. `lab` is the default, and today's behaviour.
+  - **Todos** inherit their subject's visibility, and **agent keys** see what their human sees.
+  - **Admins** do not see others' private subjects, unless the owner has been deactivated.
+  - **Publishing** to the lab is one-way and owner-only: `croft subject publish S-n --confirm S-n`, or the button with its one-way confirmation. `private ↔ members` is free for the owner.
+  - **Logged:** every change of visibility or membership is a `visibility` note in the log.
+- **Surface.**
+  - **Web app:** a visibility choice when creating a subject; a lock badge and lock marks on the board, list, `/todos` and `/board`; an Access section with members; a "Private & shared with me" filter.
+  - **CLI:** `croft subject add --visibility --member`, `croft subject share S-n +who -who`, and visibility in `list` and `show`.
+
+### Security
+
+- **Hidden looks like missing.** A hidden subject or todo answers exactly like a missing one, for reads, writes, and any ref named in a request.
+- **One rule, applied everywhere:** in SQL (`croft_subject_visible`, applied in search, activity, labels and the live-update pulse, before any limit) and at two server choke points, plus explicit filters on every other read path.
+- **Integrity:** deleting a subject can no longer turn its todos public.
+- **Pushing to Cairn:** a todo on an unpublished subject needs `--force`.
+- **Audited:** an adversarial audit found and closed five holes before release:
+  - project delete with hidden todos, and its revealing count;
+  - an un-publish race;
+  - hidden parent or duplicate ids on lab tasks;
+  - a race in the task filter;
+  - the maintenance sweep naming holders.
+- **Documented in `SECURITY.md`:** the model, the accepted leaks (numbering gaps, file links valid up to an hour after issue, workspace-wide vocabularies), and a known limitation: an administrator can still act as a person.
+
 ## [0.3.2] — 2026-09-30
 
 ### Fixed
