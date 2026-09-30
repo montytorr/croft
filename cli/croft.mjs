@@ -3072,6 +3072,11 @@ const openclawRunsGateway = () => {
     return true // JSON5 this cannot parse: the benefit of the doubt, as the hook installer gives it
   }
   const gateway = config?.gateway ?? {}
+  // `mode: "remote"` is OpenClaw's own word for a client: this machine talks to
+  // someone else's gateway (a laptop reaching clawdius), and such a config still
+  // carries `agents` defaults. Counting it as a gateway paired a key nothing on
+  // the machine reads and linked a hook no gateway here loads (CAIRN-332).
+  if (gateway.mode === 'remote') return false
   return Boolean(gateway.mode || gateway.port || config?.agents || config?.channels)
 }
 
@@ -4868,9 +4873,21 @@ const commands = {
     if (!dry) {
       line('To undo:')
       line(`  job     node ${tilde(join(releaseDir, 'scripts', 'install-cron.mjs'))} --remove --only agent-files`)
-      line('  hooks   delete the entries naming ~/.croft/hooks in ~/.claude/settings.json, ~/.codex/hooks.json' +
-        (hookRuntimes.includes('hermes') ? ' and `hermes config get hooks`' : ''))
-      line(`  cli     rm ${tilde(join(HOME, '.local', 'bin', 'croft'))}   skill: rm -r ~/.claude/skills/croft ~/.codex/skills/croft`)
+      // Only what this run set up: listing Claude's and Codex's files to a
+      // machine that set up OpenClaw alone sends someone to edit files Croft
+      // never touched (CAIRN-332).
+      const hookHomes = {
+        'claude-code': '~/.claude/settings.json',
+        codex: '~/.codex/hooks.json',
+        openclaw: 'the OpenClaw hook linked from ~/.croft/hooks/openclaw',
+        hermes: '`hermes config get hooks`',
+      }
+      const clawdSkills = process.env.CLAWD_HOME?.trim() ? `${tilde(join(process.env.CLAWD_HOME.trim(), 'skills', 'croft'))}` : null
+      const skillHomes = { 'claude-code': '~/.claude/skills/croft', codex: '~/.codex/skills/croft', openclaw: clawdSkills }
+      const hooksAt = hookRuntimes.map((r) => hookHomes[r]).filter(Boolean)
+      const skillsAt = hookRuntimes.map((r) => skillHomes[r]).filter(Boolean)
+      if (hooksAt.length) line(`  hooks   delete the entries naming ~/.croft/hooks in ${hooksAt.join(', ')}`)
+      line(`  cli     rm ${tilde(join(HOME, '.local', 'bin', 'croft'))}${skillsAt.length ? `   skill: rm -r ${skillsAt.join(' ')}` : ''}`)
       line(`  keys    remove them from ${tilde(envPath)}, and revoke them at ${url}/settings/keys`)
     }
   },

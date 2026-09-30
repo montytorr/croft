@@ -8,6 +8,18 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+### Fixed
+
+- **A machine that is an OpenClaw client was taken for a gateway** (CAIRN-332). Setup and
+  `install-hooks.mjs` counted any `gateway.mode`, or a top-level `agents` block, as "this
+  account runs a gateway". A laptop that reaches another machine's gateway has exactly that:
+  `gateway.mode: "remote"` and `agents` defaults. So a plain `croft setup` there would pair
+  an OpenClaw key nothing reads and link a hook no gateway loads. `mode: "remote"` now means a
+  client, whatever else the file holds.
+- **The "To undo" lines name only what was set up.** They listed Claude's and Codex's files
+  on a machine that set up OpenClaw alone. They now list the hook and skill locations of the
+  runtimes this run set up, including `$CLAWD_HOME/skills/croft` for OpenClaw.
+
 ## [0.4.0] — 2026-09-30
 
 Thanks to @domnumb for proposing the shape in #4.

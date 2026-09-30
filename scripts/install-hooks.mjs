@@ -527,6 +527,11 @@ const openclawRunsGateway = () => {
     return true
   }
   const gateway = config?.gateway ?? {}
+  // `mode: "remote"` is OpenClaw's own word for a client: this machine talks to
+  // someone else's gateway (a laptop reaching clawdius), and such a config still
+  // carries `agents` defaults. Counting it as a gateway paired a key nothing on
+  // the machine reads and linked a hook no gateway here loads (CAIRN-332).
+  if (gateway.mode === 'remote') return false
   return Boolean(gateway.mode || gateway.port || config?.agents || config?.channels)
 }
 

@@ -117,6 +117,20 @@ describe('the installer links the OpenClaw briefing hook', () => {
     expect(out.stdout).toContain('--openclaw')
   })
 
+  it('skips a client of someone else\'s gateway (mode "remote"), agents defaults and all', async () => {
+    const { home, env, calls, hookDir } = await setup({ gateway: false })
+    await mkdir(join(home, '.openclaw'), { recursive: true })
+    await writeFile(join(home, '.openclaw', 'openclaw.json'), JSON.stringify({
+      gateway: { mode: 'remote', remote: { url: 'wss://gateway.example', transport: 'direct' } },
+      agents: { defaults: { model: 'x' } },
+    }))
+    const out = await run([], env)
+    expect(out.code, out.stderr).toBe(0)
+    expect(await calls()).toEqual([])
+    expect(existsSync(hookDir)).toBe(false)
+    expect(out.stdout).toContain('this account runs no gateway; skipped')
+  })
+
   it('says the same on --dry-run instead of promising a link it would not make', async () => {
     const { env, calls } = await setup({ gateway: false })
     const dry = await run(['--dry-run'], env)
