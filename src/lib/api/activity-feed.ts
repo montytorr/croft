@@ -2,12 +2,12 @@ import { admin } from '@/lib/db/client'
 
 /**
  * The unified timeline. The union and the ordering live in Postgres
- * (`activity_feed`, migration 019) because the sort has to happen before the
+ * (`activity_feed`, migrations 019 and 072) because the sort has to happen before the
  * limit — stitching five queries together in JavaScript and sorting the result
  * returns the newest rows *of each kind*, not the newest rows.
  */
 export type ActivityRow = {
-  kind: 'task' | 'event' | 'note' | 'comment' | 'session' | 'knowledge'
+  kind: 'task' | 'event' | 'note' | 'comment'
   at: string
   actor: string | null
   project_key: string | null

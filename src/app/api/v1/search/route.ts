@@ -2,10 +2,8 @@ import { z } from 'zod'
 import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { searchAll, searchTasks, type SearchAllRow, type SearchRow } from '@/lib/api/search'
-import { recordSearch } from '@/lib/api/search-events'
 import { TASK_STATUSES, TASK_TYPES } from '@/schemas/task'
 import { admin } from '@/lib/db/client'
-import { stalenessFor } from '@/lib/api/staleness'
 import { liveProjectKey } from '@/lib/api/project-keys'
 import { resolveAssignee } from '@/lib/api/people'
 
@@ -20,8 +18,7 @@ const searchQuery = z.object({
   /**
    * Which stores to search. Defaults to all of them — an agent asking whether
    * something has been debugged does not know, and should not have to guess,
-   * whether the answer was written as a task, a note, a piece of knowledge or
-   * the tail of a session.
+   * whether the answer was written as a task, a note or a subject.
    */
   kinds: z
     .string()
@@ -79,7 +76,6 @@ export const GET = route({
       if (taskPath) {
         const { rows, widened } = await searchTasks(actor.userId, q, { project, type, status, assignee }, limit)
         const results = rows.map(taskResult)
-        await recordSearch(actor, q, ['task'], rows.length, widened, results.map((r) => r.ref))
         return ok({ count: rows.length, query: q, widened, results, ...told })
       }
 
@@ -87,11 +83,6 @@ export const GET = route({
 
       const results = rows.map(unifiedResult)
       await attachConclusions(rows, results)
-      // The refs exactly as the caller was handed them, in rank order. Recorded
-      // from the mapped results rather than the raw rows so what is stored is
-      // what the agent saw — an event nobody can replay measures nothing.
-      await recordSearch(actor, q, kinds ?? null, rows.length, widened, results.map((r) => r.ref))
-      await markStaleKnowledge(actor.userId, results)
       return ok({ count: rows.length, query: q, widened, results, ...told })
     } catch (error) {
       return fail('internal_error', error instanceof Error ? error.message : 'Search failed.')
@@ -117,48 +108,6 @@ const attachConclusions = async (rows: SearchAllRow[], results: ReturnType<typeo
     result.conclusion =
       conclusion && conclusion.length > CONCLUSION_CLIP ? `${conclusion.slice(0, CONCLUSION_CLIP)}…` : conclusion
   })
-}
-
-/**
- * Marks knowledge rows whose files have moved since the fact was confirmed.
- *
- * Done here rather than in `search_all` because staleness is a judgement about
- * evidence held in another table, and burying it in the ranking SQL would make
- * it neither testable nor arguable. Mutates in place: the ordering is the
- * database's and must not be rebuilt.
- */
-const markStaleKnowledge = async (
-  userId: string,
-  results: ReturnType<typeof unifiedResult>[],
-) => {
-  const slugs = results.filter((r) => r.kind === 'knowledge').map((r) => r.ref)
-  if (slugs.length === 0) return
-
-  const { data } = await admin()
-    .from('knowledge')
-    .select('id, slug, body, verified_at, created_at, source_task_id, source_session_id, source_session_ref')
-    .in('slug', slugs)
-
-  const entries = (data ?? []) as {
-    id: string
-    slug: string
-    body: string
-    verified_at: string | null
-    created_at: string | null
-    source_task_id: string | null
-    source_session_id: string | null
-    source_session_ref: string | null
-  }[]
-  if (entries.length === 0) return
-
-  const staleness = await stalenessFor(userId, entries)
-  const bySlug = new Map(entries.map((e) => [e.slug, staleness.get(e.id)]))
-  for (const row of results) {
-    if (row.kind !== 'knowledge') continue
-    row.stale = Boolean(bySlug.get(row.ref)?.stale)
-    // Apart from `stale`: no files, so no evidence of change, only of age.
-    row.unverified_days = bySlug.get(row.ref)?.unverifiedDays ?? null
-  }
 }
 
 // Rows arrive ranked by the database. Do NOT re-sort them here: ordering by
@@ -194,19 +143,12 @@ const unifiedResult = (row: SearchAllRow) => ({
   type: row.type,
   status: row.status,
   // For a task this is a recorded resolution; for a note, that it is a finding
-  // or a decision rather than an attempt; for knowledge, that it was verified.
+  // or a decision rather than an attempt; for a subject, a recorded conclusion.
   // In every case: this row is likelier to contain an answer.
   resolved: row.answered,
   updatedAt: row.updated_at,
   loose: row.widened,
   tokens: Math.ceil(row.body_bytes / 4),
-  /**
-   * Knowledge only: the files this fact names have been reworked by several
-   * sessions since it was last confirmed. A mark, never a filter — a wrong
-   * confidence signal is worse than none, so it is the reader who decides.
-   */
-  stale: false,
-  unverified_days: null as number | null,
   // The exact-ref row only, when the ref went through a retired key.
   ...(row.renamed_from ? { requestedRef: row.requested_ref, renamedFrom: row.renamed_from } : {}),
   /**

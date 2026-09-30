@@ -2,9 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { pool } from '@/lib/db/client'
 import type { Actor } from '@/lib/api/auth'
-import { upsertSession, untouchedCheckpoint, workedCheckpoint } from '@/lib/api/sessions'
+import { untouchedCheckpoint } from '@/lib/liveness-fixtures'
 import { reconcileClaims } from '@/lib/api/reconcile'
-import { sessionUpsert } from '@/schemas/session'
 
 /**
  * CROFT-283 and CROFT-284, against a real database, because every failure
@@ -22,7 +21,6 @@ const KEY = `R${randomUUID().replaceAll('-', '').slice(0, 6).toUpperCase()}`
 const ME = 'claude-code · reaper@example.test'
 const SESSION = 'session-this'
 const WEEK = 7 * 24 * 3_600
-const HANDOFF = 'Fleet-global MEV auth cooldown implemented + 18/18 guard suite, uncommitted.'
 
 const agent = (agentName: string, sessionId: string | null = null): Actor => ({
   userId: ownerId,
@@ -94,98 +92,6 @@ afterAll(async () => {
   await pool().query('delete from projects where id = $1', [projectId])
   await pool().query('delete from app_users where id = $1', [ownerId])
   await pool().end()
-})
-
-describe('session-end auto-checkpoint (CROFT-283)', () => {
-  it('keeps real checkpoints, skips other sessions, and never counts as activity', async () => {
-    const handoffUnnamed = await insertTask({ claimedSession: null, checkpoint: HANDOFF })
-    const handoffMine = await insertTask({ claimedSession: SESSION, checkpoint: HANDOFF })
-    const empty = await insertTask({ claimedSession: null })
-    const sibling = await insertTask({ claimedSession: 'session-other' })
-    const worked = await insertTask({ claimedSession: SESSION, checkpoint: HANDOFF })
-    const before = new Map(
-      await Promise.all([empty, worked].map(async (t) => [t.id, (await row(t.id)).updated_at.getTime()] as const)),
-    )
-
-    const input = sessionUpsert.parse({
-      externalId: `reaper:${randomUUID()}`,
-      platformSource: 'claude',
-      completed: 'Shipped the reaper fix.',
-      taskRefs: [worked.ref, 'CROFT-277'],
-    })
-    const { checkpointed } = await upsertSession(agent('claude-code', SESSION), input)
-
-    expect(checkpointed.sort()).toEqual([empty.ref, worked.ref].sort())
-
-    for (const kept of [handoffUnnamed, handoffMine]) {
-      expect((await row(kept.id)).checkpoint_summary).toBe(HANDOFF)
-    }
-    expect((await row(sibling.id)).checkpoint_summary).toBeNull()
-
-    const stillHeld = await row(empty.id)
-    expect(stillHeld.checkpoint_summary).toBe(untouchedCheckpoint([worked.ref]))
-    // Neither write is an edit, and neither bumps the CAS generation a
-    // deliberate checkpoint is checked against.
-    expect(stillHeld.updated_at.getTime()).toBe(before.get(empty.id))
-    expect(stillHeld.checkpoint_version).toBe(0)
-
-    const advanced = await row(worked.id)
-    expect(advanced.checkpoint_summary).toBe(workedCheckpoint('Shipped the reaper fix.'))
-    expect(advanced.updated_at.getTime()).toBe(before.get(worked.id))
-
-    const events = await pool().query(
-      `select task_id, data->>'worked' as worked, data->>'replaced' as replaced
-         from task_activity_events where project_id = $1 and event = 'auto_checkpointed'
-        order by data->>'worked'`,
-      [projectId],
-    )
-    expect(events.rows).toEqual([
-      { task_id: empty.id, worked: 'false', replaced: null },
-      { task_id: worked.id, worked: 'true', replaced: HANDOFF },
-    ])
-
-    // Re-recording the same session writes nothing new.
-    const again = await upsertSession(agent('claude-code', SESSION), input)
-    expect(again.checkpointed).toEqual([])
-  })
-
-  it('loses to a checkpoint written after the plan was read', async () => {
-    const task = await insertTask({ claimedSession: SESSION })
-    const current = await pool().query('select ownership_version from tasks where id = $1', [task.id])
-    const won = await pool().query(
-      `select auto_checkpoint_task_atomic($1,$2,'agent',$3,$4,0,'written in between',$5,now(),'{}'::jsonb) as ok`,
-      [task.id, ownerId, ME, current.rows[0].ownership_version, untouchedCheckpoint([])],
-    )
-    expect(won.rows[0].ok).toBe(false)
-    const other = await pool().query(
-      `select auto_checkpoint_task_atomic($1,$2,'agent','codex · someone',$3,0,null,'x',now(),'{}'::jsonb) as ok`,
-      [task.id, ownerId, current.rows[0].ownership_version],
-    )
-    expect(other.rows[0].ok).toBe(false)
-  })
-
-  it('does not leak the keep-updated_at flag onto a later write in the same transaction', async () => {
-    const task = await insertTask({ claimedSession: SESSION })
-    const client = await pool().connect()
-    try {
-      await client.query('begin')
-      const version = (await client.query('select ownership_version from tasks where id = $1', [task.id]))
-        .rows[0].ownership_version
-      const ok = await client.query(
-        `select auto_checkpoint_task_atomic($1,$2,'agent',$3,$4,0,null,'held',now(),'{}'::jsonb) as ok`,
-        [task.id, ownerId, ME, version],
-      )
-      expect(ok.rows[0].ok).toBe(true)
-      await client.query(`update tasks set title = 'edited' where id = $1`, [task.id])
-      const after = await client.query(
-        `select updated_at > now() - interval '1 minute' as touched from tasks where id = $1`, [task.id],
-      )
-      expect(after.rows[0].touched).toBe(true)
-      await client.query('commit')
-    } finally {
-      client.release()
-    }
-  })
 })
 
 describe('releases (CROFT-284)', () => {

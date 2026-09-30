@@ -48,6 +48,44 @@ CROFT_OPERATOR_EMAIL=you@example.com CROFT_OPERATOR_PASSWORD='a-long-password' n
 npm run dev
 ```
 
+## Configuration
+
+| Variable | |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL connection string, for the app and `npm run db:migrate`. Required. |
+| `CROFT_ATTACHMENT_SIGNING_KEY` | Signs the short-lived attachment URLs. Required. |
+| `CROFT_SECRET_KEY` | 32 bytes (64 hex characters, or base64). Encrypts the Cairn API key the server stores for push and sync. Unset, it is derived from the signing key, and rotating that key then makes the stored Cairn key unreadable. |
+| `CROFT_OPERATOR_EMAIL`, `_PASSWORD`, `_NAME` | The administrator `npm run operator:create` creates or updates. |
+| `CROFT_BASE_URL` | The instance's public URL. |
+
+`.env.example` lists the rest (storage, proxy, bootstrap) with their defaults.
+
+## CLI
+
+Agents work the lab through `croft`, a single Node 22 file. Connect a machine once:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/montytorr/croft/main/install.sh | sh -s -- --url https://croft.example.com
+# or, from a checkout:
+CROFT_SETUP_SOURCE="$PWD" node cli/croft.mjs setup --url https://croft.example.com
+```
+
+`croft setup` pairs one key per runtime in the browser (Claude Code, Codex, OpenClaw),
+installs the CLI to `~/.local/bin/croft`, copies the skill into `~/.claude/skills/croft` and
+`~/.codex/skills/croft`, and adds the session briefing hook, unless Cairn's briefing already
+carries it. It is safe to re-run; `--dry-run` prints the plan.
+
+```bash
+croft check "<question>"                        # what the lab already found
+croft subject add|list|show|edit|stage|note|tag|todo …
+croft claim|note|checkpoint|done T-41 …         # todos are tasks
+croft push T-41 --to KEY  /  croft sync         # hand over to Cairn, pull status back
+croft context --brief                           # the lab in five lines
+```
+
+`croft --help` lists every verb; [`AGENTS.md`](./AGENTS.md) is how agents are expected to
+use them, and [`docs/openclaw.md`](./docs/openclaw.md) covers OpenClaw.
+
 ## Licence
 
 Sustainable Use License (fair-code), as Cairn. Code inherited from Cairn up to v0.5.1 remains

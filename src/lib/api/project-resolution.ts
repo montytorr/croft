@@ -4,16 +4,15 @@ import { normaliseRemote, projectKeyFromEmbed, projectKeyFromRepoRows, type Repo
 /**
  * Which project a working directory belongs to, from what the server holds.
  *
- * The caller knows its filesystem and should say — `croft context` and
- * `croft session end` send the local map's answer and the checkout's remote.
- * These are the fallbacks for when it does not, shared by the briefing and the
- * session recorder so the two cannot disagree about where a directory lives.
+ * The caller knows its filesystem and should say — `croft context` sends the
+ * local map's answer and the checkout's remote. These are the fallbacks for
+ * when it does not.
  */
 
 /**
  * Which project a repository belongs to.
  *
- * Preferred over the cwd heuristics below because it is evidence rather than
+ * Preferred over the checkout-name heuristic below because it is evidence rather than
  * inference: the remote is the same string in every clone and every worktree,
  * where a path is true of one machine only.
  */
@@ -27,29 +26,6 @@ export const projectForRepo = async (_userId: string, remote: string): Promise<s
 
   if (error) throw new Error(error.message)
   return projectKeyFromRepoRows((data ?? []) as unknown as RepoRow[])
-}
-
-/**
- * Sessions already recorded against this cwd are the best available evidence,
- * and they are self-correcting — file work under a new directory once and
- * every later session there resolves.
- *
- * Only once one of them has a project, though, and for the first months of
- * the session recorder none did: nothing ever sent a project, so this lookup
- * had nothing to find and every live session stayed unattributed (CROFT-286).
- */
-export const projectForCwd = async (_userId: string, cwd: string): Promise<string | null> => {
-  const { data, error } = await admin()
-    .from('sessions')
-    .select('project:projects(key)')
-    .eq('cwd', cwd)
-    .not('project_id', 'is', null)
-    .order('ended_at', { ascending: false, nullsFirst: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (error) throw new Error(error.message)
-  return projectKeyFromEmbed((data as RepoRow | null)?.project ?? null)
 }
 
 /**
@@ -92,7 +68,7 @@ export const projectKeyForCheckoutName = (
  * server says so.
  *
  * Inference, so it only answers when one project does. Two projects with a
- * repository called `api` leave the session unattributed, which is honest; a
+ * repository called `api` leave the directory unattributed, which is honest; a
  * guess between them would be silently wrong for months.
  */
 export const projectForCheckoutName = async (_userId: string, cwd: string): Promise<string | null> => {

@@ -1,9 +1,6 @@
 import { admin } from '@/lib/db/client'
 import type { Actor } from './auth'
-import { listKnowledge } from './knowledge'
-import { stalenessFor } from './staleness'
-import { contextForFile, type FileContext } from './files'
-import { projectForCwd, projectForRepo } from './project-resolution'
+import { projectForCheckoutName, projectForRepo } from './project-resolution'
 import { formerKeysByProject, formerRefsOf, liveProjectKey, resolveProject, type FormerKey, type KeyRename } from './project-keys'
 import { peopleByIds } from './people'
 import { TASK_PRIORITIES } from '@/schemas/task'
@@ -18,9 +15,8 @@ import { TASK_PRIORITIES } from '@/schemas/task'
  *
  * This is the opposite bet. Only things that require the reader to act or that
  * change what they would do next: what you are still holding, what is in
- * flight around you, where the last session in this directory stopped, and
- * what is known here. Titles and refs, never bodies — same contract as
- * `croft check`.
+ * flight around you, and which claims nobody is acting on. Titles and refs,
+ * never bodies — same contract as `croft check`.
  */
 
 /** Matches the claim lease in the claim route. A claim older than this is takeable. */
@@ -92,17 +88,7 @@ export type ContextPayload = {
     tasks: { ref: string; title: string; status: string; priority: string }[]
     more: number
   }
-  lastSession: {
-    endedAt: string | null
-    /** Still open and written to recently: another session is live here. */
-    ongoing: boolean
-    request: string | null
-    nextSteps: string | null
-    agent: string | null
-  } | null
-  knowledge: { slug: string; title: string; scope: string; stale: boolean }[]
   staleClaims: { ref: string; title: string; claimedBy: string; heldFor: string }[]
-  file?: FileContext
 }
 
 const TASK_SELECT =
@@ -158,35 +144,6 @@ type OwnedRow = TaskRow & { priority: string; assignee_user_id: string | null }
 
 const refOf = (t: TaskRow) => `${t.project.key}-${t.number}`
 
-/**
- * Wide enough that finished sessions re-posted late (a retried summary bumps
- * updated_at but not ended_at) cannot crowd out the one that is really latest.
- */
-const LAST_SESSION_CANDIDATES = 20
-
-/**
- * An open session nobody has written to for this long is not live: it was
- * left without a close event (a killed terminal, a crash), and saying another
- * session is running here would be false.
- */
-const LIVE_WINDOW_MS = 2 * 60 * 60 * 1000
-
-type SessionActivity = {
-  ended_at: string | null
-  updated_at: string
-  request: string | null
-  next_steps: string | null
-  agent_id: string | null
-}
-
-const lastActive = (s: SessionActivity) => Date.parse(s.ended_at ?? s.updated_at)
-
-export const latestByActivity = <T extends SessionActivity>(rows: T[]): T[] =>
-  [...rows].sort((a, b) => lastActive(b) - lastActive(a))
-
-export const isLive = (s: SessionActivity, now: number) =>
-  s.ended_at === null && now - Date.parse(s.updated_at) < LIVE_WINDOW_MS
-
 const priorityRank = (priority: string) => {
   const index = (TASK_PRIORITIES as readonly string[]).indexOf(priority)
   return index === -1 ? TASK_PRIORITIES.length : index
@@ -202,7 +159,7 @@ const humanDuration = (fromIso: string | null): string => {
 
 export const buildContext = async (
   actor: Actor,
-  input: { cwd?: string; project?: string; file?: string; repo?: string; scope?: 'all' | 'project' },
+  input: { cwd?: string; project?: string; repo?: string; scope?: 'all' | 'project' },
 ): Promise<ContextPayload> => {
   // A key given explicitly may be one the project no longer has — every
   // checkout mapped before a rename sends it — so it is resolved to the live
@@ -217,7 +174,7 @@ export const buildContext = async (
   const project =
     asked?.key ??
     (input.repo ? await projectForRepo(actor.userId, input.repo) : null) ??
-    (input.cwd ? await projectForCwd(actor.userId, input.cwd) : null)
+    (input.cwd ? await projectForCheckoutName(actor.userId, input.cwd) : null)
   const scopedProject = input.scope === 'project' ? project : null
   if (input.scope === 'project' && !scopedProject) throw new ContextScopeError()
 
@@ -335,75 +292,6 @@ export const buildContext = async (
     }
   }
 
-  // --- where the last session here stopped ------------------------------
-  // The latest by activity, open sessions included (CROFT-320). Ordered by
-  // ended_at alone, an open session — no end yet — ranked below every finished
-  // one, so the briefing showed an older session instead of the one in
-  // progress. updated_at picks the candidates; a finished row re-posted late
-  // (a retried summary) still ranks by when it ended.
-  let lastSession: ContextPayload['lastSession'] = null
-  if (input.cwd || project) {
-    let query = admin()
-      .from('sessions')
-      .select('ended_at, updated_at, request, next_steps, agent_id, cwd, project_id' +
-        (scopedProject ? ', project:projects!project_id!inner(key)' : ''))
-      .order('updated_at', { ascending: false })
-      .limit(LAST_SESSION_CANDIDATES)
-
-    query = input.cwd ? query.eq('cwd', input.cwd) : query
-    if (scopedProject) query = query.eq('projects.key', scopedProject)
-
-    const { data: rows, error } = await query
-    if (error) throw new Error(error.message)
-    const [data] = latestByActivity((rows ?? []) as unknown as SessionActivity[])
-    if (data) {
-      lastSession = {
-        endedAt: data.ended_at,
-        ongoing: isLive(data, Date.now()),
-        request: data.request as string | null,
-        nextSteps: data.next_steps as string | null,
-        agent: data.agent_id as string | null,
-      }
-    }
-  }
-
-  // --- what is known here, plus what is known everywhere ----------------
-  const rows = await listKnowledge(actor.userId, { project: project ?? undefined, limit: 12 })
-  // Marked where it is read. A fact whose files several sessions have reworked
-  // since it was confirmed still reads exactly like one confirmed this morning,
-  // which is how half a dozen Supabase entries outlived the stack they described.
-  const aged = await stalenessFor(
-    actor.userId,
-    rows.map((r) => ({
-      id: r.id,
-      body: r.body ?? '',
-      verified_at: r.verified_at,
-      created_at: r.created_at,
-      source_task_id: r.source_task_id,
-      source_session_id: r.source_session_id,
-      source_session_ref: r.source_session_ref ?? null,
-    })),
-  )
-  const knowledge = rows.map((r) => ({
-    slug: r.slug,
-    title: r.title,
-    // Derived from `r.scope`, which `listKnowledge` already worked out
-    // relative to the project asked for. Reading `r.projects` alone said
-    // `global` for every entity-scoped fact — telling the next agent that a
-    // fact true of one business is true everywhere, which is the failure
-    // entities were introduced to end. Keeping the keys rather than printing
-    // the bare tier, because the entity's own name is what a reader can act
-    // on and "entity" is not.
-    scope:
-      r.scope === 'entity'
-        ? (r.entities ?? []).join(',') || 'entity'
-        : (r.projects ?? []).length === 0
-          ? 'global'
-          : (r.projects ?? []).join(','),
-    stale: Boolean(aged.get(r.id)?.stale),
-    unverified_days: aged.get(r.id)?.unverifiedDays ?? null,
-  }))
-
   // --- claims nobody is acting on ---------------------------------------
   const cutoff = new Date(Date.now() - LEASE_MINUTES * 60_000).toISOString()
   let staleQuery = admin()
@@ -424,18 +312,13 @@ export const buildContext = async (
     heldFor: humanDuration(row.claimed_at),
   }))
 
-  const file = input.file ? await contextForFile(actor.userId, input.file) : undefined
-
   return {
     project,
     ...(asked?.renamed ? { projectRenamed: asked.renamed } : {}),
     held,
     inFlight,
     unattended,
-    lastSession,
-    knowledge,
     staleClaims,
-    file,
   }
 }
 

@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { createServer, type Server } from 'node:http'
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { spawn } from 'node:child_process'
 
 /**
@@ -420,5 +420,53 @@ describe('croft setup — CROFT_SETUP_SOURCE', () => {
     expect(existsSync(join(HOME, '.claude', 'skills', 'croft', 'SKILL.md'))).toBe(true)
     // No release was fetched from GitHub or cached under ~/.croft/releases.
     expect(existsSync(join(HOME, '.croft', 'releases'))).toBe(false)
+  })
+
+  it('copies the skill for each runtime and wires hooks around Cairn, the same on a second run', async () => {
+    const base = await serve({
+      status: 'approved',
+      keys: [{ agentName: 'claude-code', key: 'sk_valid' }, { agentName: 'codex', key: 'sk_valid' }],
+    })
+    const HOME = await home()
+    await mkdir(join(HOME, '.claude'), { recursive: true })
+    await mkdir(join(HOME, '.codex'), { recursive: true })
+    const cairn = { type: 'command', command: 'node /h/.cairn/hooks/cairn-context.mjs', 'cairn-memory': true, timeout: 10 }
+    const guard = { matcher: 'Bash', hooks: [{ type: 'command', command: '/guard.sh' }] }
+    await writeFile(
+      join(HOME, '.claude', 'settings.json'),
+      JSON.stringify({ model: 'opus', hooks: { SessionStart: [{ matcher: 'startup', hooks: [cairn] }], PreToolUse: [guard] } }),
+    )
+    const quarry = { hooks: [{ type: 'command', command: 'node /x/quarry-stop.mjs' }] }
+    await writeFile(join(HOME, '.codex', 'hooks.json'), JSON.stringify({ hooks: { Stop: [quarry] } }))
+    const sandbox = { PATH: `${dirname(process.execPath)}:/usr/bin:/bin`, CROFT_OPENCLAW_BIN: 'openclaw-not-installed' }
+    const args = ['setup', '--url', base, '--runtimes', 'claude-code,codex', '--no-jobs']
+
+    const first = await run(args, HOME, sandbox)
+    expect(first.code, first.stderr).toBe(0)
+    for (const runtime of ['.claude', '.codex']) {
+      expect(await readFile(join(HOME, runtime, 'skills', 'croft', 'SKILL.md'), 'utf8')).toBe(
+        await readFile(join(REPO, 'skills', 'croft', 'SKILL.md'), 'utf8'),
+      )
+    }
+    expect(first.stdout).toContain('claude: briefing: carried by Cairn')
+    const claude = JSON.parse(await readFile(join(HOME, '.claude', 'settings.json'), 'utf8'))
+    expect(claude).toEqual({ model: 'opus', hooks: { SessionStart: [{ matcher: 'startup', hooks: [cairn] }], PreToolUse: [guard] } })
+    const codex = JSON.parse(await readFile(join(HOME, '.codex', 'hooks.json'), 'utf8'))
+    expect(codex.hooks.Stop).toEqual([quarry])
+    expect(codex.hooks.SessionStart).toEqual([
+      {
+        matcher: 'startup|resume|clear',
+        hooks: [expect.objectContaining({ command: expect.stringMatching(/croft-context\.mjs$/), 'croft-memory': true })],
+      },
+    ])
+
+    const files = async () =>
+      Promise.all(['.claude/settings.json', '.codex/hooks.json'].map((f) => readFile(join(HOME, f), 'utf8')))
+    const written = await files()
+    const second = await run(args, HOME, sandbox)
+    expect(second.code, second.stderr).toBe(0)
+    expect(second.stdout).toContain('skill     ~/.claude/skills/croft, ~/.codex/skills/croft — unchanged')
+    // Byte for byte: Codex re-asks trust for any entry whose hash moves.
+    expect(await files()).toEqual(written)
   })
 })

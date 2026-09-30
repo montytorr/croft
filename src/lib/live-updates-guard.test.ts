@@ -92,4 +92,18 @@ describe('pages stay current', () => {
     expect(migration).toMatch(/create trigger tags_touch\s+before update on tags/)
     expect(migration).toMatch(/after insert or delete on subject_tags/)
   })
+
+  it('keeps every lab store in the pulse when 072 drops sessions and knowledge', () => {
+    const migration = readFileSync(join(process.cwd(), 'migrations/072_drop_memory.sql'), 'utf8')
+    const start = migration.indexOf('create or replace function croft_pulse')
+    const pulse = migration.slice(start, migration.indexOf('$$;', start))
+    for (const store of ['tasks', 'task_activity_events', 'subjects', 'subject_notes', 'subject_stages', 'tags', 'subject_tags']) {
+      expect(pulse, `the pulse ignores ${store}`).toMatch(new RegExp(`from ${store}\\b`))
+    }
+    for (const gone of ['sessions', 'knowledge']) {
+      expect(pulse, `the pulse still reads ${gone}`).not.toMatch(new RegExp(`from ${gone}\\b`))
+    }
+    // Redefined before the tables it no longer reads are dropped.
+    expect(start).toBeLessThan(migration.indexOf('drop table if exists sessions'))
+  })
 })

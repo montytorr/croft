@@ -4,7 +4,6 @@ import { join } from 'node:path'
 import { Client } from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { pool } from '@/lib/db/client'
-import { createKnowledge, updateKnowledge } from '@/lib/api/knowledge'
 
 const databaseUrl = process.env.DATABASE_URL
 if (!databaseUrl) throw new Error('DATABASE_URL is required for integration tests')
@@ -94,26 +93,6 @@ describe('shared workspace task lifecycle', () => {
       `insert into projects (owner_user_id, key, title) values ($1, 'INT', 'Duplicate')`,
       [memberId],
     )).rejects.toMatchObject({ code: '23505' })
-
-    await pool().query(
-      `insert into entities (owner_user_id, key, title) values ($1, 'shared-entity', 'Shared entity')`,
-      [ownerId],
-    )
-    await expect(pool().query(
-      `insert into entities (owner_user_id, key, title) values ($1, 'shared-entity', 'Duplicate')`,
-      [memberId],
-    )).rejects.toMatchObject({ code: '23505' })
-
-    await pool().query(
-      `insert into knowledge (owner_user_id, slug, title, body, actor_type, actor_id)
-       values ($1, 'shared-fact', 'Shared fact', 'body', 'human', 'Owner')`,
-      [ownerId],
-    )
-    await expect(pool().query(
-      `insert into knowledge (owner_user_id, slug, title, body, actor_type, actor_id)
-       values ($1, 'shared-fact', 'Duplicate', 'body', 'human', 'Member')`,
-      [memberId],
-    )).rejects.toMatchObject({ code: '23505' })
   })
 })
 
@@ -135,9 +114,6 @@ describe('shared workspace RPCs', () => {
       [memberId],
     )
     expect(activity.rows.some((row) => row.actor === 'Codex · Member')).toBe(true)
-
-    const vitals = await pool().query(`select croft_vitals($1, 24) as value`, [memberId])
-    expect(Number(vitals.rows[0].value.tasks.opened)).toBeGreaterThanOrEqual(2)
   })
 
   it('removes owner predicates from every compatibility RPC definition', async () => {
@@ -148,9 +124,6 @@ describe('shared workspace RPCs', () => {
       'list_labels',
       'rename_label',
       'croft_pulse',
-      'croft_work_shape',
-      'croft_memory_use',
-      'croft_vitals',
     ]
     const definitions = await pool().query<{ proname: string; definition: string }>(
       `select p.proname, pg_get_functiondef(p.oid) as definition
@@ -242,82 +215,6 @@ describe('ownership generations and checkpoint ordering', () => {
       [taskId, ownerId, before.rows[0].ownership_version, before.rows[0].heartbeat_at, before.rows[0].updated_at],
     )
     expect(result.rows[0].released).toBe(false)
-  })
-})
-
-describe('atomic knowledge writes', () => {
-  it('rolls back the knowledge row when relationship insertion fails', async () => {
-    await pool().query(`
-      create or replace function fail_integrity_link() returns trigger language plpgsql as $$
-      begin raise exception 'fault injected'; end $$;
-      create trigger fail_integrity_link before insert on knowledge_projects
-      for each row execute function fail_integrity_link();
-    `)
-    try {
-      await expect(createKnowledge(
-        {
-          userId: ownerId,
-          actorType: 'agent',
-          actorId: 'integration-agent',
-          userDisplayName: 'Integration User',
-          role: 'admin',
-          rateKey: 'test',
-  sessionId: null,
-        },
-        {
-          title: 'Atomic knowledge sentinel',
-          body: 'must roll back',
-          labels: [],
-          projects: ['INT'],
-          entities: [],
-          verified: false,
-        },
-      )).rejects.toThrow('fault injected')
-      const row = await pool().query(`select id from knowledge where slug = 'atomic-knowledge-sentinel'`)
-      expect(row.rowCount).toBe(0)
-    } finally {
-      await pool().query('drop trigger if exists fail_integrity_link on knowledge_projects')
-      await pool().query('drop function if exists fail_integrity_link()')
-    }
-  })
-
-  it('rolls back body updates when relationship replacement fails', async () => {
-    const actor = {
-      userId: ownerId,
-      actorType: 'agent' as const,
-      actorId: 'integration-agent',
-      userDisplayName: 'Integration User',
-      role: 'admin' as const,
-      rateKey: 'test',
-  sessionId: null,
-    }
-    const created = await createKnowledge(actor, {
-      title: 'Atomic update sentinel',
-      body: 'before',
-      labels: [],
-      projects: [],
-      entities: [],
-      verified: false,
-    })
-    if (!created) throw new Error('knowledge creation returned no row')
-    await pool().query(`
-      create or replace function fail_integrity_link() returns trigger language plpgsql as $$
-      begin raise exception 'fault injected'; end $$;
-      create trigger fail_integrity_link before insert on knowledge_projects
-      for each row execute function fail_integrity_link();
-    `)
-    try {
-      await expect(updateKnowledge(actor, created.slug, {
-        body: 'after',
-        projects: ['INT'],
-      })).rejects.toThrow('fault injected')
-      const row = await pool().query('select body from knowledge where id = $1', [created.id])
-      expect(row.rows[0].body).toBe('before')
-    } finally {
-      await pool().query('drop trigger if exists fail_integrity_link on knowledge_projects')
-      await pool().query('drop function if exists fail_integrity_link()')
-      await pool().query('delete from knowledge where id = $1', [created.id])
-    }
   })
 })
 
@@ -449,7 +346,9 @@ describe('N-1 migration compatibility', () => {
         [search, user],
       )
 
-      for (const file of files.filter((name) => name >= '046_')) {
+      // Up to the last migration that still had the memory tables, so their
+      // attribution is checked before 072 drops them.
+      for (const file of files.filter((name) => name >= '046_' && name < '072_')) {
         await client.query(await readFile(join(process.cwd(), 'migrations', file), 'utf8'))
       }
 
@@ -481,6 +380,23 @@ describe('N-1 migration compatibility', () => {
         .toBe(agent)
       expect((await client.query('select actor_id from search_events where id = $1', [search])).rows[0].actor_id)
         .toBe(agent)
+
+      // 072 drops the memory stores on a database that holds rows in them, and
+      // what the lab still reads survives it.
+      for (const file of files.filter((name) => name >= '072_')) {
+        await client.query(await readFile(join(process.cwd(), 'migrations', file), 'utf8'))
+      }
+      const left = await client.query<{ name: string }>(
+        `select table_name as name from information_schema.tables
+          where table_schema = 'public'
+            and table_name in ('knowledge', 'sessions', 'search_events', 'entities', 'file_touches')`,
+      )
+      expect(left.rows).toEqual([])
+      expect((await client.query('select actor_id from task_notes where id = $1', [note])).rows[0].actor_id)
+        .toBe(agent)
+      expect((await client.query(`select count(*)::int as n from activity_feed($1, null, 50, null, null, null)`, [user]))
+        .rows[0].n).toBeGreaterThan(0)
+      expect((await client.query(`select croft_pulse(null) as p`)).rows[0].p).toEqual(expect.any(String))
 
       const member = randomUUID()
       await client.query(

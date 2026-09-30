@@ -25,7 +25,7 @@ describe('openapi spec', () => {
       '/tasks/{ref}/release', '/tasks/{ref}/notes', '/tasks/{ref}/comments',
       '/tasks/{ref}/attachments', '/attachments/{id}',
       '/tasks/{ref}/dependencies', '/projects/{id}', '/tasks/{ref}/activity', '/tasks/{ref}/children', '/labels',
-      '/knowledge/gaps',
+      '/context', '/next', '/reconcile', '/subjects', '/subjects/brief',
     ]) {
       expect(paths).toContain(p)
     }

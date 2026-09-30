@@ -6,7 +6,7 @@ import { liveProjectKey } from '@/lib/api/project-keys'
 
 export const dynamic = 'force-dynamic'
 
-const ACTIVITY_KINDS = ['task', 'event', 'note', 'comment', 'session', 'knowledge'] as const
+const ACTIVITY_KINDS = ['task', 'event', 'note', 'comment'] as const
 
 const query = z.object({
   before: z.string().datetime().optional(),

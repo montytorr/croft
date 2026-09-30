@@ -332,7 +332,7 @@ const rankTasks = async (
 }
 
 /**
- * The unified index: tasks, work-log notes, knowledge and sessions.
+ * The unified index: tasks, work-log notes and subjects.
  *
  * `search_tasks` above is kept because the UI and the duplicate probe both
  * want tasks and only tasks. This is what `croft check` calls, because the
@@ -341,7 +341,7 @@ const rankTasks = async (
  * exist, a work-log note, was the one table nothing searched.
  */
 export type SearchAllRow = {
-  kind: 'task' | 'note' | 'knowledge' | 'session' | 'subject'
+  kind: 'task' | 'note' | 'subject'
   id: string
   ref: string
   title: string
@@ -427,10 +427,8 @@ export const searchAll = async (
    *
    * "Any row was loose" stopped meaning anything the moment 055 made both arms
    * run: nearly every search returns some loose row, and a flag that is almost
-   * always true would have quietly turned the widening rate on the Vitals page
-   * — whose own caption is "a search that widened is one the precise question
-   * could not answer" — into a constant, and `croft check`'s "treat this
-   * subject as new" warning into noise printed over correct answers.
+   * always true would have turned `croft check`'s "treat this subject as new"
+   * warning into noise printed over correct answers.
    *
    * What the flag is for is unchanged, so it is derived from the thing that
    * still carries that meaning: NOTHING cleared the precise arm. Zero rows is

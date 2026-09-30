@@ -16,9 +16,24 @@
  *   3. Stay small. The CLI's --brief prints five lines at most.
  */
 import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { delimiter, join } from 'node:path'
 
 const TIMEOUT_MS = Number(process.env.CROFT_HOOK_TIMEOUT_MS ?? 3000)
-const CLI = process.env.CROFT_CLI ?? 'croft'
+
+/**
+ * `croft setup` installs the CLI to ~/.local/bin, and a runtime launched from
+ * a dock or an IDE often has no PATH entry for it. A PATH miss looks exactly
+ * like "nothing to say", so the hook would go quiet for good without a word.
+ */
+const cli = () => {
+  if (process.env.CROFT_CLI) return process.env.CROFT_CLI
+  if ((process.env.PATH ?? '').split(delimiter).some((dir) => dir && existsSync(join(dir, 'croft')))) return 'croft'
+  const local = join(homedir(), '.local', 'bin', 'croft')
+  return existsSync(local) ? local : 'croft'
+}
+const CLI = cli()
 
 /**
  * A summariser run (Cairn's, Quarry's, ours or any agent-memory tool's) is a

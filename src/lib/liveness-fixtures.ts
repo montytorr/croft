@@ -1,19 +1,29 @@
 import { AUTO_CHECKPOINT_MARKER, UNTOUCHED_CHECKPOINT_PREFIX } from './checkpoint-origin'
 
 /**
- * One set of cases for the two places that decide whether a claim is alive.
- *
- * The reaper decides in TypeScript (`lastSignOfLife`, src/lib/api/reconcile.ts)
- * and vitals decides in SQL (`task_genuine_activity_at`, migration 065). If
- * they disagreed, vitals would alarm `reaper-idle` about claims the reaper
- * rightly keeps, or say nothing about claims it is about to release. So each
- * case states the answer once, and both suites must produce it:
- * src/lib/liveness-fixtures.test.ts through lastSignOfLife, and
- * tests/integration/vitals-signals.test.ts through the SQL function.
+ * The cases that decide whether a claim is alive, run through the reaper's
+ * `lastSignOfLife` (src/lib/api/reconcile.ts) by src/lib/liveness-fixtures.test.ts.
  *
  * Times are hours before "now"; null is absent. `expectedHoursAgo` is the
  * last sign of life.
  */
+
+/**
+ * The text the retired session-end hook wrote onto held tasks. Nothing writes
+ * it any more, but rows already carry it and the reaper must keep reading the
+ * "still held" kind as no sign of life.
+ */
+export const workedCheckpoint = (summary: string) => `${summary}\n\n${AUTO_CHECKPOINT_MARKER}`
+
+export const untouchedCheckpoint = (taskRefs: string[]) => {
+  const elsewhere = taskRefs.slice(0, 5).join(', ')
+  return (
+    `${UNTOUCHED_CHECKPOINT_PREFIX}: the session that held this claim worked` +
+    (elsewhere ? ` on ${elsewhere}` : ' elsewhere') +
+    `.\n\n${AUTO_CHECKPOINT_MARKER}`
+  )
+}
+
 /** The claim's holder in every case; any other actor is not the holder. */
 export const HOLDER = 'openclaw · Dev'
 
@@ -31,8 +41,8 @@ export type LivenessCase = {
   expectedHoursAgo: number
 }
 
-const untouched = `${UNTOUCHED_CHECKPOINT_PREFIX}: the session that held this claim worked on CROFT-277.\n\n${AUTO_CHECKPOINT_MARKER}`
-const worked = `Shipped the handler.\n\n${AUTO_CHECKPOINT_MARKER}`
+const untouched = untouchedCheckpoint(['CROFT-277'])
+const worked = workedCheckpoint('Shipped the handler.')
 
 const base = {
   claimedHoursAgo: 168,

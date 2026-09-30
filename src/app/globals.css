@@ -871,6 +871,47 @@
 .prose-editor .ProseMirror hr { border: 0; height: 1px; background: var(--border); margin: 1.5em 0; }
 .prose-editor .ProseMirror a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
 .prose-editor .ProseMirror img { max-width: 100%; border-radius: 8px; border: 1px solid var(--border); }
+/* Tables, drawn as MarkdownView draws them (the table/th/td entries in
+   components/markdown.tsx), so the edit and the preview beside it agree.
+   Tiptap wraps the table in .tableWrapper, which scrolls on its own like the
+   rendered view's container. */
+.prose-editor .ProseMirror .tableWrapper {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.prose-editor .ProseMirror table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78125rem;
+  font-variant-numeric: tabular-nums;
+}
+.prose-editor .ProseMirror th,
+.prose-editor .ProseMirror td {
+  position: relative;
+  padding: 0.375rem 0.625rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+}
+.prose-editor .ProseMirror th {
+  background: var(--surface-raised);
+  color: var(--fg-muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  border-bottom-color: var(--border);
+}
+.prose-editor .ProseMirror tr:last-child > td { border-bottom: 0; }
+.prose-editor .ProseMirror :is(th, td) > p { margin: 0; }
+.prose-editor .ProseMirror :is(th, td) > * + * { margin-top: 0.4em; }
+.prose-editor .ProseMirror .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--accent-subtle);
+  opacity: 0.6;
+}
 .prose-editor .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   color: var(--fg-subtle);

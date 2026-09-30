@@ -122,7 +122,6 @@ describe('a rename is told, not only resolved', () => {
   it.each([
     'src/app/api/v1/search/route.ts',
     'src/app/api/v1/activity/route.ts',
-    'src/app/api/v1/knowledge/route.ts',
     'src/app/api/v1/events/route.ts',
     'src/lib/api/context.ts',
   ])('%s normalises a --project filter to the live key', (path) => {

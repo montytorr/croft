@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { normalizeDatabaseValue, pool } from '@/lib/db/client'
+import { openSecret, sealSecret, SecretUnreadableError } from '@/lib/secret-box'
 import type { CairnConnection } from '@/lib/lab/types'
 import type { Actor } from './auth'
 import { isTerminal, RESOLUTION_KINDS, type TaskStatus } from '@/schemas/task'
@@ -16,15 +17,47 @@ import { closeTask } from './tasks'
  * work it spun off ended without anyone copying it across.
  */
 
-type ConnectionRow = { url: string | null; api_key: string | null; last_synced_at: string | null }
+/**
+ * `api_key` is sealed (src/lib/secret-box.ts). `api_key_plaintext` marks a key
+ * stored before 073, which is read once as it is and sealed on the spot.
+ */
+type ConnectionRow = {
+  url: string | null
+  api_key: string | null
+  api_key_plaintext: boolean
+  last_synced_at: string | null
+}
+
+/** The associated data every sealed Cairn key is bound to. */
+const KEY_PURPOSE = 'cairn_connection.api_key'
 
 const readConnection = async (): Promise<ConnectionRow | null> => {
-  const result = await pool().query('select url, api_key, last_synced_at from cairn_connection where id')
+  const result = await pool().query(
+    'select url, api_key, api_key_plaintext, last_synced_at from cairn_connection where id',
+  )
   return (normalizeDatabaseValue(result.rows) as ConnectionRow[])[0] ?? null
 }
 
+/**
+ * The key, in the clear, for presenting to Cairn. A legacy plaintext key is
+ * sealed in place the first time it is read; the update is conditional on the
+ * row still holding that plaintext, so a key saved meanwhile is not undone.
+ */
+const cairnKey = async (row: ConnectionRow): Promise<string | null> => {
+  if (!row.api_key) return null
+  if (!row.api_key_plaintext) return openSecret(row.api_key, KEY_PURPOSE)
+  await pool().query(
+    `update cairn_connection set api_key = $1, api_key_plaintext = false
+      where id and api_key_plaintext and api_key = $2`,
+    [sealSecret(row.api_key, KEY_PURPOSE), row.api_key],
+  )
+  return row.api_key
+}
+
 /** What anyone may be told about the connection. Never the key. */
-export const describeConnection = (row: ConnectionRow | null): CairnConnection => ({
+export const describeConnection = (
+  row: Pick<ConnectionRow, 'url' | 'api_key' | 'last_synced_at'> | null,
+): CairnConnection => ({
   url: row?.url ?? null,
   key_set: Boolean(row?.api_key),
   last_synced_at: row?.last_synced_at ?? null,
@@ -41,17 +74,23 @@ export const saveCairnConnection = async (
   input: { url: string | null; apiKey?: string | null },
 ): Promise<CairnConnection> => {
   const keepKey = input.apiKey === undefined
+  const sealed = input.apiKey ? sealSecret(input.apiKey, KEY_PURPOSE) : null
   await pool().query(
-    `insert into cairn_connection (id, url, api_key, updated_at, updated_by)
-     values (true, $1, $2, now(), $3)
+    `insert into cairn_connection (id, url, api_key, api_key_plaintext, updated_at, updated_by)
+     values (true, $1, $2, false, now(), $3)
      on conflict (id) do update set
-       url        = excluded.url,
-       api_key    = case when $4 then cairn_connection.api_key else excluded.api_key end,
-       updated_at = now(),
-       updated_by = excluded.updated_by`,
-    [input.url, keepKey ? null : input.apiKey, actor.userId, keepKey],
+       url               = excluded.url,
+       api_key           = case when $4 then cairn_connection.api_key else excluded.api_key end,
+       api_key_plaintext = case when $4 then cairn_connection.api_key_plaintext else false end,
+       updated_at        = now(),
+       updated_by        = excluded.updated_by`,
+    [input.url, sealed, actor.userId, keepKey],
   )
-  return getCairnConnection()
+  // A kept key from before 073 is sealed on this write rather than left in
+  // the clear until the next sync happens to read it.
+  const saved = await readConnection()
+  if (saved?.api_key_plaintext) await cairnKey(saved)
+  return describeConnection(saved)
 }
 
 export const TERMINAL_CAIRN_STATUSES = ['done', 'cancelled'] as const
@@ -206,11 +245,18 @@ const inBatches = async <T>(items: T[], size: number, run: (item: T) => Promise<
 export const syncCairn = async (
   actor: Actor,
   fetcher: typeof fetch = fetch,
-): Promise<{ ok: true; report: SyncReport } | { ok: false; reason: 'not_connected' }> => {
+): Promise<{ ok: true; report: SyncReport } | { ok: false; reason: 'not_connected' | 'key_unreadable' }> => {
   const connection = await readConnection()
   if (!connection?.url || !connection.api_key) return { ok: false, reason: 'not_connected' }
   const base = connection.url.replace(/\/+$/, '')
-  const key = connection.api_key
+  let key: string | null
+  try {
+    key = await cairnKey(connection)
+  } catch (error) {
+    if (error instanceof SecretUnreadableError) return { ok: false, reason: 'key_unreadable' }
+    throw error
+  }
+  if (!key) return { ok: false, reason: 'not_connected' }
 
   const linked = normalizeDatabaseValue(
     (

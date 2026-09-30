@@ -118,8 +118,7 @@ export const lastSignOfLife = (
  * `ignored` is listed so the decision is explicit rather than implied by
  * omission: an automatic checkpoint is written without anyone looking, and a
  * claim or release is ownership bookkeeping (the claim's own time is already
- * `claimed_at`). Mirrored in SQL by task_genuine_activity_at — keep both in
- * step.
+ * `claimed_at`).
  */
 export const CLAIM_EVIDENCE_EVENTS = {
   genuine: ['git_commit', 'git_push', 'run_result', 'checkpointed', 'status_changed'],

@@ -22,7 +22,7 @@ import { groupActivity, type ActivityGroup } from '@/lib/activity-grouping'
  * grey they were six versions of "something happened".
  *
  * `GitCommitHorizontal` is the timeline glyph for a thing that occurred at a
- * point; `PenLine` is someone writing as they work; `Terminal` is a session.
+ * point; `PenLine` is someone writing as they work.
  * Each keeps a fixed colour, which is what makes the column sortable by eye.
  */
 type KindMeta = { label: string; Icon: typeof ListTodo; color: string }
@@ -41,10 +41,8 @@ const kindOf = (kind: string): KindMeta => KIND[kind] ?? KIND.event!
 
 /** Where a row leads: a subject to its page, anything on a todo to the todo. */
 export const hrefFor = (row: ActivityRow): string | null => {
-  const kind: string = row.kind
   const subject = /^S-(\d+)$/.exec(row.ref)
   if (subject) return `/subjects/${subject[1]}`
-  if (kind === 'session' || kind === 'knowledge') return null
   const [key, number] = row.ref.split('-')
   if (key && number) return `/projects/${key}/tasks/${number}`
   // An event about the project itself — renamed, re-keyed, archived — carries

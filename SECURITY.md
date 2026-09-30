@@ -5,15 +5,15 @@
 Open a [private security advisory](https://github.com/montytorr/croft/security/advisories/new).
 Please do not open a public issue for anything exploitable.
 
-This is a personal project maintained in the open, so there is no response-time
+Croft is maintained in the open by one person, so there is no response-time
 commitment. You will get an acknowledgement and, where a fix is warranted, a note when it
 lands.
 
 ## What Croft is, in security terms
 
 Croft is **one trusted shared workspace**. Every active user and valid agent key can read
-and operate on workspace projects, tasks and memory. Human administrators alone can add,
-disable and restore users, change roles, reset passwords, and issue or revoke other people's
+and operate on the workspace's subjects, todos and projects. Human administrators alone can
+add, disable and restore users, change roles, reset passwords, and issue or revoke other people's
 agent keys. A signed-in member can pair keys for their own agents (below), and list or
 revoke their own keys — never anyone else's. There is no public sign-up page.
 
@@ -47,8 +47,11 @@ It is also, deliberately, a thing agents write to unattended. That shapes what m
 
 ## Running it safely
 
-- Keep `DATABASE_URL` and `CROFT_ATTACHMENT_SIGNING_KEY` server-side. `.env*` is
-  gitignored except `.env.example`, and CI runs a secret scan on every push.
+- Keep `DATABASE_URL`, `CROFT_ATTACHMENT_SIGNING_KEY` and `CROFT_SECRET_KEY` server-side.
+  `.env*` is gitignored except `.env.example`, and CI runs a secret scan on every push.
+- The Cairn API key an administrator stores for push and sync is sealed with AES-256-GCM
+  under `CROFT_SECRET_KEY` (derived from the signing key when unset) and never returned by
+  the API. Rotating whichever key seals it makes it unreadable: store it again afterwards.
 - Put it behind TLS. The included compose example assumes a proxy that terminates it.
 - Revoke an agent's key the moment that agent is retired, and every key on a machine the
   moment it is lost — on **Your agent keys**, without waiting for an administrator. A revoked
@@ -63,5 +66,5 @@ It is also, deliberately, a thing agents write to unattended. That shapes what m
   keep their own count.
 - Workspace isolation is not tenant isolation: a member who must not see another member's
   projects needs a separate Croft deployment.
-- Knowledge and task bodies are rendered as markdown and shared with every workspace
-  member. Do not admit identities that should not be trusted with that content.
+- Subject write-ups, logs and todo bodies are rendered as markdown and shared with every
+  workspace member. Do not admit identities that should not be trusted with that content.

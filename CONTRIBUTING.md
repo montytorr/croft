@@ -1,17 +1,17 @@
 # Contributing
 
-Croft is a personal tool published in the open. Issues and PRs are welcome; the
-maintainer's own use is what drives the roadmap, so a feature may be declined simply
-because it is not needed here.
+Croft is a lab board forked from [Cairn](https://github.com/montytorr/cairn) and maintained
+in the open. Issues and PRs are welcome; the maintainer's own use is what drives the
+roadmap, so a feature may be declined simply because it is not needed here.
 
 ## Running it
 
-See [`README.md`](./README.md#self-hosting). You need Node 22+, Docker and PostgreSQL 17+.
+See [`README.md`](./README.md#running-it-locally). You need Node 22+ and PostgreSQL 17+.
 
-Croft used to run on Supabase and no longer does — the runtime moved to the native
-PostgreSQL driver, and `migrations/` used to be `supabase/migrations/`. If you find a
-reference to Supabase that reads as a requirement rather than as history, it is stale and
-a PR fixing it is welcome.
+The code Croft inherited from Cairn once ran on Supabase, and no longer does — the runtime
+moved to the native PostgreSQL driver, and `migrations/` used to be `supabase/migrations/`.
+A reference to Supabase that reads as a requirement rather than as history is stale, and a
+PR fixing it is welcome.
 
 ## Before opening a PR
 
@@ -26,16 +26,15 @@ npm run db:migrate
 npm run test:integration
 ```
 
-CI runs every one of those, plus a check that `AGENTS.md` stays under 7900 bytes — agents
-read that file every session, so its size is a real cost. It currently sits a couple of
-bytes under, so adding a line there means cutting one: guidance with room to grow belongs
-in [`skills/croft/SKILL.md`](./skills/croft/SKILL.md) instead.
+CI runs every one of those, and fails when `AGENTS.md` passes 8192 bytes (a unit test
+warns from 7900) — agents read that file every session, so its size is a real cost.
+Guidance with room to grow belongs in [`skills/croft/SKILL.md`](./skills/croft/SKILL.md)
+instead.
 
 The integration suite runs in a job of its own because it migrates a clean PostgreSQL
 first, which is the point of it: `tests/integration/` is the only execution-level proof
-that the SQL does what the rest of the suite mocks. `vitals-closure.test.ts` in particular
-checks queries no unit test can reach. It is easy to skip locally and easy to break, so run
-it before a PR that touches `migrations/` or anything that queries them.
+that the SQL does what the rest of the suite mocks. It is easy to skip locally and easy to
+break, so run it before a PR that touches `migrations/` or anything that queries them.
 
 ## Things worth knowing before you change them
 
@@ -56,7 +55,7 @@ ProseMirror, so writing an untouched body can rewrite what an agent authored. Se
 **A backfill must not advertise itself as user activity.** `tasks`, `projects` and
 `task_comments` carry a `before update` touch trigger that sets `updated_at = now()` on
 every row it sees. A migration that rewrites a column for bookkeeping therefore stamps
-every row it touches as just-edited. Migration 049 qualified legacy actor ids across the
+every row it touches as just-edited. In Cairn, migration 049 qualified legacy actor ids across the
 table and flattened `updated_at` on 3023 tasks to one timestamp, which destroyed recency
 ordering and blinded every staleness view until it was repaired from a backup. Disable
 the trigger around the statement, and turn it back on in the same transaction:
@@ -70,15 +69,6 @@ alter table tasks enable trigger tasks_touch;
 Nothing warns you: the migration succeeds, the data is correct, and only the timestamps
 are quietly wrong.
 
-**The knowledge map's layout must stay a pure function of the graph.** No `Math.random`,
-no simulation in the browser — `src/lib/graph-layout.ts` seeds every position from a hash
-of the slug and settles it on the server. Every view in this app re-renders through
-`router.refresh()` when the live stream reports a change, which on a working day is every
-few minutes, so a layout computed client-side rearranges the whole map under whoever is
-reading it each time an agent writes a note. Animation is allowed and moves a node *around*
-its anchor; nothing may move the anchor. `src/lib/graph-layout.test.ts` asserts two runs
-agree, and `graph-view.test.tsx` asserts two renders are byte-identical.
-
 **The `admin()` client bypasses RLS.** It is a PostgREST-compatible adapter over the
 `pg` driver (`src/lib/db/client.ts`) and it connects as the owner, so every query made
 with it must filter by owner explicitly — `.eq('owner_user_id', …)`, or through the
@@ -91,7 +81,8 @@ Contributions are made under the [Sustainable Use License](./LICENSE), the licen
 project ships under. You keep the copyright in what you write; you are granting the
 project the right to use it under those terms.
 
-The boundary is a commit, not a date: `303a9f9`, merged 2026-09-19 at 20:18 UTC.
+The boundary, inherited from Cairn, is a commit, not a date: `303a9f9`, merged 2026-09-19
+at 20:18 UTC.
 Everything contributed before it was contributed under MIT and is acknowledged as such —
 see [`LICENSE-MIT-HISTORY`](./LICENSE-MIT-HISTORY).
 
@@ -99,7 +90,7 @@ see [`LICENSE-MIT-HISTORY`](./LICENSE-MIT-HISTORY).
 You read the licence that was in the repository when you wrote the patch, and we are not
 going to claim you agreed to one that arrived afterwards. If you would rather your
 contribution were under the current licence instead, say so on the pull request and it
-will be recorded there. This is not hypothetical: [#43](https://github.com/montytorr/croft/pull/43)
+will be recorded there. This is not hypothetical: Cairn's [#43](https://github.com/montytorr/cairn/pull/43)
 was opened twenty-one minutes before the licence changed, which is how we found that a
 date and a tag were two different lines and neither one covered an open branch.
 

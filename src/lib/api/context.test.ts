@@ -3,7 +3,6 @@ import type { Actor } from './auth'
 
 const db = vi.hoisted(() => ({
   tasks: [] as Record<string, unknown>[],
-  sessions: [] as Record<string, unknown>[],
   calls: [] as { table: string; filters: [string, unknown][]; limit: number | null }[],
 }))
 
@@ -30,7 +29,7 @@ vi.mock('@/lib/db/client', () => ({
       }
       function rows(): Record<string, unknown>[] {
         db.calls.push({ table, filters: [...filters], limit })
-        let result = (table === 'tasks' ? db.tasks : table === 'sessions' ? db.sessions : [])
+        let result = (table === 'tasks' ? db.tasks : [])
           .filter((row) => filters.every(([column, value]) => {
             const actual = column === 'projects.key' ? (row.project as { key: string } | undefined)?.key : row[column]
             return Array.isArray(value) ? value.includes(actual) : actual === value
@@ -55,14 +54,12 @@ vi.mock('./project-keys', () => ({
   formerKeysByProject: async () => new Map(),
   formerRefsOf: () => [],
 }))
-vi.mock('./knowledge', () => ({ listKnowledge: async () => [] }))
-vi.mock('./staleness', () => ({ stalenessFor: async () => new Map() }))
 vi.mock('./people', () => ({
   peopleByIds: async (ids: string[]) =>
     new Map(ids.map((id) => [id, { id, email: `${id}@example.test`, name: id === 'julien' ? 'Julien' : id, active: true }])),
 }))
 
-import { buildContext, isLive, latestByActivity } from './context'
+import { buildContext } from './context'
 
 const actor = { userId: 'user', actorId: 'agent', actorType: 'agent', role: 'member', rateKey: 'agent', userDisplayName: 'Agent', sessionId: null } satisfies Actor
 const task = (project: string, number: number, claimedAt: string) => ({
@@ -70,12 +67,7 @@ const task = (project: string, number: number, claimedAt: string) => ({
   status: 'doing', claimed_by: 'agent', claimed_at: claimedAt, created_at: claimedAt,
   heartbeat_at: '2020-01-01T00:00:00Z', updated_at: claimedAt,
 })
-const session = (project: string, cwd: string, endedAt: string | null, updatedAt = endedAt ?? '2020-01-01T00:00:00Z') => ({
-  project_id: project, project: { key: project }, cwd, ended_at: endedAt, updated_at: updatedAt,
-  request: `${project} request`, next_steps: null, agent_id: 'agent',
-})
-
-beforeEach(() => { db.tasks = []; db.sessions = []; db.calls = [] })
+beforeEach(() => { db.tasks = []; db.calls = [] })
 
 describe('context project scope', () => {
   it('keeps the default cross-project held work and stale claims', async () => {
@@ -96,25 +88,6 @@ describe('context project scope', () => {
       .toMatchObject({ filters: [['claimed_by', 'agent'], ['projects.key', 'MES']], limit: 10 })
   })
 
-  it('filters the last session by project as well as cwd before selecting the latest', async () => {
-    db.sessions = [session('MES', '/repo', '2020-01-01T00:00:00Z'), session('CAL', '/repo', '2020-01-02T00:00:00Z')]
-    const context = await buildContext(actor, { project: 'MES', cwd: '/repo', scope: 'project' })
-    expect(context.lastSession?.request).toBe('MES request')
-    expect(db.calls.find((call) => call.table === 'sessions'))
-      .toMatchObject({ filters: [['cwd', '/repo'], ['projects.key', 'MES']], limit: 20 })
-  })
-
-  /**
-   * CROFT-320: ordered by ended_at, an open session — no end yet — ranked
-   * below every finished one, and the briefing showed an older session.
-   */
-  it('shows the open session over an older finished one, and says it is live', async () => {
-    const recent = new Date(Date.now() - 5 * 60_000).toISOString()
-    db.sessions = [session('CAL', '/repo', '2020-01-01T00:00:00Z'), { ...session('MES', '/repo', null, recent) }]
-    const context = await buildContext(actor, { cwd: '/repo' })
-    expect(context.lastSession).toMatchObject({ request: 'MES request', ongoing: true, endedAt: null })
-  })
-
   it('filters stale claims before their limit', async () => {
     db.tasks = [
       ...Array.from({ length: 5 }, (_, i) => task('CAL', i + 1, `2020-01-01T00:${String(i).padStart(2, '0')}:00Z`)),
@@ -128,12 +101,10 @@ describe('context project scope', () => {
 
   it('uses the current project key when the caller supplies a retired key', async () => {
     db.tasks = [task('MES', 1, '2020-01-01T00:00:00Z'), task('CAL', 2, '2020-01-02T00:00:00Z')]
-    db.sessions = [session('MES', '/mes', '2020-01-01T00:00:00Z'), session('CAL', '/cal', '2020-01-02T00:00:00Z')]
     const context = await buildContext(actor, { project: 'OLD', scope: 'project' })
     expect(context.project).toBe('MES')
     expect(context.projectRenamed).toMatchObject({ key: 'OLD', to: 'MES' })
     expect(context.held.map((item) => item.ref)).toEqual(['MES-1'])
-    expect(context.lastSession?.request).toBe('MES request')
   })
 
   it('rejects an unresolved project rather than returning an unfiltered briefing', async () => {
@@ -144,7 +115,6 @@ describe('context project scope', () => {
 
   it('rejects an unknown explicit key instead of showing an empty project briefing', async () => {
     db.tasks = [task('MES', 1, '2020-01-01T00:00:00Z')]
-    db.sessions = [session('MES', '/repo', '2020-01-02T00:00:00Z')]
     await expect(buildContext(actor, { scope: 'project', project: 'TYPO', cwd: '/repo' }))
       .rejects.toThrow('Project not found')
     expect(db.calls).toEqual([])
@@ -222,23 +192,5 @@ describe('context and the assignee', () => {
     const byRef = new Map(context.inFlight.map((t) => [t.ref, t]))
     expect(byRef.get('MES-1')?.assignee).toBe('Julien')
     expect(byRef.get('MES-2')).not.toHaveProperty('assignee')
-  })
-})
-
-describe('the last session by activity', () => {
-  const row = (ended_at: string | null, updated_at: string, request: string) =>
-    ({ ended_at, updated_at, request, next_steps: null, agent_id: null })
-
-  it('ranks a finished session by when it ended, even when it was re-posted later', () => {
-    const retried = row('2026-01-01T00:00:00Z', '2026-01-03T00:00:00Z', 'retried summary')
-    const newer = row('2026-01-02T00:00:00Z', '2026-01-02T00:00:00Z', 'newer')
-    expect(latestByActivity([retried, newer]).map((s) => s.request)).toEqual(['newer', 'retried summary'])
-  })
-
-  it('calls an open session live only while it is being written to', () => {
-    const now = Date.parse('2026-01-01T12:00:00Z')
-    expect(isLive(row(null, '2026-01-01T11:30:00Z', 'x'), now)).toBe(true)
-    expect(isLive(row(null, '2026-01-01T08:00:00Z', 'x'), now)).toBe(false)
-    expect(isLive(row('2026-01-01T11:59:00Z', '2026-01-01T11:59:00Z', 'x'), now)).toBe(false)
   })
 })

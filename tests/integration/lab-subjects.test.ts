@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
@@ -35,6 +35,8 @@ import { GET as listStagesRoute } from '@/app/api/v1/stages/route'
 import { getTask } from '@/lib/data'
 
 const databaseUrl = process.env.DATABASE_URL
+// The Cairn key is sealed at rest; any 32-byte key will do for a run.
+process.env.CROFT_SECRET_KEY ??= randomBytes(32).toString('hex')
 if (!databaseUrl) throw new Error('DATABASE_URL is required for integration tests')
 
 const ORIGIN = 'https://croft.example.test'
@@ -107,8 +109,9 @@ afterAll(async () => {
   if (savedConnection) {
     const c = savedConnection
     await pool().query(
-      'insert into cairn_connection (id, url, api_key, last_synced_at, updated_at, updated_by) values (true,$1,$2,$3,$4,$5)',
-      [c.url, c.api_key, c.last_synced_at, c.updated_at, c.updated_by],
+      `insert into cairn_connection (id, url, api_key, api_key_plaintext, last_synced_at, updated_at, updated_by)
+       values (true,$1,$2,$3,$4,$5,$6)`,
+      [c.url, c.api_key, c.api_key_plaintext ?? false, c.last_synced_at, c.updated_at, c.updated_by],
     )
   }
   await pool().query('delete from app_users where id = any($1::uuid[])', [[adminId, memberId]])
@@ -300,6 +303,11 @@ describe('the lab board', () => {
     const put = await call(cairnPutRoute, 'PUT', '/integrations/cairn', {}, { url: 'https://cairn.example/', apiKey: 'sk_test_12345678' })
     expect(put.json.data).toEqual({ url: 'https://cairn.example', key_set: true, last_synced_at: null })
     expect(JSON.stringify((await call(cairnGetRoute, 'GET', '/integrations/cairn')).json)).not.toContain('sk_test')
+    // Sealed at rest (073), not stored as typed.
+    const stored = (await pool().query('select api_key, api_key_plaintext from cairn_connection where id')).rows[0]
+    expect(stored.api_key).toMatch(/^v1:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+$/)
+    expect(stored.api_key).not.toContain('sk_test')
+    expect(stored.api_key_plaintext).toBe(false)
 
     const cairnRef = `CAIRN-${100_000 + Math.floor(Math.random() * 900_000)}`
     const linked = await call(cairnLinkRoute, 'POST', `/tasks/${todoRef}/cairn-link`, { ref: todoRef }, { cairnRef, cairnStatus: 'todo' })
@@ -315,9 +323,16 @@ describe('the lab board', () => {
       return new Response(JSON.stringify({ success: true, data: { status: 'done', resolution: 'Shipped the index.' } }))
     })
 
+    // A key stored before 073 is plaintext and marked: the sync still presents
+    // it, and seals it in place on that read.
+    await pool().query(`update cairn_connection set api_key = 'sk_test_12345678', api_key_plaintext = true where id`)
+
     const first = await call(cairnSyncRoute, 'POST', '/integrations/cairn/sync')
     expect(first.status).toBe(200)
     expect(requests.find((r) => r.url === `https://cairn.example/api/v1/tasks/${cairnRef}`)?.auth).toBe('Bearer sk_test_12345678')
+    const resealed = (await pool().query('select api_key, api_key_plaintext from cairn_connection where id')).rows[0]
+    expect(resealed.api_key_plaintext).toBe(false)
+    expect(resealed.api_key).toMatch(/^v1:/)
     // One line per todo, beside the counts: what `croft sync` prints.
     expect(first.json.data.results.find((r: { ref: string }) => r.ref === todoRef)).toEqual({
       ref: todoRef,

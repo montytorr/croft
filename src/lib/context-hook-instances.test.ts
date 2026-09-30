@@ -1,6 +1,6 @@
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -88,5 +88,24 @@ describe('the SessionStart briefing hook', () => {
       payload: { hook_event_name: 'PreToolUse', cwd: '/w', tool_input: { file_path: '/w/a.ts' } },
     })
     expect(stdout).toBe('')
+  })
+
+  it('finds the CLI where `croft setup` puts it when PATH does not have it', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'croft-context-home-'))
+    directories.push(home)
+    await mkdir(join(home, '.local/bin'), { recursive: true })
+    const cli = join(home, '.local/bin/croft')
+    await writeFile(cli, '#!/bin/sh\necho "Croft — lab: 2 exploring"\n')
+    await chmod(cli, 0o755)
+    const stdout = await new Promise<string>((resolve) => {
+      const child = spawn(process.execPath, ['hooks/croft-context.mjs'], {
+        env: { HOME: home, PATH: `${dirname(process.execPath)}:/usr/bin:/bin` } as unknown as NodeJS.ProcessEnv,
+      })
+      let out = ''
+      child.stdout.on('data', (c: Buffer) => { out += c.toString() })
+      child.on('close', () => resolve(out))
+      child.stdin.end(JSON.stringify({ hook_event_name: 'SessionStart', cwd: '/work/lab' }))
+    })
+    expect(JSON.parse(stdout).hookSpecificOutput.additionalContext).toBe('Croft — lab: 2 exploring')
   })
 })

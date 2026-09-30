@@ -31,35 +31,21 @@ beforeAll(async () => {
       [randomUUID(), projectId, number, title, agent, claimedAt],
     )
   }
-  for (const [projectId, request, endedAt] of [
-    [currentId, 'Current session', '2020-01-01T00:00:00Z'],
-    [otherId, 'Other session', '2020-01-02T00:00:00Z'],
-    [null, 'Unclassified session', '2020-01-03T00:00:00Z'],
-  ] as const) {
-    await pool().query(
-      `insert into sessions (owner_user_id, project_id, external_id, platform_source, cwd, request, ended_at)
-       values ($1,$2,$3,'other',$4,$5,$6)`,
-      [owner, projectId, randomUUID(), cwd, request, endedAt],
-    )
-  }
 })
 
 afterAll(async () => {
-  await pool().query('delete from sessions where owner_user_id = $1', [owner])
   await pool().query('delete from tasks where project_id in ($1,$2)', [currentId, otherId])
   await pool().query('delete from projects where owner_user_id = $1', [owner])
   await pool().query('delete from app_users where id = $1', [owner])
 })
 
-it('scopes real joined queries for held work, stale claims, and the last session', async () => {
+it('scopes real joined queries for held work and stale claims', async () => {
   const scoped = await buildContext(actor, { cwd, project: currentKey, scope: 'project' })
   expect(scoped.held.map((item) => item.title)).toEqual(['Current work'])
   expect(scoped.staleClaims.map((item) => item.title)).toEqual(['Current work'])
-  expect(scoped.lastSession?.request).toBe('Current session')
 
   const unscoped = await buildContext(actor, { cwd, project: currentKey })
   expect(unscoped.held.map((item) => item.title)).toEqual(['Other work', 'Current work'])
-  expect(unscoped.lastSession?.request).toBe('Unclassified session')
 })
 
 it('rejects an unknown explicit project key even with a matching cwd', async () => {

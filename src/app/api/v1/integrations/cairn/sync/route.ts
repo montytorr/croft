@@ -21,7 +21,10 @@ export const POST = route({
       // this machine's cairn CLI instead", which no other 409 means.
       return fail(
         'cairn_not_configured',
-        'Cairn is not connected. An administrator can connect it in Settings.',
+        synced.reason === 'key_unreadable'
+          ? 'The stored Cairn key cannot be decrypted with this instance\'s CROFT_SECRET_KEY. ' +
+              'An administrator can enter it again in Settings.'
+          : 'Cairn is not connected. An administrator can connect it in Settings.',
         { reason: synced.reason },
       )
     }

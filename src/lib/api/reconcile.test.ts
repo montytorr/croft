@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Actor } from './auth'
-import { untouchedCheckpoint, workedCheckpoint } from './sessions'
+import { untouchedCheckpoint, workedCheckpoint } from '@/lib/liveness-fixtures'
 
 const db = vi.hoisted(() => ({
   tasks: [] as Record<string, unknown>[],

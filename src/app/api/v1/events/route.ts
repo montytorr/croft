@@ -36,10 +36,9 @@ export const GET = async (req: Request) => {
    * One query, covering every store the UI can show.
    *
    * This compared `max(tasks.updated_at)` and `count(tasks)` and nothing else,
-   * which is why the sessions, knowledge and activity pages could not be given
-   * live updates: they would have held a subscription that could never fire. A
-   * session recorded or a fact learned moves nothing in a fingerprint made of
-   * tasks.
+   * which is why the activity and lab pages could not be given live updates:
+   * they would have held a subscription that could never fire. A subject moved
+   * or a note logged moves nothing in a fingerprint made of tasks.
    *
    * In the database rather than four round trips from here, because this runs
    * every few seconds for every open tab.

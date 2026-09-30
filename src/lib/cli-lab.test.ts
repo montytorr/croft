@@ -295,18 +295,17 @@ describe('croft check', () => {
         {
           kind: 'subject', ref: 'S-12', title: 'pgvector for recall', subtitle: 'Recall improved on the eval set.',
           project: null, type: 'subject', status: 'done', resolved: true, updatedAt: '2026-09-30T10:00:00Z',
-          loose: false, tokens: 312, stale: false, unverified_days: null,
+          loose: false, tokens: 312,
           stage: 'done', conclusion: 'Recall improved on the eval set.',
         },
         {
           kind: 'subject', ref: 'S-14', title: 'pgvector on the read replica', subtitle: null,
           project: null, type: 'subject', status: 'exploring', resolved: false, updatedAt: '2026-09-29T10:00:00Z',
-          loose: true, tokens: 0, stale: false, unverified_days: null, stage: 'exploring', conclusion: null,
+          loose: true, tokens: 0, stage: 'exploring', conclusion: null,
         },
         {
           kind: 'task', ref: 'T-41', title: 'Benchmark the index', subtitle: null, project: 'T', type: 'spike',
           status: 'doing', resolved: false, updatedAt: '2026-09-30T09:00:00Z', loose: false, tokens: 80,
-          stale: false, unverified_days: null,
         },
       ],
     }

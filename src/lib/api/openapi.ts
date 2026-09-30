@@ -10,8 +10,6 @@ import {
   TASK_STATUSES,
   TASK_TYPES,
 } from '@/schemas/task'
-import { knowledgeCreate, knowledgeUpdate } from '@/schemas/knowledge'
-import { sessionUpsert } from '@/schemas/session'
 import {
   cairnConnectionSchema,
   cairnLinkSchema,
@@ -54,7 +52,7 @@ const errorResponse = {
             type: 'string',
             enum: [
               'unauthorized', 'forbidden', 'not_found', 'validation_failed',
-              'conflict', 'already_claimed', 'session_closed', 'resolution_required',
+              'conflict', 'already_claimed', 'resolution_required',
               'conclusion_required', 'stage_in_use', 'cairn_not_configured',
               'secret_detected', 'rate_limited', 'internal_error',
             ],
@@ -72,76 +70,6 @@ const errorResponse = {
               'Present when an agent\'s task description is refused as unreadable (CROFT-312): ' +
               'one instruction per problem — a heading to write, a paragraph to break up, a path ' +
               'to put in backticks. `error` repeats them.',
-          },
-        },
-        required: ['success', 'error', 'code'],
-      },
-    },
-  },
-}
-
-/**
- * What a knowledge write says when its `[[refs]]` do not resolve.
- *
- * The ordinary failure envelope plus the half that makes it actionable. 63% of
- * the dangling references already in the store point at a fact Croft holds
- * under a different slug, so "that does not exist" is true and useless; the
- * names that nearly are it are the answer. `error` repeats all of it in prose,
- * because the CLI prints that field and drops everything beside it.
- */
-const referenceRefusalResponse = {
-  description:
-    'A `[[reference]]` in the body points at no entry. `code` is `validation_failed`. ' +
-    'Nothing was written.',
-  content: {
-    'application/json': {
-      schema: {
-        type: 'object',
-        properties: {
-          success: { const: false },
-          error: {
-            type: 'string',
-            description:
-              'The whole refusal, in prose: which reference missed, the slug it probably ' +
-              'meant, and how to record it anyway if it really is new.',
-          },
-          code: { const: 'validation_failed' },
-          unresolvedReferences: {
-            type: 'array',
-            description:
-              'Every reference that resolved to nothing, whether or not it is what caused ' +
-              'the refusal — only the ones with a near-named entry do that.',
-            items: {
-              type: 'object',
-              properties: {
-                slug: {
-                  type: 'string',
-                  description: 'Normalised: lowercased, underscores read as hyphens.',
-                },
-                raw: { type: 'string', description: 'As the author spelled it.' },
-                suggestions: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description:
-                    'Existing slugs that are close, closest first, at most three. Often empty.',
-                },
-                certain: {
-                  type: 'boolean',
-                  description:
-                    'A suggestion is close enough to call this a misspelt name rather than a ' +
-                    'fact nobody has written yet. This is what the refusal is for; send ' +
-                    '`allowUnresolvedRefs` to record it anyway.',
-                },
-              },
-            },
-          },
-          taskReferences: {
-            type: 'array',
-            items: { type: 'string' },
-            description:
-              'Task refs somebody put in wiki brackets — `[[CAI-42]]`. Refused outright and ' +
-              'not covered by `allowUnresolvedRefs`: inside `[[...]]` it reads as a knowledge ' +
-              'slug and points at an entry that will never exist. Write it bare.',
           },
         },
         required: ['success', 'error', 'code'],
@@ -370,164 +298,6 @@ const formerKeys = {
   description: 'Keys this project used to have, oldest first. Refs under each still resolve.',
 }
 
-/**
- * The stored entry, and the one thing about it that is not a column.
- *
- * A reference resolving to nothing with nothing close to it is accepted rather
- * than refused — two entries that cite each other cannot both be written first
- * — so the write succeeds and says so anyway. Absent when there is nothing to
- * say, which is the usual case.
- */
-const knowledgeEntry = {
-  type: 'object',
-  description: 'The stored row.',
-  properties: {
-    slug: { type: 'string' },
-    title: { type: 'string' },
-    body: { type: 'string' },
-    warnings: {
-      type: 'array',
-      items: { type: 'string' },
-      description:
-        'Accepted, and still worth saying: one line per `[[reference]]` that points at no ' +
-        'entry, naming any close matches. Silence is what let 70 of these accumulate.',
-    },
-  },
-}
-
-const counts = (properties: Record<string, unknown>) => ({ type: 'object', properties })
-
-const integer = (description: string) => ({ type: 'integer', description })
-
-/**
- * The vital signs, spelled out rather than left as "an object".
- *
- * Worth the space because two of these have already been read wrong from the
- * outside. `tasks.closedWithoutTrace` was `closedUnclaimed` until migration
- * 054 and counts something different now, so a consumer reading the old key
- * gets `undefined` rather than a wrong number — deliberately. And `memory` is
- * nullable, not optional-shaped-like-a-zero: this endpoint is the monitor, and
- * a monitor that fails outright because one of its two questions is
- * unanswerable has stopped answering the other one too.
- */
-const vitalsReport = {
-  type: 'object',
-  properties: {
-    windowHours: integer('The window these counts cover.'),
-    sessions: counts({
-      recent: integer('Sessions recorded in the window.'),
-      recentWithFiles: integer('Of those, how many name a file.'),
-      recentSummarised: integer(
-        'Of those, how many have the prose half. The summariser costs a model call and ' +
-          'the hook keeps the row when it cannot reach one, so this is where it shows.',
-      ),
-      baseline: integer('The same count over the week before, unscaled.'),
-      baselineWithFiles: integer('The same, for sessions naming a file.'),
-    }),
-    tasks: counts({
-      opened: integer('Filed in the window.'),
-      closed: integer('Moved to done or cancelled in the window.'),
-      stalled: integer('Open, and nothing has happened on them.'),
-      held: integer('Under a live claim.'),
-      closedWithoutTrace: {
-        type: 'integer',
-        description:
-          'Closed by a runtime with nothing recorded between filing and close that anyone ' +
-          'was on it: no claim, no checkpoint, no status move off the status it was filed ' +
-          'in, no commit, no push, no test run. **Renamed from `closedUnclaimed`**, which ' +
-          'asked a narrower question and answered it wrongly — nine of ten tasks it flagged ' +
-          'had moved to in-review hours earlier, several with commits against them. Absent ' +
-          'from a server older than migration 054; treat absent as unknown rather than zero, ' +
-          'because one on 051 sends the old key under the old meaning.',
-      },
-    }),
-    autoReleased: integer('Claims released by the backstop rather than by their holder.'),
-    knowledgeWritten: integer('Entries learned or corrected in the window.'),
-    agents: {
-      type: 'array',
-      description: 'Who wrote anything, against the week before. Not a leaderboard.',
-      items: counts({
-        agent: { type: 'string' },
-        actorType: {
-          type: 'string',
-          description: 'Absent on a server older than migration 050. A person is not a runtime that has gone quiet.',
-        },
-        recent: { type: 'integer' },
-        baseline: { type: 'integer' },
-      }),
-    },
-    memory: {
-      type: ['object', 'null'],
-      description:
-        'Whether anybody consults what is already known. Every other number here describes ' +
-        'what was written; none described whether any of it was read, and a store nobody ' +
-        'queries is an expensive way to write into a drawer. **Null when the aggregate ' +
-        'cannot be read** — the rest of the report is still served.',
-      properties: {
-        windowHours: integer('The window, which is the same one as above.'),
-        searches: integer(
-          'Searches in the window. Direct reads by slug are counted separately, in ' +
-            'directReads — pooling them would make widened and zeroResults unreadable, ' +
-            'since a slug lookup has no second pass and its empty result means the ' +
-            'opposite of an empty search.',
-        ),
-        widened: integer(
-          'Of those, how many fell back from the precise AND pass to OR because the first ' +
-            'came back thin. A high share means the phrasing is missing on the first try.',
-        ),
-        zeroResults: integer('Of those, how many returned nothing at all.'),
-        byAgent: {
-          type: 'array',
-          description: 'Who is doing the searching. An agent absent here is one not checking.',
-          items: counts({ agent: { type: 'string' }, searches: { type: 'integer' } }),
-        },
-        tasksFiled: integer('Tasks filed in the window.'),
-        tasksFiledWithoutChecking: integer(
-          'Of those, how many were filed with no search beforehand — work begun without ' +
-            'asking whether it had already been done.',
-        ),
-        recentMisses: {
-          type: 'array',
-          items: { type: 'string' },
-          description:
-            'Recent subjects that were searched for and found nothing. Each is either a ' +
-            'gap in the memory or a phrasing the index does not match.',
-        },
-        directReads: integer(
-          'Facts looked up by slug rather than searched for — `croft know <slug>`, the ' +
-            'MCP tool, and every browser read. Absent from a server before migration ' +
-            '053, which is not the same as zero.',
-        ),
-        directReadMisses: integer(
-          'Of those, how many named a slug that does not exist. This is the interesting ' +
-            'one: it is a dangling reference being followed in real time rather than ' +
-            'found later by a diagnostic nobody is obliged to run.',
-        ),
-        recentSlugMisses: {
-          type: 'array',
-          items: { type: 'string' },
-          description:
-            'The slugs behind those misses. Two thirds of the dangling references in the ' +
-            'store point at a fact that exists under another name, so these are usually a ' +
-            'handle spelled wrong rather than knowledge nobody has written.',
-        },
-      },
-    },
-    findings: {
-      type: 'array',
-      description:
-        'The counts that should not be what they are, already judged against the week ' +
-        'before. Empty is the healthy answer, and the reason this can drive a job that ' +
-        'speaks only when there is something to say.',
-      items: counts({
-        code: { type: 'string', example: 'no-sessions' },
-        severity: { type: 'string', enum: ['alarm', 'warning'] },
-        message: { type: 'string', description: 'What was seen, in full. Not a template to fill in.' },
-      }),
-    },
-  },
-}
-
 export const openapiSpec = () => ({
   openapi: '3.1.0',
   info: {
@@ -582,8 +352,8 @@ export const openapiSpec = () => ({
       get: {
         summary: 'Find prior work — call this first',
         description:
-          'Searches four stores at once: tasks, work-log notes, knowledge and recorded ' +
-          'sessions. Returns an index, never bodies. Hits carrying an answer rank first. ' +
+          'Searches tasks, work-log notes and lab subjects at once. Returns an index, never ' +
+          'bodies. Hits carrying an answer rank first. ' +
           'Matching is keyword-based (Postgres FTS ANDs terms, widening to OR when the ' +
           'precise pass comes back thin), so a paraphrase can still miss. ' +
           'A `type`, `status` or `assignee` filter is a statement about tasks and narrows to them.',
@@ -593,8 +363,8 @@ export const openapiSpec = () => ({
           {
             name: 'kinds',
             in: 'query',
-            description: 'Comma-separated subset of task,note,knowledge,session. Default: all.',
-            schema: { type: 'string', example: 'task,knowledge' },
+            description: 'Comma-separated subset of task,note,subject. Default: all.',
+            schema: { type: 'string', example: 'task,subject' },
           },
           { name: 'tasksOnly', in: 'query', schema: { type: 'boolean', default: false } },
           { name: 'type', in: 'query', schema: { type: 'string', enum: [...TASK_TYPES] } },
@@ -616,11 +386,10 @@ export const openapiSpec = () => ({
                 items: {
                   type: 'object',
                   properties: {
-                    kind: { type: 'string', enum: ['task', 'note', 'knowledge', 'session'] },
+                    kind: { type: 'string', enum: ['task', 'note', 'subject'] },
                     ref: {
                       type: 'string',
-                      description:
-                        'A task ref for tasks and notes, a slug for knowledge, a date for sessions.',
+                      description: 'A task ref for tasks and notes, `S-n` for subjects.',
                     },
                     title: { type: 'string' },
                     type: { type: 'string' },
@@ -629,7 +398,7 @@ export const openapiSpec = () => ({
                       type: 'boolean',
                       description:
                         'An answer is recorded: a resolution on a task, a finding or decision ' +
-                        'on a note, next steps on a session, verified on knowledge.',
+                        'on a note, a conclusion on a subject.',
                     },
                     tokens: { type: 'integer', description: 'Rough cost of opening this.' },
                     requestedRef: {
@@ -1069,9 +838,8 @@ export const openapiSpec = () => ({
       get: {
         summary: 'One timeline of everything that happened',
         description:
-          'A union across tasks filed, what changed on them, work-log notes, comments, ' +
-          'sessions and knowledge written or corrected — ordered together rather than ' +
-          'per-store, because the newest rows *of each kind* are not the newest rows. ' +
+          'A union across tasks filed, what changed on them, work-log notes and comments ' +
+          '— ordered together rather than per-store, because the newest rows *of each kind* are not the newest rows. ' +
           'Paged by `before`, a keyset cursor: the feed grows from the head, so an OFFSET ' +
           'page drifts as soon as an agent writes anything. The response hands back ' +
           '`nextBefore` so the caller does not have to dig for it.',
@@ -1082,8 +850,8 @@ export const openapiSpec = () => ({
           {
             name: 'kinds',
             in: 'query',
-            description: 'Comma-separated subset of task,event,note,comment,session,knowledge.',
-            schema: { type: 'string', example: 'note,knowledge' },
+            description: 'Comma-separated subset of task,event,note,comment.',
+            schema: { type: 'string', example: 'note,comment' },
           },
           { name: 'limit', in: 'query', schema: { type: 'integer', default: 50, maximum: 200 } },
         ],
@@ -1102,116 +870,6 @@ export const openapiSpec = () => ({
         responses: { '200': okResponse('An event stream.') },
       },
     },
-    '/knowledge': {
-      get: {
-        summary: 'What we know that applies here',
-        description:
-          'Scoped three ways, narrowest first: to a project, to an entity (a grouping of ' +
-          'projects), or to nothing at all, which means everywhere. A project-scoped read ' +
-          'deliberately includes both of the wider scopes — the question is "what do we ' +
-          'know that applies here", and an infra gotcha applies here.',
-        parameters: [
-          { name: 'project', in: 'query', schema: { type: 'string' } },
-          { name: 'label', in: 'query', schema: { type: 'string' } },
-          {
-            name: 'superseded',
-            in: 'query',
-            description: 'Include rows that have been replaced. Hidden by default.',
-            schema: { type: 'boolean', default: false },
-          },
-          { name: 'limit', in: 'query', schema: { type: 'integer', default: 50, maximum: 200 } },
-          {
-            name: 'unused',
-            in: 'query',
-            description:
-              'Instead of the index: current entries no search returned and no direct read ' +
-              'fetched in this many days, never-recalled first, leaving out entries younger ' +
-              'than the window. The session briefing and `croft recall` record nothing and are ' +
-              'not counted; `counted` in the response says so.',
-            schema: { type: 'integer', minimum: 1, maximum: 365 },
-          },
-        ],
-        responses: {
-          '200': okResponse(
-            'Knowledge index. Each row carries `recalled`: searches that returned it plus direct ' +
-              'reads in the last `recallWindowDays` days.',
-          ),
-        },
-      },
-      post: {
-        summary: 'Record what we now know',
-        description:
-          'Omit `projects` and `entities` for a fact that is true everywhere. The slug is ' +
-          'derived from the title when not given, and must be unique.\n\n' +
-          '`[[refs]]` in the body are resolved before the row is written, not audited ' +
-          'afterwards. One naming an entry that does not exist while a near-named one does ' +
-          'is refused with the slug it probably meant; one naming nothing close is recorded ' +
-          'with a `warning`. `allowUnresolvedRefs` records the refused case anyway, for the ' +
-          'fact that genuinely has not been written yet.',
-        requestBody: body(json(knowledgeCreate)),
-        responses: {
-          '201': okResponse('Recorded.', knowledgeEntry),
-          '400': referenceRefusalResponse,
-          '409': errorResponse,
-        },
-      },
-    },
-    '/knowledge/gaps': {
-      get: {
-        summary: 'Where the memory has holes',
-        description:
-          'Entries joined to nothing, references pointing at entries nobody ever wrote, ' +
-          'and the sizes of the separate islands the corpus has fallen into. None of it ' +
-          'appears in a list of knowledge, because a list shows what is there. Returns no ' +
-          'coordinates: a reader with a screen needs somewhere to draw each node, a reader ' +
-          'without one needs the facts.',
-        responses: { '200': okResponse('Orphans, dangling references and island sizes.') },
-      },
-    },
-    '/knowledge/{slug}': {
-      parameters: [
-        { name: 'slug', in: 'path', required: true, schema: { type: 'string' } },
-      ],
-      get: { summary: 'Read one', responses: { '200': okResponse('The fact.'), '404': errorResponse } },
-      patch: {
-        summary: 'Correct it, or mark it superseded',
-        description:
-          'Correcting knowledge is the point: two contradictory claims, equally findable, ' +
-          'with no way to tell which is current, is how a memory store stops being worth ' +
-          'reading. `supersededBy` points at what replaced this; the row stays findable ' +
-          'and is marked.\n\n' +
-          'A changed `body` runs the same reference check as the write, and refuses or warns ' +
-          'the same way — otherwise the check is reachable in one hop: write a clean entry, ' +
-          'then edit a dangling `[[ref]]` into it with nothing looking. A body that is not ' +
-          'being changed is not re-checked, so a rename or a `verified` does not fail on a ' +
-          'reference the entry has carried for weeks.',
-        requestBody: body(json(knowledgeUpdate)),
-        responses: {
-          '200': okResponse('Updated.', knowledgeEntry),
-          '400': referenceRefusalResponse,
-          '404': errorResponse,
-        },
-      },
-      delete: { summary: 'Forget it', responses: { '200': okResponse('Deleted.'), '404': errorResponse } },
-    },
-    '/tasks/{ref}/recall': {
-      parameters: [
-        { name: 'ref', in: 'path', required: true, schema: { type: 'string' } },
-        { name: 'decisions', in: 'query', schema: { type: 'integer', default: 8, maximum: 30 } },
-        { name: 'knowledge', in: 'query', schema: { type: 'integer', default: 8, maximum: 30 } },
-      ],
-      get: {
-        summary: 'What already bears on this task',
-        description:
-          'Two lists, each line with `why` it was picked. `decisions`: resolutions and ' +
-          'decision/finding notes on related tasks — ones that name this task (and the note ' +
-          'that does), ones it names, its parent, sub-tasks, blockers, and answered tasks with ' +
-          'a similar title. `knowledge`: current entries linked to files this task touched, ' +
-          'learned on it or a related task, or matching its terms within its project, with ' +
-          'their stale mark. `omitted` says how many lines each limit cut.',
-        responses: { '200': okResponse('{ ref, title, decisions, knowledge, omitted }.'), '404': errorResponse },
-      },
-    },
     '/tasks/{ref}/mentions': {
       parameters: [
         { name: 'ref', in: 'path', required: true, schema: { type: 'string' } },
@@ -1226,68 +884,6 @@ export const openapiSpec = () => ({
           'newest first within each. Indexed from what was written, not guessed: a mention is ' +
           'something somebody wrote. The digest carries the first five as `mentionedIn`.',
         responses: { '200': okResponse('{ total, mentions }.'), '404': errorResponse },
-      },
-    },
-    '/knowledge/{slug}/history': {
-      parameters: [
-        { name: 'slug', in: 'path', required: true, schema: { type: 'string' } },
-      ],
-      get: {
-        summary: 'What it used to say',
-        description:
-          'Every version an edit replaced, newest first: its title, body, labels and scope as ' +
-          'they stood, and who replaced it, when, and why. `version` is the live row\'s ' +
-          'number, so revision N is version N and the live row is `version`. A `verified` ' +
-          'alone, or a PATCH that changes nothing, is not a new version.',
-        responses: { '200': okResponse('The versions.'), '404': errorResponse },
-      },
-    },
-    '/entities': {
-      get: {
-        summary: 'Groupings a fact can be true of',
-        description:
-          'A business, a stack, a subsystem. Many-to-many with projects, because a project ' +
-          'belongs to more than one at a time and a fact can be true of it for either reason.',
-        responses: { '200': okResponse('Entities and their projects.') },
-      },
-      post: { summary: 'Create one', responses: { '201': okResponse('Created.'), '409': errorResponse } },
-      patch: {
-        summary: 'Add or remove projects',
-        description:
-          'Additive and subtractive rather than a wholesale replacement: assigning one ' +
-          'project must not silently unassign thirty others.',
-        responses: { '200': okResponse('Membership changed.'), '404': errorResponse },
-      },
-    },
-    '/sessions': {
-      get: {
-        summary: 'What happened, newest first',
-        parameters: [
-          { name: 'project', in: 'query', schema: { type: 'string' } },
-          { name: 'cwd', in: 'query', schema: { type: 'string' } },
-          { name: 'limit', in: 'query', schema: { type: 'integer', default: 20, maximum: 100 } },
-        ],
-        responses: { '200': okResponse('Sessions.') },
-      },
-      post: {
-        summary: 'Checkpoint an ongoing session or record a finished session',
-        description:
-          'Set `ongoing: true` for an in-progress checkpoint: `ended_at` stays null, ' +
-          'held tasks are not checkpointed, and a closed session cannot be reopened ' +
-          '(409 `session_closed`). ' +
-          'Omit `ongoing` for the existing session-end behavior. Idempotent on ' +
-          '(platformSource, externalId), which is a correctness requirement rather than a ' +
-          'nicety: Codex checkpoints the live session on Stop, which fires every turn. ' +
-          '`checkpointHeld` also checkpoints what this session holds: tasks it ' +
-          'worked get the summary, tasks it only held get a "still held" line where they ' +
-          'have no checkpoint at all. It never replaces a written checkpoint on a claim it ' +
-          'cannot prove is its own, never touches another session\'s claim, and does not ' +
-          'count as activity for `/reconcile`. Secret-shaped strings in `request`, ' +
-          '`learned`, `completed` and `nextSteps` are replaced with `[redacted <rule>]` ' +
-          'rather than refused, and `redactions` lists each by field, rule and line, never ' +
-          'the value.',
-        requestBody: body(json(sessionUpsert)),
-        responses: { '200': okResponse('Recorded.'), '409': errorResponse },
       },
     },
     '/next': {
@@ -1318,17 +914,16 @@ export const openapiSpec = () => ({
         summary: 'The briefing a session opens with',
         description:
           'What you are still holding, what is in flight around you, your user\'s open work ' +
-          'here that nobody is on, where the last session ' +
-          'in this directory stopped, and what is known here. Index only, never bodies. ' +
-          'With `file`, it answers the narrower question instead: what is known about that ' +
-          'path. Read by a hook that has milliseconds and no way to recover from a failure, ' +
+          'here that nobody is on, and claims nobody is acting on. Index only, never bodies. ' +
+          'Read by a hook that has milliseconds and no way to recover from a failure, ' +
           'so it stays cheap and must never be why a session does not start.',
         parameters: [
           { name: 'cwd', in: 'query', schema: { type: 'string' } },
           { name: 'project', in: 'query', schema: { type: 'string' } },
-          { name: 'file', in: 'query', schema: { type: 'string' } },
+          { name: 'file', in: 'query', schema: { type: 'string' },
+            description: 'Accepted for older hooks and ignored: the file index is gone.' },
           { name: 'scope', in: 'query', schema: { type: 'string', enum: ['all', 'project'] },
-            description: 'Defaults to all. Project scope limits held work, stale claims, and the last session; requires a resolved project.' },
+            description: 'Defaults to all. Project scope limits held work and stale claims; requires a resolved project.' },
           { name: 'repo', in: 'query', schema: { type: 'string' },
             description:
               'Origin remote. Resolves the project where a path cannot: a second clone, ' +
@@ -1417,30 +1012,6 @@ export const openapiSpec = () => ({
           },
         }),
         responses: { '200': okResponse('What was released.') },
-      },
-    },
-    '/vitals': {
-      get: {
-        summary: "Croft's own vital signs, and what looks wrong",
-        description:
-          'Counts for the last `hours` (default 24, max 720) against the week before, plus ' +
-          '`findings` — the ones worth acting on. Separate from `/health`, which reports on ' +
-          'the process: that probe stayed green through two days of recording no sessions ' +
-          'at all. Intended for a scheduled job that speaks only when findings are present.\n\n' +
-          'Two things here will break a consumer written against an older server. ' +
-          '`tasks.closedWithoutTrace` replaces `closedUnclaimed` and answers a different ' +
-          'question, so a reader of the old key now gets nothing rather than a number that ' +
-          'means something else. And `memory` is new: whether agents *read* the store, ' +
-          'which until now reached only a person with the Vitals page open — and the things ' +
-          'that write knowledge here cannot open a browser. It is nullable by design.',
-        parameters: [
-          {
-            name: 'hours',
-            in: 'query',
-            schema: { type: 'integer', minimum: 1, maximum: 720, default: 24 },
-          },
-        ],
-        responses: { '200': okResponse('Vital signs, memory use, and findings.', vitalsReport) },
       },
     },
     '/labels': {

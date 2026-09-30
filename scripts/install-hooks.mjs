@@ -13,7 +13,9 @@
  * Cairn's briefing already carries Croft's block, and a second briefing
  * competing for the top of every session is how both get skimmed. So for that
  * runtime Croft's hook is not installed (and a previous one is removed), and
- * this prints "briefing: carried by Cairn".
+ * this prints "briefing: carried by Cairn". A Cairn whose installed briefing
+ * script predates Croft's block is not yielded to: Croft briefs on its own and
+ * says to re-run once Cairn is upgraded.
  *
  * Idempotent: run it again after an upgrade and it replaces its own entries
  * without touching anyone else's. Every entry it owns is tagged, and tagging
@@ -102,6 +104,37 @@ const readJson = (path) => {
   }
 }
 
+/**
+ * A hooks file this installer is about to rewrite: `{}` when there is none,
+ * the parsed object, or an `error` when it cannot be read as one.
+ *
+ * `readJson`'s "anything unreadable is empty" is right for a config it only
+ * inspects, and wrong for one it writes back: a settings.json with a trailing
+ * comma read as `{}` came back holding Croft's hook and nothing else — every
+ * permission, model and other hook in it gone. So a file that will not parse
+ * is left exactly as it is, and the run says so and fails.
+ */
+const readHooksFile = (path) => {
+  if (!existsSync(path)) return { value: {} }
+  let value
+  try {
+    value = JSON.parse(readFileSync(path, 'utf8'))
+  } catch (error) {
+    return { error: `not valid JSON (${error.message})` }
+  }
+  const isObject = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v)
+  if (!isObject(value)) return { error: 'not a JSON object' }
+  if (value.hooks != null && !isObject(value.hooks)) return { error: '"hooks" is not an object' }
+  const bad = Object.entries(value.hooks ?? {}).find(([, groups]) => !Array.isArray(groups))
+  if (bad) return { error: `"hooks.${bad[0]}" is not a list` }
+  return { value }
+}
+
+const refuse = (runtime, path, error) => {
+  console.error(`  ${runtime}: ${path} is ${error} — left untouched; fix it and re-run`)
+  process.exitCode = 1
+}
+
 // --- the hook scripts themselves -------------------------------------------
 
 const installScripts = () => {
@@ -177,8 +210,38 @@ const foreignHooks = (hooks) =>
 const isCairnHook = (hook) =>
   Boolean(hook?.[CAIRN_TAG]) || (typeof hook?.command === 'string' && hook.command.includes('cairn-context.mjs'))
 
+/**
+ * Whether the Cairn script a hook runs carries Croft's block. Cairn gained it
+ * in the release that added the Croft sibling line; a Cairn briefing from
+ * before that is tagged exactly the same, and yielding to it would leave the
+ * session with no lab briefing at all. The script is read where the entry
+ * says it is; one this cannot read gets the benefit of the doubt.
+ */
+const carriesCroft = (hook) => {
+  const script = typeof hook?.command === 'string' ? hook.command.match(/(\S*cairn-context\.mjs)/)?.[1] : null
+  if (!script) return true
+  const path = script.replace(/^["']/, '').replace(/^(~|\$HOME|\$\{HOME\})(?=\/)/, HOME)
+  try {
+    return /croft/i.test(readFileSync(path, 'utf8'))
+  } catch {
+    return true
+  }
+}
+
+/**
+ * Cairn's briefing in one list of hooks: 'carries' (Croft stays out),
+ * 'predates' (Cairn is there but too old to carry Croft's block), or null.
+ */
+const cairnBriefing = (hooks) => {
+  const cairn = hooks.filter(isCairnHook)
+  if (!cairn.length) return null
+  return cairn.some(carriesCroft) ? 'carries' : 'predates'
+}
+
 const cairnBriefs = (hooks, event = 'SessionStart') =>
-  (Array.isArray(hooks?.[event]) ? hooks[event] : []).some((g) => (g?.hooks ?? []).some(isCairnHook))
+  cairnBriefing((Array.isArray(hooks?.[event]) ? hooks[event] : []).flatMap((g) => g?.hooks ?? []))
+
+const PREDATES = "Cairn's briefing here predates Croft's block — Croft briefs on its own; after upgrading Cairn, re-run `croft setup`"
 
 /** Events older installs of this script wrote to, and that it now only cleans. */
 const RETIRED_EVENTS = ['PreToolUse', 'SessionEnd', 'PreCompact', 'Stop']
@@ -205,12 +268,15 @@ const installClaude = () => {
 
   // Read twice: `settings` is mutated below, so the second copy is the only
   // record of what the file said before this run.
-  const before = readJson(path)
-  const settings = readJson(path)
+  const read = readHooksFile(path)
+  if (read.error) return refuse('claude', path, read.error)
+  const before = read.value
+  const settings = structuredClone(read.value)
   settings.hooks ??= {}
 
   const retired = RETIRED_EVENTS.filter((event) => strip(settings.hooks, event))
-  const carried = cairnBriefs(settings.hooks)
+  const cairn = cairnBriefs(settings.hooks)
+  const carried = cairn === 'carries'
   if (carried) {
     strip(settings.hooks, 'SessionStart')
   } else {
@@ -224,7 +290,8 @@ const installClaude = () => {
 
   const wrote = writeJson(path, settings, before)
   if (carried) log(`  claude: ${CARRIED}`)
-  else if (wrote) log('  claude: SessionStart (lab briefing)')
+  else if (cairn === 'predates') log(`  claude: ${PREDATES}`)
+  if (!carried && wrote) log('  claude: SessionStart (lab briefing)')
   if (wrote && retired.length) log(`  claude: removed Croft's old ${retired.join(', ')} hook(s)`)
 }
 
@@ -240,8 +307,10 @@ const installCodex = () => {
   const path = join(HOME, '.codex', 'hooks.json')
   if (!existsSync(join(HOME, '.codex'))) return log('  no ~/.codex — skipped')
 
-  const before = readJson(path)
-  const config = readJson(path)
+  const read = readHooksFile(path)
+  if (read.error) return refuse('codex', path, read.error)
+  const before = read.value
+  const config = structuredClone(read.value)
   config.hooks ??= {}
 
   // CROFT_AGENT names the runtime, and the CLI picks the matching key out of
@@ -250,7 +319,8 @@ const installCodex = () => {
   const env = 'CROFT_AGENT=codex CROFT_PLATFORM=codex'
 
   const retired = RETIRED_EVENTS.filter((event) => strip(config.hooks, event))
-  const carried = cairnBriefs(config.hooks)
+  const cairn = cairnBriefs(config.hooks)
+  const carried = cairn === 'carries'
   if (carried) {
     strip(config.hooks, 'SessionStart')
   } else {
@@ -267,6 +337,7 @@ const installCodex = () => {
   // as the twenty where it did not.
   const wrote = writeJson(path, config, before)
   if (carried) log(`  codex: ${CARRIED}`)
+  else if (cairn === 'predates') log(`  codex: ${PREDATES}`)
   if (wrote) {
     if (!carried) log('  codex: SessionStart (lab briefing)')
     if (retired.length) log(`  codex: removed Croft's old ${retired.join(', ')} hook(s)`)
@@ -331,7 +402,9 @@ const installHermes = () => {
   const hooks = JSON.parse(JSON.stringify(before))
   const command = `env CROFT_AGENT=hermes CROFT_PLATFORM=hermes CROFT_CLI=${hookCli} node ${CONTEXT}`
   const current = Array.isArray(hooks.pre_llm_call) ? hooks.pre_llm_call : []
-  const carried = current.some(isCairnHook)
+  const cairn = cairnBriefing(current)
+  const carried = cairn === 'carries'
+  if (cairn === 'predates') log(`  Hermes Agent by Nous Research: ${PREDATES}`)
   const others = current.filter((entry) => !isMine(entry))
   if (carried) {
     if (others.length) hooks.pre_llm_call = others

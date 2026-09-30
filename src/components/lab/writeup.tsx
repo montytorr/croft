@@ -3,7 +3,7 @@
 import { EditorContent, useEditor } from '@tiptap/react'
 import Placeholder from '@tiptap/extension-placeholder'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Eye, PenLine, X } from 'lucide-react'
 import { MarkdownView } from '@/components/markdown'
@@ -40,7 +40,11 @@ const Editor = ({
 }) => {
   const [mode, setMode] = useState<Mode>(() => (richEditLoss(initial) ? 'source' : 'rich'))
   const [markdown, setMarkdown] = useState(initial)
-  const richLoss = mode === 'source' ? richEditLoss(markdown) : null
+  // A body with a table is checked by round-tripping it, which is too much to
+  // repeat on every keystroke; the tab's state can trail the text slightly,
+  // and switchMode checks the text as it is.
+  const deferred = useDeferredValue(markdown)
+  const richLoss = useMemo(() => (mode === 'source' ? richEditLoss(deferred) : null), [mode, deferred])
   const [state, setState] = useState<SaveState>('idle')
   const [error, setError] = useState<string | null>(null)
   const [pane, setPane] = useState<'edit' | 'preview'>('edit')
@@ -69,7 +73,7 @@ const Editor = ({
 
   const switchMode = (next: Mode) => {
     if (next === mode) return
-    if (next === 'rich' && richLoss) return
+    if (next === 'rich' && richEditLoss(markdown)) return
     if (next === 'source' && editor) {
       clearTimeout(timer.current)
       setMarkdown(editor.storage.markdown.getMarkdown())

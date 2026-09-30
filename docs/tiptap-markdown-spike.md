@@ -1,7 +1,9 @@
 # Decision: markdown stays the source of truth
 
 **Status:** resolved. Option A adopted.
-**Evidence:** `src/lib/editor/markdown.test.ts` — 20 tests, all passing.
+**Evidence:** `src/lib/editor/markdown.test.ts` — 45 tests, all passing.
+**Updated:** GFM tables round-trip (ported from Cairn, CAIRN-326); bodies that would still lose content are
+edited as markdown.
 
 ## The problem
 
@@ -33,7 +35,12 @@ Verified idempotent — a second round trip changes nothing:
 
 headings · emphasis (italic/bold/inline code) · bullet lists · ordered lists · nested
 lists · task lists with checkbox state · fenced code with language · blockquotes · links ·
-**images** · horizontal rules · strikethrough · paragraphs
+**images** · horizontal rules · strikethrough · paragraphs · **GFM tables**
+
+Tables are held to a stricter bar than stable: they come back **byte-for-byte**. Cases:
+a simple table, all four column alignments, inline code and bold in cells, escaped pipes
+in text and inside a code span, links and strikethrough in cells, an empty cell, a
+header-only table, a table between paragraphs, and one inside a blockquote.
 
 Plus an explicit case for a realistic agent-written body (headings, checkboxes, a fenced
 block) confirming that open-and-save with no edits leaves it byte-stable.
@@ -42,10 +49,23 @@ block) confirming that open-and-save with no edits leaves it byte-stable.
 
 | Construct | Behaviour | Why |
 |---|---|---|
-| Raw inline HTML | **Dropped** | `html: false`. Not round-trippable; dropping beats corrupting. |
-| GFM tables | **Degraded to text** | StarterKit ships no table extension. See below. |
+| Raw HTML, comments included | **Dropped** (escaped) | `html: false`. Not round-trippable; dropping beats corrupting. Edited as markdown instead. |
+| Headings `####`–`######` | **Flattened** to paragraphs | The schema has levels 1–3. Edited as markdown instead. |
+| Footnotes `[^1]` | **Broken** (brackets escaped) | markdown-it's default preset has no footnotes. Edited as markdown instead. |
+| Table row with more cells than its header | Extra cells **dropped** | GFM ignores them too, so they never rendered. Edited as markdown instead. |
+| Table delimiter row | Normalised to `\| --- \| :---: \|` | Alignment is kept; only dash counts change. |
+| Table row short of cells | Padded with empty cells | Renders the same. |
 | `*` list markers | Normalised to `-` | One canonical marker; content is unchanged. |
 | Setext headings | Normalised to ATX (`# `) | Same. |
+
+None of the losses reaches a saved body through the rich editor: `richEditLoss()` in
+`src/lib/editor/markdown.ts` spots each one, and `MarkdownEditor` then edits that body as
+its markdown in a textarea, with the reason shown under it. Tiptap never parses it. The
+write-up editor opens such a body in its Markdown tab and keeps the Rich tab disabled.
+
+For tables, `richEditLoss()` also runs the rule itself rather than only the named checks:
+a body with a table goes to the rich editor only when every table renders to the same
+HTML before and after the round trip. Without a DOM to run that in, it assumes a loss.
 
 ## Two findings worth recording
 
@@ -56,12 +76,26 @@ block) confirming that open-and-save with no edits leaves it byte-stable.
    have silently deleted screenshot references from agent-written bodies. This is the
    thing the spike was for; it would not have been caught by review.
 
-## Tables: the open question
+## Tables
 
-Tables are the only loss that could plausibly matter, since agents like them for
-comparisons. Deferred rather than solved, because adding `@tiptap/extension-table` also
-means teaching the markdown serialiser to emit pipe tables, and no real task needs one
-yet.
+Tables were deferred here as "no real task needs one yet". Agents then wrote them, and a
+human who fixed a typo in such a body saved it back as flattened text.
 
-**Guard in the meantime:** never save a body that is unchanged. If the editor opens a
-task and the user makes no edit, do not write — that alone prevents most silent rewrites.
+Now `@tiptap/extension-table` (v3, matching the rest of Tiptap) is in the schema, with its
+own markdown serialiser in `markdown.ts` rather than tiptap-markdown's. The stock one:
+
+- writes every delimiter as `---`, so **column alignment was lost**;
+- leaves a `|` in a cell unescaped, so `a \| b` **split into two cells** on the next parse;
+- writes the literal `[table]` for any table it will not call GFM (a header row turned
+  off, a merged cell, two paragraphs in a cell) once html is off, and `[hardBreak]` for a
+  shift-enter in a cell.
+
+The replacement always writes a pipe table: the first row is the header, spans are laid
+out as empty cells, a cell's line breaks and extra blocks become spaces, and every `|` in
+a cell is escaped, code spans included, as GFM requires. Each cell is rendered by a fresh
+serialiser state, because tiptap-markdown's state trims whitespace at recorded buffer
+offsets, and rendering a cell into a borrowed buffer moved that trim onto the delimiter
+row (`| --- |` came out as ` -- |`). Column resizing is off: widths are not markdown.
+
+**Guards.** Never save a body that is unchanged, and never take a body through Tiptap
+when `richEditLoss()` says the trip would lose part of it.

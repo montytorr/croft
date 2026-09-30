@@ -31,5 +31,5 @@ anything sensitive, and reaches only the maintainer.
 
 Reports are handled privately. Responses range from a request to change behaviour, to
 having a contribution declined, to being blocked from the repository, depending on what
-happened. This is a personal project maintained in spare time, so there is no
-response-time commitment beyond an acknowledgement.
+happened. Croft is maintained in spare time, so there is no response-time commitment
+beyond an acknowledgement.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { isAutoCheckpoint, isUntouchedAutoCheckpoint, resolutionSuggestion } from './checkpoint-origin'
-import { untouchedCheckpoint, workedCheckpoint } from './api/sessions'
+import { untouchedCheckpoint, workedCheckpoint } from './liveness-fixtures'
 
 describe('checkpoint origin', () => {
   const written = 'Guard suite 18/18 green; the cooldown is uncommitted in worktree mev-auth.'
