@@ -53,6 +53,17 @@ const flagValue = (name) => {
 const MAC = process.platform === 'darwin'
 
 /**
+ * The runtimes `croft setup` set up, rendered into the agent-files job so the
+ * sync writes only their copies (CROFT-14). Read at `--install` time only: a
+ * `--run` replays the command the schedule already holds.
+ */
+const SYNC_RUNTIMES = process.argv.includes('--run') ? null : flagValue('--runtimes')
+if (SYNC_RUNTIMES && !/^[a-z0-9-]+(,[a-z0-9-]+)*$/.test(SYNC_RUNTIMES)) {
+  console.error(`--runtimes ${JSON.stringify(SYNC_RUNTIMES)} is not a comma list of runtime names.`)
+  process.exit(2)
+}
+
+/**
  * Defaults that describe the machine this is running on rather than one host.
  *
  * A Mac has no /usr/local/bin/croft, cannot write /var/log as the logged-in
@@ -242,6 +253,7 @@ const JOBS = [
       NODE,
       SYNC,
       ...(SOURCE_ARGS ?? []),
+      ...(SYNC_RUNTIMES ? ['--runtimes', SYNC_RUNTIMES] : []),
       ...ALSO.flatMap((pair) => ['--also', pair]),
       ...(NOTIFY_FILES ? ['--notify', NOTIFY_FILES] : []),
     ],

@@ -75,6 +75,26 @@ installs the CLI to `~/.local/bin/croft`, copies the skill into `~/.claude/skill
 `~/.codex/skills/croft`, and adds the session briefing hook, unless Cairn's briefing already
 carries it. It is safe to re-run; `--dry-run` prints the plan.
 
+### What `croft setup` does
+
+Only the runtimes it sets up get keys, hooks and skills: detected (`~/.claude`, `~/.codex`,
+an OpenClaw gateway) or named with `--runtimes a,b`. Hermes Agent is never detected;
+`hermes` on PATH gets a line saying how to add it (`--runtimes claude-code,hermes`), not a hook.
+
+| Step | What it writes | Where | Skip | Undo |
+|---|---|---|---|---|
+| instance, keys | `CROFT_BASE_URL` and one `CROFT_API_KEY_<RUNTIME>` per runtime, paired in the browser | `~/.croft/env` (mode 600) | — | remove the lines; revoke the keys at `<instance>/settings/keys` |
+| release | the release matching the CLI's version (or `CROFT_SETUP_SOURCE`) | `~/.croft/releases/<version>` | — | `rm -r` it |
+| cli | `croft` | `~/.local/bin/croft` | — | `rm ~/.local/bin/croft` |
+| skill | the Croft skill, per runtime set up | `~/.claude/skills/croft`, `~/.codex/skills/croft` | `--no-skill` | `rm -r` the folder |
+| hooks | the session briefing hook, per runtime set up (none where Cairn's briefing already carries Croft's) | `~/.claude/settings.json`, `~/.codex/hooks.json`, OpenClaw's hook link; `~/.croft/hooks` | `--no-hooks` | delete the entries naming `~/.croft/hooks` |
+| jobs | `agent-files`, which keeps the CLI, hook and skill equal to the installed release's tag every 15 minutes on macOS, hourly on Linux, for the runtimes set up; `reconcile` with `--maintenance` | a LaunchAgent on macOS, a crontab on Linux | `--no-jobs` | `node ~/.croft/releases/<version>/scripts/install-cron.mjs --remove --only agent-files` |
+
+What it never does: wire a runtime it did not set up (Hermes included), follow a branch, or
+replace the job's own scripts from the network. Every line it prints starts with `✓` (done),
+`–` (unchanged or skipped, with the reason and how to change it) or `!` (needs you), and it
+ends with the next step and the undo commands above.
+
 ```bash
 croft check "<question>"                        # what the lab already found
 croft subject add|list|show|edit|stage|note|tag|todo …

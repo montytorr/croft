@@ -8,6 +8,24 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+### Fixed
+
+- **The agent-files job wrote skills for runtimes setup did not set up** (CROFT-14). After
+  `croft setup --runtimes claude-code`, the job still wrote `~/.codex/skills/croft/SKILL.md`
+  wherever `~/.codex` existed. Setup now renders the job with the runtimes it set up, and
+  `sync-agent-files.mjs --runtimes a,b` writes only their copies, saying which it skipped.
+  Without the flag it writes every runtime whose directory exists, as before. Re-run
+  `croft setup` to re-render an existing job.
+
+### Changed
+
+- **`croft setup` says what it is doing.** It opens with one line on what it sets up and
+  that `--dry-run` shows the plan. A `runtimes` line says which runtimes get keys, hooks and
+  skills, and whether they were detected or named. A `hermes` on PATH that was not chosen
+  gets a line with the command to add it. Every skip says how to undo it. It ends with the
+  next step, the fact that re-running is the upgrade path, and the command that takes out
+  each piece. The README gains a "What `croft setup` does" table and what it never does.
+
 ## [0.3.1] — 2026-09-30
 
 Thanks to @domnumb, whose report and pull requests #1–#3 started this release.
