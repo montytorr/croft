@@ -8,6 +8,8 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-09-30
+
 ### Added
 
 - **Lab projects.** A subject can belong to one project from a short list an administrator
@@ -58,5 +60,6 @@ Forked from Cairn v0.12.1 (1ef3556).
 
 - A field notebook: paper and peat grounds, a heather accent, Schibsted Grotesk and Newsreader, and runrig strips for a mark.
 
-[Unreleased]: https://github.com/montytorr/croft/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/montytorr/croft/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/montytorr/croft/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/montytorr/croft/releases/tag/v0.1.0
