@@ -14,7 +14,11 @@ const renameBody = z.object({
   to: z.string().min(1).max(50).nullable(),
 })
 
-/** Every label in use, with how many tasks carry it. Busiest first. */
+/**
+ * Every label in use, with how many tasks carry it. Busiest first. Counted
+ * over the tasks this viewer can see: a label only someone's private todos
+ * carry is not in anyone else's list (migration 076).
+ */
 export const GET = route({
   handler: async ({ actor }) => {
     const { data, error } = await admin().rpc('list_labels', { p_owner: actor.userId })
@@ -25,9 +29,10 @@ export const GET = route({
 
 /**
  * Rename, merge or delete — one operation, because a rename onto an existing
- * label *is* a merge. The work happens in a single workspace-wide statement in
- * the database; doing it here would mean reading every task, rewriting its
- * array and writing it back one row at a time.
+ * label *is* a merge. The work happens in a single statement in the database;
+ * doing it here would mean reading every task, rewriting its array and writing
+ * it back one row at a time. It touches only the tasks the caller can see, so
+ * `tasksChanged` never counts someone else's private todos (migration 076).
  */
 export const PATCH = route<Record<string, string>, z.infer<typeof renameBody>>({
   schema: renameBody,

@@ -9,6 +9,7 @@ import { resolveProject } from '@/lib/api/project-keys'
 import { resolveAssignee, withAssignees } from '@/lib/api/people'
 import { resolveTodoFilters, withTaskSubjects } from '@/lib/api/lab-todos'
 import { createTaskSchema, TASK_STATUSES, TASK_TYPES } from '@/schemas/task'
+import { restrictTo, visibleTasksOr } from '@/lib/api/visibility'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,12 +61,14 @@ export const GET = route<{ id: string }>({
     if (!parsed.success) return fail('validation_failed', 'Bad query parameters.')
     const { status, type, label, mine, claimed_by, assignee, subject, project: labProject, limit, offset } = parsed.data
 
-    const todoFilters = await resolveTodoFilters({ subject, project: labProject })
+    const todoFilters = await resolveTodoFilters({ subject, project: labProject }, actor.userId)
     if (!todoFilters.ok) return todoFilters.response
 
-    let query = admin()
-      .from('tasks')
-      .select(TASK_LIST_LAB_FIELDS, { count: 'exact' })
+    // Only the tasks the caller may see, and `count` counts only those.
+    let query = restrictTo(
+      admin().from('tasks').select(TASK_LIST_LAB_FIELDS, { count: 'exact' }),
+      await visibleTasksOr(actor.userId),
+    )
 
     // A task filed elsewhere can still belong here. Its home project keeps the
     // ref; these links only widen where it shows up, so the list is the union.
@@ -134,7 +137,7 @@ export const GET = route<{ id: string }>({
       offset,
       limit,
       // `subject_ref` for the CLI's pairing; `subject` (ref, title, lab project) for the lab's lists.
-      tasks: await withTaskSubjects(await withAssignees(withSubjectRefs(data ?? []) as unknown as (Record<string, unknown> & { id: string })[])),
+      tasks: await withTaskSubjects(await withAssignees(withSubjectRefs(data ?? []) as unknown as (Record<string, unknown> & { id: string })[]), actor.userId),
       ...(renamed ? { renamed_from: renamed } : {}),
     })
   },

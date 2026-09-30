@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { LockMark } from '@/components/lab/visibility'
 import { ArrowUpRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { LabTodo } from '@/lib/lab/types'
@@ -45,6 +46,7 @@ export const SubjectChip = ({
   >
     <ProjectDot color={subject.project?.color} />
     <span className="text-fg-subtle group-hover/subject:text-fg-muted shrink-0 font-mono text-[0.6875rem]">{subject.ref}</span>
+    <LockMark visibility={subject.visibility} size={10} />
     <span className={cn('min-w-0 truncate', titleClassName)}>{subject.title}</span>
   </Link>
 )

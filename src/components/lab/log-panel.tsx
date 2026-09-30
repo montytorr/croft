@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { Globe, Lock } from 'lucide-react'
 import { MarkdownView } from '@/components/markdown'
 import { RelativeTime } from '@/components/relative-time'
 import { Button } from '@/components/ui/control'
@@ -15,8 +16,12 @@ import { LABEL } from './subject-properties'
 /** A kind's colour: the --log-* tokens, shared with a todo's work log. */
 const tone = (kind: string) => `var(--log-${kind}, var(--fg-subtle))`
 
-/** Kinds a person can write; `stage` entries are written by the stage move itself. */
-const WRITABLE = SUBJECT_NOTE_KINDS.filter((k) => k !== 'stage')
+/** Written by the server, never typed: a stage move, a publish or a share. */
+const SERVER_KINDS: readonly string[] = ['stage', 'visibility']
+const serverWritten = (kind: string) => SERVER_KINDS.includes(kind)
+
+/** Kinds a person can write. */
+const WRITABLE = SUBJECT_NOTE_KINDS.filter((k) => !serverWritten(k))
 
 const KIND_HINT: Record<string, string> = {
   note: 'What happened, what you noticed.',
@@ -26,9 +31,20 @@ const KIND_HINT: Record<string, string> = {
   handoff: 'Where you left it, for whoever picks it up.',
 }
 
-/** An entry's dot. A stage move is drawn as a small rig instead: the subject moved along the field. */
-const Marker = ({ kind }: { kind: string }) =>
-  kind === 'stage' ? (
+/**
+ * An entry's dot. A stage move is drawn as a small rig instead: the subject
+ * moved along the field. A change of who sees it is a small lock, or a globe
+ * once it is published.
+ */
+const Marker = ({ kind, note }: { kind: string; note: string }) =>
+  kind === 'visibility' ? (
+    <span
+      className="bg-bg relative z-10 mt-[0.25rem] grid size-[0.75rem] shrink-0 place-items-center"
+      style={{ color: tone('visibility') }}
+    >
+      {/^published\b/i.test(note) ? <Globe size={11} aria-hidden /> : <Lock size={11} aria-hidden />}
+    </span>
+  ) : kind === 'stage' ? (
     <svg viewBox="3 4 25 24" className="relative z-10 mt-[0.3rem] size-[0.75rem] shrink-0" aria-hidden>
       {RIG_PATHS.map((d) => (
         <path key={d} d={d} fill={tone('stage')} />
@@ -128,7 +144,7 @@ export const LogPanel = ({ subjectRef, notes: initial }: { subjectRef: string; n
         <ol className="stagger flex flex-col">
           {notes.map((note) => (
             <li key={note.id} className="group/entry relative flex gap-3 pb-5 last:pb-0">
-              <Marker kind={note.kind} />
+              <Marker kind={note.kind} note={note.note} />
               <span
                 aria-hidden
                 className="bg-border absolute top-[1.25rem] bottom-0 left-[0.3125rem] w-px group-last/entry:hidden"
@@ -143,7 +159,7 @@ export const LogPanel = ({ subjectRef, notes: initial }: { subjectRef: string; n
                   </span>
                   <RelativeTime iso={note.created_at} className="text-fg-subtle ml-auto shrink-0" />
                 </div>
-                {note.kind === 'stage' ? (
+                {serverWritten(note.kind) ? (
                   <p className="text-fg-muted mt-0.5 text-[0.8125rem]">{note.note}</p>
                 ) : (
                   <div className="mt-1">

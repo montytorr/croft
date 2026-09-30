@@ -9,6 +9,13 @@ const db = vi.hoisted(() => ({
   rpcs: [] as Record<string, unknown>[],
 }))
 
+// Visibility (v0.4) is a SQL rule, exercised by the integration suite; here
+// every task is visible, so these tests keep asking what they asked before.
+vi.mock('./visibility', () => ({
+  visibleTasksOr: async () => null,
+  restrictTo: <Q>(query: Q) => query,
+}))
+
 vi.mock('@/lib/db/client', () => ({
   admin: () => ({
     from: (table: string) => {

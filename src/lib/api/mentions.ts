@@ -1,4 +1,5 @@
 import { pool } from '@/lib/db/client'
+import { taskVisibleSql, type Viewer } from './visibility'
 
 /**
  * Where else a task was named (CROFT-267).
@@ -45,9 +46,15 @@ export const excerptAround = (text: string, ref: string): string => {
   return `${start > 0 ? '…' : ''}${flat.slice(start, end)}${end < flat.length ? '…' : ''}`
 }
 
+/**
+ * Mentions of `taskId`, from tasks `viewer` may see only: a private todo
+ * that names a lab task must not surface on the lab task — its title, its
+ * excerpt or its place in the count.
+ */
 export const mentionsOf = async (
   taskId: string,
-  limit = 10,
+  limit: number,
+  viewer: Pick<Viewer, 'id'>,
 ): Promise<{ total: number; mentions: Mention[] }> => {
   const { rows } = await pool().query(
     `select p.key || '-' || s.number as ref, s.title, s.status, m.source,
@@ -64,6 +71,7 @@ export const mentionsOf = async (
        left join task_notes n on n.id = m.note_id
        left join task_comments c on c.id = m.comment_id
       where m.target_task_id = $1
+        and ${taskVisibleSql('s.subject_id', '$3')}
       order by case
                  when m.source = 'resolution' or n.kind in ('decision', 'finding') then 0
                  when n.kind = 'handoff' or m.source = 'description' then 1
@@ -71,7 +79,7 @@ export const mentionsOf = async (
                end,
                m.created_at desc
       limit $2`,
-    [taskId, limit],
+    [taskId, limit, viewer.id],
   )
 
   return {

@@ -7,8 +7,8 @@ export const dynamic = 'force-dynamic'
 
 /** The subject's files, oldest first, each with fresh signed links and its stable `content_url`. */
 export const GET = route<{ ref: string }>({
-  handler: async ({ params }) => {
-    const subject = await resolveSubject(params.ref)
+  handler: async ({ actor, params }) => {
+    const subject = await resolveSubject(params.ref, actor.userId)
     if (!subject) return noSuchSubject(params.ref)
     return ok(await listSubjectAttachments(subject.id))
   },
@@ -21,7 +21,7 @@ export const GET = route<{ ref: string }>({
  */
 export const POST = route<{ ref: string }>({
   handler: async ({ actor, params, req }) => {
-    const subject = await resolveSubject(params.ref)
+    const subject = await resolveSubject(params.ref, actor.userId)
     if (!subject) return noSuchSubject(params.ref)
 
     const form = await req.formData().catch(() => null)

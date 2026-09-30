@@ -5,6 +5,10 @@ import { admin } from '@/lib/db/client'
  * (`activity_feed`, migrations 019 and 072) because the sort has to happen before the
  * limit — stitching five queries together in JavaScript and sorting the result
  * returns the newest rows *of each kind*, not the newest rows.
+ *
+ * `userId` is the viewer: since migration 076 every arm leaves out the todos of
+ * subjects they cannot see — and those todos' events, tombstones, notes and
+ * comments — before the limit, so a page is never short.
  */
 export type ActivityRow = {
   kind: 'task' | 'event' | 'note' | 'comment'

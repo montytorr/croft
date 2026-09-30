@@ -61,7 +61,10 @@ Single-letter keys on purpose: they never collide with Cairn refs (`CAIRN-331`).
 croft subject list [--stage exploring] [--tag db] [--project Trig|none] [--mine] [--all]
 croft subject show S-12 [--full]          # digest: write-up, conclusion, todos, recent log
 croft subject add "<title>" [--stage S] [--tag a,b] [--project P] [--owner me] [--body -]
+                  [--visibility lab|members|private] [--member <who>]...
 croft subject edit S-12 [--title "T"] [--body -] [--project P|none]
+croft subject share S-12 +mael -sam [--visibility members|private]
+croft subject publish S-12 --confirm S-12   # private/members -> lab, ONE-WAY
 croft subject stage S-12 "<stage>" [--conclusion -|"text"]
 croft subject note S-12 "<text>"|- [--kind finding|decision|attempt|note|handoff]
 croft subject tag S-12 +vector -later     # add and remove tags
@@ -69,8 +72,13 @@ croft subject todo S-12 "<title>" [--body -]
 croft subject notes S-12  |  croft subject attach S-12 <file>  |  croft subject files S-12   # people's notes; files (an image embeds as ![name](url))
 ```
 
-`list` prints: ref, stage, todos open/done, tags, project, `~tokens`, title. `--all` includes
-archived. A stage change writes a
+`list` prints: ref, stage, visibility, todos open/done, tags, project, `~tokens`, title.
+`--all` includes archived.
+
+**Visibility**: a subject is `lab` (everyone sees it) unless filed `private` (its owner only)
+or `members` (its owner and the people shared with). Publishing to the lab is one-way — do
+it only when the owner means it. Do not push a private or members subject's todo to Cairn:
+`croft push` refuses without `--force`, because Cairn shows it to everyone. A stage change writes a
 `stage` note by itself ("to explore → exploring"); do not narrate it.
 
 **Bodies and notes are markdown**: `##` headings, `-` lists, code and paths in backticks.
@@ -107,6 +115,8 @@ croft push T-41 --to CAIRN      # or name the Cairn project key; --to always win
 ```
 
 With no `--to` and no key on the subject's project, it refuses and says what is missing.
+A todo whose subject is not yet in the lab (private or members) is refused too: publish the
+subject first, or `--force` when its owner has said it can go.
 
 This runs `cairn add` with the todo's title and description (plus "From Croft T-41 (subject
 S-12)"), labels the Cairn task `croft:T-41`, and links the two. **From then on Cairn owns the

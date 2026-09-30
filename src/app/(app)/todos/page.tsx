@@ -27,9 +27,10 @@ const TodosPage = async ({ searchParams }: { searchParams: Promise<Record<string
 
   // Loaded whole and filtered in the view, so switching project, subject or
   // grouping answers at once and the counts on the chips stay honest.
+  const viewer = { id: user.id, role: user.role }
   const [todos, projects] = await Promise.all([
-    listLabTodos({ includeClosed: true, limit: LIMIT }),
-    listLabProjects().catch(() => []),
+    listLabTodos({ includeClosed: true, limit: LIMIT }, viewer),
+    listLabProjects(viewer).catch(() => []),
   ])
 
   const query = new URLSearchParams(

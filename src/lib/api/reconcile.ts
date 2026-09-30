@@ -1,6 +1,7 @@
 import { admin } from '@/lib/db/client'
 import type { Actor } from './auth'
 import { isUntouchedAutoCheckpoint } from '@/lib/checkpoint-origin'
+import { restrictTo, visibleTasksOr } from './visibility'
 
 /**
  * The backstop for claims that outlive the session that took them.
@@ -153,9 +154,14 @@ export const reconcileClaims = async (
       'id, number, status, claimed_by, claimed_at, heartbeat_at, checkpoint_at, updated_at, ' +
         'checkpoint_summary, ownership_version, project:projects!project_id!inner(key)',
     )
+  // The maintenance sweep acts on every quiet claim, private todos included —
+  // an abandoned claim is abandoned whoever can see the task — and reports
+  // refs only. Anyone else reconciles their own claims on tasks they can
+  // still see: one on a subject they were since removed from is not theirs
+  // to name.
   const { data, error } = await (workspace
     ? query.not('claimed_by', 'is', null)
-    : query.eq('claimed_by', actor.actorId))
+    : restrictTo(query, await visibleTasksOr(actor.userId)).eq('claimed_by', actor.actorId))
 
   if (error) throw new Error(error.message)
 

@@ -21,9 +21,10 @@ const AppLayout = async ({ children }: { children: React.ReactNode }) => {
   // Middleware enforces this; a layout renders data and should not assume
   // the guard ran.
   if (!user) redirect(await loginRedirectTarget())
+  const viewer = { id: user.id, role: user.role }
 
   const [projects, formerKeys, people, stages, tags, labProjects] = await Promise.all([
-    listProjects(user.id),
+    listProjects(user.id, {}, viewer),
     listFormerKeys(user.id),
     // Fetched once for every assignee and owner picker in the app, rather than
     // each one loading its own copy of the same short list.
@@ -32,7 +33,7 @@ const AppLayout = async ({ children }: { children: React.ReactNode }) => {
     // tables are not there yet should still render the rest of the app.
     listStages().catch(() => []),
     listTags().catch(() => []),
-    listLabProjects().catch(() => []),
+    listLabProjects(viewer).catch(() => []),
   ])
   const email = user.email ?? 'you'
   // Only what the sidebar draws crosses to the client.

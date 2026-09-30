@@ -2,6 +2,7 @@ import { normalizeDatabaseValue, pool } from '@/lib/db/client'
 import { TODO_PROJECT_KEY, type LabTodo } from '@/lib/lab/types'
 import { findLabProject, unknownLabProject } from './lab-admin'
 import { noSuchSubject, resolveSubject } from './subjects'
+import { subjectVisibleSql, taskVisibleSql } from './visibility'
 
 /**
  * Todos as the lab shows them: each task with the subject it belongs to and
@@ -16,7 +17,7 @@ const CLOSED = ['done', 'cancelled']
 const SUBJECT_JSON = `
   case when s.id is null then null
        else json_build_object(
-         'ref', 'S-' || s.number, 'number', s.number, 'title', s.title,
+         'ref', 'S-' || s.number, 'number', s.number, 'title', s.title, 'visibility', s.visibility,
          'project', case when lp.id is null then null
                          else json_build_object('name', lp.name, 'color', lp.color) end)
   end`
@@ -24,9 +25,13 @@ const SUBJECT_JSON = `
 /**
  * The `subject` of each row, by task id, in one query. Rows keep every field
  * they had; `subject` is added (null on a task that belongs to no subject).
+ *
+ * A decoration, not a filter: callers have already kept to the tasks
+ * `viewerId` may see. A subject the viewer may not see is still never named.
  */
 export const withTaskSubjects = async <T extends { id: string }>(
   tasks: readonly T[],
+  viewerId: string,
 ): Promise<(T & { subject: LabTodoSubject | null })[]> => {
   const ids = [...new Set(tasks.map((t) => t.id))]
   if (ids.length === 0) return tasks.map((t) => ({ ...t, subject: null }))
@@ -35,8 +40,8 @@ export const withTaskSubjects = async <T extends { id: string }>(
        from tasks t
        join subjects s on s.id = t.subject_id
        left join lab_projects lp on lp.id = s.project_id
-      where t.id = any($1::uuid[])`,
-    [ids],
+      where t.id = any($1::uuid[]) and ${subjectVisibleSql('s.id', '$2')}`,
+    [ids, viewerId],
   )
   const bySubject = new Map(
     (normalizeDatabaseValue(result.rows) as { id: string; subject: LabTodoSubject }[]).map((r) => [r.id, r.subject]),
@@ -64,10 +69,12 @@ export type ResolvedTodoFilters = {
  */
 export const resolveTodoFilters = async (
   filters: LabTodoFilters,
+  viewerId: string,
 ): Promise<{ ok: true; value: ResolvedTodoFilters } | { ok: false; response: Response }> => {
   const value: ResolvedTodoFilters = {}
   if (filters.subject) {
-    const subject = await resolveSubject(filters.subject)
+    // A subject the viewer cannot see is refused exactly as one that does not exist.
+    const subject = await resolveSubject(filters.subject, viewerId)
     if (!subject) return { ok: false, response: noSuchSubject(filters.subject) }
     value.subjectId = subject.id
   }
@@ -81,8 +88,10 @@ export const resolveTodoFilters = async (
       projectIds.push(project.id)
     }
     const found = await pool().query<{ id: string }>(
-      `select id from subjects where project_id = any($1::uuid[]) or ($2 and project_id is null)`,
-      [projectIds, none],
+      `select s.id from subjects s
+        where (s.project_id = any($1::uuid[]) or ($2 and s.project_id is null))
+          and ${subjectVisibleSql('s.id', '$3')}`,
+      [projectIds, none, viewerId],
     )
     value.project = { subjectIds: found.rows.map((r) => r.id), none }
   }
@@ -107,17 +116,17 @@ export type ListLabTodosOptions = LabTodoFilters & {
  * then the most recently touched. Unknown filters resolve to an empty list;
  * a route wanting a readable refusal calls `resolveTodoFilters` first.
  */
-export const listLabTodos = async (options: ListLabTodosOptions = {}): Promise<LabTodo[]> => {
-  const resolved = await resolveTodoFilters(options)
+export const listLabTodos = async (options: ListLabTodosOptions, viewerId: string): Promise<LabTodo[]> => {
+  const resolved = await resolveTodoFilters(options, viewerId)
   if (!resolved.ok) return []
   const { subjectId, project } = resolved.value
 
-  const values: unknown[] = [TODO_PROJECT_KEY]
+  const values: unknown[] = [TODO_PROJECT_KEY, viewerId]
   const bind = (value: unknown) => {
     values.push(value)
     return `$${values.length}`
   }
-  const where = ['p.key = $1']
+  const where = ['p.key = $1', taskVisibleSql('t.subject_id', '$2')]
   if (!options.includeClosed && !options.status) where.push(`t.status <> all(${bind(CLOSED)}::text[])`)
   if (options.status) where.push(`t.status = ${bind(options.status)}`)
   if (subjectId) where.push(`t.subject_id = ${bind(subjectId)}::uuid`)

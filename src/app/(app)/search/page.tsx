@@ -35,7 +35,7 @@ const SearchPage = async ({
   const user = await currentUser()
   if (!user) redirect('/login')
 
-  const projects = await listProjects(user.id)
+  const projects = await listProjects(user.id, {}, { id: user.id, role: user.role })
   const query = q.trim()
 
   // A type or status filter is a statement about tasks, so it selects the

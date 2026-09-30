@@ -16,6 +16,7 @@ import {
   listTags,
 } from '@/lib/lab/data'
 import { parseSubjectRef } from '@/lib/lab/types'
+import type { Viewer } from '@/lib/api/visibility'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { LiveUpdates } from '@/components/live-updates'
 import { Avatar } from '@/components/icons'
@@ -24,6 +25,7 @@ import { StageBadge } from '@/components/lab/stage'
 import { ProjectLabel } from '@/components/lab/project-label'
 import { TagChip } from '@/components/lab/tag-chip'
 import { SubjectTitle } from '@/components/lab/subject-title'
+import { VisibilityBadge } from '@/components/lab/visibility'
 import { ConclusionCallout } from '@/components/lab/conclusion-callout'
 import { WriteUp } from '@/components/lab/writeup'
 import { WriteUpAside } from '@/components/lab/writeup-aside'
@@ -38,13 +40,20 @@ import { counts } from '@/components/lab/todo-lanes'
 
 export const dynamic = 'force-dynamic'
 
-// Deduped against the page's own lookup (React cache(), same request).
-const cachedSubject = cache(getSubject)
+// Deduped against the page's own lookup (React cache(), same request). Keyed
+// on primitives: cache() compares arguments by identity, and a viewer object
+// built in each caller would never match.
+const cachedSubject = cache((n: number, viewerId: string, role: Viewer['role']) =>
+  getSubject(n, { id: viewerId, role }),
+)
 
+// Through the same gate as the page: a title is enough to leak a private subject.
 export const generateMetadata = async ({ params }: { params: Promise<{ number: string }> }): Promise<Metadata> => {
   const n = parseSubjectRef((await params).number)
   if (n === null) return { title: 'Subject' }
-  const subject = await cachedSubject(n)
+  const user = await currentUser()
+  if (!user) return { title: `S-${n}` }
+  const subject = await cachedSubject(n, user.id, user.role)
   return { title: subject ? `${subject.ref} ${subject.title}` : `S-${n}` }
 }
 
@@ -66,21 +75,22 @@ const SubjectPage = async ({
   const user = await currentUser()
   if (!user) redirect('/login')
 
+  const viewer: Viewer = { id: user.id, role: user.role }
   const n = parseSubjectRef((await params).number)
   if (n === null) notFound()
-  const subject = await cachedSubject(n)
+  const subject = await cachedSubject(n, user.id, user.role)
   if (!subject) notFound()
   const query = await searchParams
 
   const [log, todos, humanNotes, files, stages, tags, projects, cairn] = await Promise.all([
-    listSubjectNotes(subject.id),
+    listSubjectNotes(subject.id, viewer),
     // The lab's todo rows, not the bare subject list: they carry priority and assignee.
-    listLabTodos({ subject: subject.id, includeClosed: true }),
-    listSubjectHumanNotes(subject.id),
-    listSubjectAttachments(subject.id),
+    listLabTodos({ subject: subject.id, includeClosed: true }, viewer),
+    listSubjectHumanNotes(subject.id, viewer),
+    listSubjectAttachments(subject.id, viewer),
     listStages(),
     listTags(),
-    listLabProjects(),
+    listLabProjects(viewer),
     getCairnConnection(),
   ])
 
@@ -105,6 +115,7 @@ const SubjectPage = async ({
         <ChevronRight size={12} className="text-fg-subtle hidden shrink-0 sm:block" aria-hidden />
         <span className="text-fg-subtle shrink-0 font-mono text-[0.71875rem]">{subject.ref}</span>
         <span className="text-fg-muted hidden max-w-[48ch] truncate text-[0.8125rem] md:block">{subject.title}</span>
+        <VisibilityBadge visibility={subject.visibility} members={subject.members.length} className="ml-1" />
         {subject.archived_at ? (
           <span className="border-border text-fg-subtle ml-1 rounded border px-1.5 py-px text-[0.625rem] tracking-wide uppercase">
             Archived
@@ -205,6 +216,7 @@ const SubjectPage = async ({
               tags={tags}
               projects={projects}
               canCreateTags={isAdmin}
+              isAdmin={isAdmin}
             />
           }
         />

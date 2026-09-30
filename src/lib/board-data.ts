@@ -3,6 +3,7 @@ import { byTitle } from '@/lib/utils'
 import { withAssignees, type Person } from '@/lib/api/people'
 import type { TaskPriority, TaskStatus, TaskType } from '@/schemas/task'
 import { withTaskSubjects, type LabTodoSubject } from '@/lib/api/lab-todos'
+import { restrictTo, visibleTasksOr, type Viewer } from '@/lib/api/visibility'
 
 /**
  * Data loader for the cross-project board (`/board`, CROFT-72).
@@ -68,9 +69,13 @@ const PREVIEW_CHARS = 280
  */
 export const listBoardTasks = async (
   _userId: string,
-  { includeClosed = false, limit = 2000 }: { includeClosed?: boolean; limit?: number } = {},
+  { includeClosed = false, limit = 2000 }: { includeClosed?: boolean; limit?: number },
+  viewer: Viewer,
 ): Promise<{ tasks: BoardTask[]; projects: BoardProject[]; closedHidden: number }> => {
   const closed = ['done', 'cancelled']
+  // Tasks and the closed count hold only what `viewer` may see: a todo of
+  // somebody else's private subject is not on the board, nor in its numbers.
+  const visible = await visibleTasksOr(viewer.id)
 
   const [projectsRes, tasksRes, totals, links] = await Promise.all([
     admin()
@@ -80,16 +85,11 @@ export const listBoardTasks = async (
       .order('title')
       .order('created_at'),
     (() => {
-      let q = admin()
-        .from('tasks')
-        .select(`${BOARD_COLUMNS}, project:projects!project_id!inner(key)`)
+      let q = restrictTo(admin().from('tasks').select(`${BOARD_COLUMNS}, project:projects!project_id!inner(key)`), visible)
       if (!includeClosed) q = q.not('status', 'in', `(${closed.join(',')})`)
       return q.order('updated_at', { ascending: false }).limit(limit)
     })(),
-    admin()
-      .from('tasks')
-      .select('id', { count: 'exact', head: true })
-      .in('status', closed),
+    restrictTo(admin().from('tasks').select('id', { count: 'exact', head: true }), visible).in('status', closed),
     admin().from('task_projects').select('task_id, project:projects(key)'),
   ])
 
@@ -107,7 +107,8 @@ export const listBoardTasks = async (
     guestKeys.set(row.task_id, [...(guestKeys.get(row.task_id) ?? []), key])
   }
 
-  const tasks = await withTaskSubjects(await withAssignees(
+  const tasks = await withTaskSubjects(
+    await withAssignees(
     ((tasksRes.data ?? []) as unknown as Row[]).map((t) => {
       const home = (Array.isArray(t.project) ? t.project[0]?.key : t.project?.key) ?? ''
       return {
@@ -117,7 +118,9 @@ export const listBoardTasks = async (
         project_keys: [home, ...(guestKeys.get(t.id) ?? [])].filter(Boolean),
       }
     }),
-  ))
+    ),
+    viewer.id,
+  )
 
   return {
     tasks,

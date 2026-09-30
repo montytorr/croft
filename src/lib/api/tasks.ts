@@ -1,9 +1,10 @@
 import { admin, pool } from '@/lib/db/client'
 import type { Actor } from './auth'
 import { diffTaskEvents, recordActivity } from './activity'
-import { subjectRef } from '@/lib/lab/types'
+import { subjectRef, type SubjectVisibility } from '@/lib/lab/types'
 import { issuedUnderFormerKey, lookupFormerKey, renameDay, type KeyRename } from './project-keys'
 import { fail } from './response'
+import { isTaskVisible } from './visibility'
 
 /**
  * Columns returned by `show`. Kept explicit so responses stay predictable.
@@ -46,6 +47,9 @@ export const withSubjectRefs = <T extends Record<string, unknown>>(rows: T[]) =>
 
 export type TaskRef = { key: string; number: number } | { id: string }
 
+/** A bare `subject_id` column in a select list (not the `subjects!subject_id` embed hint). */
+const SUBJECT_ID_COLUMN = /(^|,)\s*subject_id\s*(,|$)/
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** Accepts either `CAI-42` or a raw UUID, so both prose refs and ids work. */
@@ -85,7 +89,7 @@ export const refOfRow = (row: Record<string, unknown>) => {
  * through a retired key.
  */
 export const resolveTask = async (
-  _actor: Actor,
+  actor: Pick<Actor, 'userId'>,
   raw: string,
   fields = TASK_FIELDS,
 ): Promise<ResolvedTask> => {
@@ -96,9 +100,12 @@ export const resolveTask = async (
   // Key-based refs need the embedded project relation even when callers request
   // a narrow projection. `status` rides along so `refuseArchived` works for
   // callers that asked for a narrow field set too.
-  const select = fields.includes('projects!project_id!inner')
+  const withProject = fields.includes('projects!project_id!inner')
     ? fields
     : `${fields}, projects!project_id!inner(key, status)`
+  // The subject decides who may see the task (v0.4), so it is read whatever
+  // projection the caller asked for.
+  const select = SUBJECT_ID_COLUMN.test(withProject) ? withProject : `${withProject}, subject_id`
 
   const query = admin().from('tasks').select(select)
 
@@ -113,7 +120,15 @@ export const resolveTask = async (
   // the product into "No task CROFT-64." for a PGRST201 ambiguity that named
   // its own fix in the response body.
   if (error) throw new Error(`task lookup failed: ${error.message}`)
-  if (data) return { task: data as unknown as TaskRow, renamed: null, requestedRef }
+  if (data) {
+    // Hidden is missing: a todo of a subject the caller cannot see answers
+    // exactly as a ref that names nothing. Not tried under a former key
+    // either — a live-key hit is never also a retired-key hit.
+    const task = data as unknown as TaskRow
+    return (await isTaskVisible(task.subject_id, actor.userId))
+      ? { task, renamed: null, requestedRef }
+      : { task: null, renamed: null, requestedRef }
+  }
 
   // Not found under that key — but the key may be one the project used to
   // have. Refs escape into commit messages and other agents' notes, which a
@@ -138,6 +153,10 @@ export const resolveTask = async (
   if (!byFormer) return { task: null, renamed: former.rename, requestedRef }
 
   const task = byFormer as unknown as TaskRow
+  // Before the never-issued check: "did you mean T-5?" would name it.
+  if (!(await isTaskVisible(task.subject_id, actor.userId))) {
+    return { task: null, renamed: former.rename, requestedRef }
+  }
   if (!issuedUnderFormerKey(former.rename, task.created_at)) {
     return {
       task: null,
@@ -156,7 +175,7 @@ export const resolveTask = async (
  * shows a task back to the caller should use `resolveTask` and pass the
  * rename on.
  */
-export const findTask = async (actor: Actor, raw: string, fields = TASK_FIELDS) =>
+export const findTask = async (actor: Pick<Actor, 'userId'>, raw: string, fields = TASK_FIELDS) =>
   (await resolveTask(actor, raw, fields)).task
 
 /** A task row's embedded project, whichever alias or shape fetched it. */
@@ -318,20 +337,28 @@ export type TaskSubject = {
    * `croft push T-n` with no `--to` files the todo under `cairn_key`.
    */
   project: { name: string; cairn_key: string | null } | null
+  /**
+   * Who can see the subject, and so the todo (v0.4). `croft push` refuses a
+   * todo whose subject is not `lab` unless forced: Cairn has no notion of it.
+   */
+  visibility: SubjectVisibility
 }
 
-/** The subject a todo belongs to — "part of S-12" — or null for an ordinary task. */
-export const subjectOfTask = async (subjectId: unknown): Promise<TaskSubject | null> => {
+/**
+ * The subject a todo belongs to — "part of S-12" — or null for an ordinary
+ * task, or for a subject the viewer cannot see.
+ */
+export const subjectOfTask = async (subjectId: unknown, viewerId: string): Promise<TaskSubject | null> => {
   if (typeof subjectId !== 'string' || !subjectId) return null
   const result = await pool().query(
-    `select s.number, s.title, lp.name as project_name, lp.cairn_key
+    `select s.number, s.title, s.visibility, lp.name as project_name, lp.cairn_key
        from subjects s
        left join lab_projects lp on lp.id = s.project_id
-      where s.id = $1`,
-    [subjectId],
+      where s.id = $1 and croft_subject_visible(s.id, $2::uuid)`,
+    [subjectId, viewerId],
   )
   const row = result.rows[0] as
-    | { number: number; title: string; project_name: string | null; cairn_key: string | null }
+    | { number: number; title: string; visibility: SubjectVisibility; project_name: string | null; cairn_key: string | null }
     | undefined
   if (!row) return null
   return {
@@ -339,5 +366,6 @@ export const subjectOfTask = async (subjectId: unknown): Promise<TaskSubject | n
     number: row.number,
     title: row.title,
     project: row.project_name === null ? null : { name: row.project_name, cairn_key: row.cairn_key },
+    visibility: row.visibility,
   }
 }

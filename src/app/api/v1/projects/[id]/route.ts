@@ -3,6 +3,7 @@ import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { failFromDb } from '@/lib/api/db-errors'
 import { admin } from '@/lib/db/client'
+import { restrictTo, visibleTasksOr } from '@/lib/api/visibility'
 import { recordActivity } from '@/lib/api/activity'
 import type { Actor } from '@/lib/api/auth'
 import { removeAttachments } from '@/lib/attachments'
@@ -41,10 +42,11 @@ export const GET = route<{ id: string }>({
     const { project, renamed } = resolved
 
     const [{ count }, former] = await Promise.all([
-      admin()
-        .from('tasks')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', project.id),
+      // As the caller sees the project: private todos are not counted.
+      restrictTo(
+        admin().from('tasks').select('id', { count: 'exact', head: true }).eq('project_id', project.id),
+        await visibleTasksOr(actor.userId),
+      ),
       formerKeysByProject([project.id]),
     ])
 

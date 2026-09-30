@@ -266,7 +266,12 @@ export const syncCairn = async (
            from tasks t
            join projects p on p.id = t.project_id
           where t.cairn_ref is not null
+            -- Only the todos the caller may see: the report names each one,
+            -- and an outcome is written into its subject's log as the caller.
+            -- A private todo syncs when its owner or a member syncs.
+            and croft_task_visible(t.subject_id, $1::uuid)
           order by t.updated_at`,
+        [actor.userId],
       )
     ).rows,
   ) as LinkedTodo[]

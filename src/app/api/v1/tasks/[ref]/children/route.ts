@@ -2,6 +2,7 @@ import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { admin } from '@/lib/db/client'
 import { findTask, TASK_LIST_FIELDS } from '@/lib/api/tasks'
+import { restrictTo, visibleTasksOr } from '@/lib/api/visibility'
 import { isTerminal, type TaskStatus } from '@/schemas/task'
 
 export const dynamic = 'force-dynamic'
@@ -18,11 +19,15 @@ export const GET = route<{ ref: string }>({
     const task = await findTask(actor, params.ref, TASK_LIST_FIELDS)
     if (!task) return fail('not_found', `No task ${params.ref}.`)
 
-    const { data, error } = await admin()
-      .from('tasks')
-      .select('id, number, title, type, status, priority, project:projects!project_id!inner(key)')
-      .eq('parent_id', task.id)
-      .order('created_at')
+    // Only the children the caller may see: a private todo filed under a lab
+    // task is neither listed nor counted.
+    const { data, error } = await restrictTo(
+      admin()
+        .from('tasks')
+        .select('id, number, title, type, status, priority, project:projects!project_id!inner(key)')
+        .eq('parent_id', task.id),
+      await visibleTasksOr(actor.userId),
+    ).order('created_at')
 
     if (error) return fail('internal_error', error.message)
 

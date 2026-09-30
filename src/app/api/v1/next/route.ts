@@ -5,6 +5,7 @@ import { admin } from '@/lib/db/client'
 import { rankNext, type Candidate } from '@/lib/api/next'
 import { resolveProject } from '@/lib/api/project-keys'
 import { peopleByIds, resolveAssignee } from '@/lib/api/people'
+import { restrictTo, visibleTasksOr } from '@/lib/api/visibility'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,12 +66,16 @@ export const GET = route({
     const owner = query.assignee ? await resolveAssignee(query.assignee, actor.userId) : null
     if (owner && !owner.ok) return fail(owner.code, owner.error)
 
-    const base = admin()
-      .from('tasks')
-      .select(
-        'id, number, title, status, priority, type, claimed_by, claimed_session, heartbeat_at, updated_at, ' +
-          'checkpoint_summary, blocked_at, assignee_user_id, project:projects!project_id!inner(key)',
-      )
+    // Only what the caller may see is offered, or counted in `considered`.
+    const base = restrictTo(
+      admin()
+        .from('tasks')
+        .select(
+          'id, number, title, status, priority, type, claimed_by, claimed_session, heartbeat_at, updated_at, ' +
+            'checkpoint_summary, blocked_at, assignee_user_id, project:projects!project_id!inner(key)',
+        ),
+      await visibleTasksOr(actor.userId),
+    )
       .not('status', 'in', '("done","cancelled")')
       .neq('projects.status', 'archived')
     const scoped = projectKey ? base.eq('projects.key', projectKey) : base

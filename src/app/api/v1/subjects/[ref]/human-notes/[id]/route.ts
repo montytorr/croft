@@ -12,7 +12,7 @@ export const PATCH = route<{ ref: string; id: string }, z.infer<typeof subjectHu
   schema: subjectHumanNoteSchema,
   secretFields: ['body'],
   handler: async ({ actor, params, body }) => {
-    const subject = await resolveSubject(params.ref)
+    const subject = await resolveSubject(params.ref, actor.userId)
     if (!subject) return noSuchSubject(params.ref)
     const unreadable = refuseUnreadableNote(actor, body.body)
     if (unreadable) return unreadable
@@ -24,7 +24,7 @@ export const PATCH = route<{ ref: string; id: string }, z.infer<typeof subjectHu
 /** Removes a note. Its author, or an administrator. */
 export const DELETE = route<{ ref: string; id: string }>({
   handler: async ({ actor, params }) => {
-    const subject = await resolveSubject(params.ref)
+    const subject = await resolveSubject(params.ref, actor.userId)
     if (!subject) return noSuchSubject(params.ref)
     const deleted = await deleteSubjectHumanNote(actor, subject.id, params.id)
     return deleted.ok ? ok({ deleted: true, id: params.id }) : deleted.response

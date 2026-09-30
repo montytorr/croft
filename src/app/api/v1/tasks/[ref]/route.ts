@@ -17,6 +17,7 @@ import {
 import { formerKeysByProject, formerRefsOf, projectsForKeys, resolveProject } from '@/lib/api/project-keys'
 import { buildDigest } from '@/lib/api/digest'
 import { mentionsOf } from '@/lib/api/mentions'
+import { viewerOf } from '@/lib/api/visibility'
 import { peopleByIds, resolveAssignee, withAssignee } from '@/lib/api/people'
 import { removeAttachments } from '@/lib/attachments'
 import { refuseUnreadableBody } from '@/lib/api/task-body'
@@ -47,7 +48,7 @@ export const GET = route<{ ref: string }>({
     )
     const told = { ...renameFields(resolved), ...(former_refs.length > 0 ? { former_refs } : {}) }
     // A todo says which subject it is part of, by ref, so nobody has to map a uuid.
-    const subject = await subjectOfTask(task.subject_id)
+    const subject = await subjectOfTask(task.subject_id, actor.userId)
 
     // `full` stays the default so nothing already calling this changes
     // behaviour. The CLI asks for the digest explicitly.
@@ -59,9 +60,9 @@ export const GET = route<{ ref: string }>({
           ? { cairn_ref: task.cairn_ref, cairn_status: task.cairn_status, cairn_synced_at: task.cairn_synced_at }
           : {}),
       }
-      return ok({ ...(await buildDigest(task)), ...lab, ...told })
+      return ok({ ...(await buildDigest(task, viewerOf(actor))), ...lab, ...told })
     }
-    const mentioned = await mentionsOf(task.id as string, 50)
+    const mentioned = await mentionsOf(task.id as string, 50, viewerOf(actor))
     return ok({ ...task, subject, ...told, mentioned_in: mentioned.mentions, mentioned_in_total: mentioned.total })
   },
 })

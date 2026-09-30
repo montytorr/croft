@@ -7,6 +7,7 @@ import type { Stage, SubjectSummary } from '@/lib/lab/types'
 import { CATEGORY_LABEL, StageGlyph, stageTone } from './stage'
 import { ProjectLabel } from './project-label'
 import { TagChip } from './tag-chip'
+import { LockMark } from './visibility'
 
 const Counts = ({ todos }: { todos: SubjectSummary['todos'] }) =>
   todos.open + todos.done === 0 ? (
@@ -27,7 +28,10 @@ const Row = ({ subject }: { subject: SubjectSummary }) => (
     >
       <span className="text-fg-subtle w-[3rem] shrink-0 font-mono text-[0.6875rem] tabular-nums">{subject.ref}</span>
       <span className="min-w-0 flex-1">
-        <span className="text-fg block truncate text-[0.875rem] font-medium">{subject.title}</span>
+        <span className="flex min-w-0 items-center gap-1.5">
+          <LockMark visibility={subject.visibility} members={subject.members.length} />
+          <span className="text-fg truncate text-[0.875rem] font-medium">{subject.title}</span>
+        </span>
         {subject.conclusion ? (
           <span className="writeup-sm text-fg-muted block truncate !text-[0.8125rem] italic">{subject.conclusion}</span>
         ) : null}

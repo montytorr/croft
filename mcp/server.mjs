@@ -151,6 +151,17 @@ const TOOLS = [
         tags: { type: 'string', description: 'Comma-separated tag names (croft tags lists them).' },
         project: { type: 'string', description: 'The lab project it is part of, e.g. "Trig" (croft projects lists them).' },
         owner: { type: 'string', description: '"me" to own it yourself.' },
+        visibility: {
+          type: 'string',
+          enum: ['lab', 'members', 'private'],
+          description:
+            'Who sees it. "lab" (the default): everyone. "members": its owner and the people in members. ' +
+            '"private": its owner only. Publishing to the lab later is one-way.',
+        },
+        members: {
+          type: 'string',
+          description: 'Comma-separated people to share it with (me, emails or names; croft people lists them). Needs visibility "members".',
+        },
       },
       required: ['title'],
     },
@@ -161,6 +172,8 @@ const TOOLS = [
       ...(a.tags ? ['--tag', a.tags] : []),
       ...(a.project ? ['--project', a.project] : []),
       ...(a.owner ? ['--owner', a.owner] : []),
+      ...(a.visibility ? ['--visibility', a.visibility] : []),
+      ...(a.members ? ['--member', a.members] : []),
     ],
   },
   {

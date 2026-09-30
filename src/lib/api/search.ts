@@ -1,4 +1,4 @@
-import { admin } from '@/lib/db/client'
+import { admin, pool } from '@/lib/db/client'
 import { issuedUnderFormerKey, lookupFormerKey, type KeyRename } from './project-keys'
 import { subjectByRefQuery } from './subjects'
 
@@ -152,6 +152,21 @@ type ExactTask = {
   renamed_from?: KeyRename
 }
 
+/**
+ * The exact-address paths read tasks directly rather than through the ranked
+ * RPCs, so they apply the same rule themselves: a todo whose subject the viewer
+ * cannot see is not found, exactly as if it did not exist.
+ */
+const visibleTaskFilter = async (viewerId: string): Promise<string> => {
+  const { rows } = await pool().query<{ id: string }>(
+    'select croft_visible_subjects($1) as id',
+    [viewerId],
+  )
+  return rows.length > 0
+    ? `subject_id.is.null,subject_id.in.(${rows.map((row) => row.id).join(',')})`
+    : 'subject_id.is.null'
+}
+
 const keyOfProject = (project: ExactTask['project']) =>
   (Array.isArray(project) ? project[0]?.key : project?.key) ?? null
 
@@ -160,7 +175,7 @@ const keyOfProject = (project: ExactTask['project']) =>
  * the whole point of retaining former keys is that old refs keep resolving.
  */
 const tasksByNumber = async (
-  _userId: string,
+  viewerId: string,
   q: string,
   project?: string,
 ): Promise<ExactTask[]> => {
@@ -171,6 +186,7 @@ const tasksByNumber = async (
     .from('tasks')
     .select(EXACT_COLUMNS)
     .eq('number', Number(match[1]))
+    .or(await visibleTaskFilter(viewerId))
   if (project) query = query.eq('projects.key', project.toUpperCase())
 
   const { data } = await query
@@ -179,19 +195,21 @@ const tasksByNumber = async (
   return (data ?? []) as unknown as ExactTask[]
 }
 
-const taskByRef = async (_userId: string, q: string): Promise<ExactTask | null> => {
+const taskByRef = async (viewerId: string, q: string): Promise<ExactTask | null> => {
   const match = REF_QUERY.exec(q)
   if (!match?.[1] || !match[2]) return null
   const key = match[1].toUpperCase()
   const number = Number(match[2])
 
   const columns = EXACT_COLUMNS
+  const visible = await visibleTaskFilter(viewerId)
 
   const { data } = await admin()
     .from('tasks')
     .select(columns)
     .eq('projects.key', key)
     .eq('number', number)
+    .or(visible)
     .maybeSingle()
 
   if (data) return data as unknown as ExactTask
@@ -204,6 +222,7 @@ const taskByRef = async (_userId: string, q: string): Promise<ExactTask | null> 
     .select(`${columns}, created_at`)
     .eq('project_id', former.projectId)
     .eq('number', number)
+    .or(visible)
     .maybeSingle()
 
   const task = (byFormer as unknown as ExactTask | null) ?? null
@@ -389,7 +408,7 @@ export const searchAll = async (
 
   // `S-12` names a subject the same way `CAI-42` names a task.
   const wantsSubjects = !filters.project && (!filters.kinds || filters.kinds.includes('subject'))
-  const subject = wantsSubjects ? await subjectByRefQuery(q) : null
+  const subject = wantsSubjects ? await subjectByRefQuery(q, userId) : null
   const exactSubject: SearchAllRow[] = subject
     ? [{
         kind: 'subject',

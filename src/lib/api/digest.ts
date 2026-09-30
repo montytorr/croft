@@ -1,5 +1,6 @@
 import { admin } from '@/lib/db/client'
 import { mentionsOf } from './mentions'
+import { isTaskVisible, restrictTo, visibleTasksOr, type Viewer } from './visibility'
 
 /** Roughly four characters per token. Order-of-magnitude, on purpose. */
 const tokens = (text: string | null | undefined) => Math.ceil((text?.length ?? 0) / 4)
@@ -27,20 +28,23 @@ const MENTION_BUDGET = 5
  * are what a later reader came for.
  */
 /** `CAI-42` for a task id, or null. Refs are addressable; uuids are not. */
-const refOf = async (id: unknown): Promise<string | null> => {
+const refOf = async (id: unknown, viewerId: string): Promise<string | null> => {
   if (typeof id !== 'string') return null
   const { data } = await admin()
     .from('tasks')
-    .select('number, project:projects!project_id!inner(key)')
+    .select('number, subject_id, project:projects!project_id!inner(key)')
     .eq('id', id)
     .maybeSingle()
   if (!data) return null
-  const row = data as unknown as { number: number; project: { key: string } | { key: string }[] }
+  const row = data as unknown as { number: number; subject_id: string | null; project: { key: string } | { key: string }[] }
+  // A duplicate or parent the viewer cannot see is not named.
+  if (!(await isTaskVisible(row.subject_id, viewerId))) return null
   const project = Array.isArray(row.project) ? row.project[0] : row.project
   return `${project?.key}-${row.number}`
 }
 
-export const buildDigest = async (task: Record<string, unknown>) => {
+export const buildDigest = async (task: Record<string, unknown>, viewer: Viewer) => {
+  const visible = await visibleTasksOr(viewer.id)
   const [{ data: notes }, { count: childCount }, { count: childClosed }, duplicateOf, parent, mentioned] =
     await Promise.all([
       admin()
@@ -48,18 +52,22 @@ export const buildDigest = async (task: Record<string, unknown>) => {
         .select('kind, note, actor_id, created_at')
         .eq('task_id', task.id as string)
         .order('created_at'),
-      admin()
-        .from('tasks')
-        .select('id', { count: 'exact', head: true })
-        .eq('parent_id', task.id as string),
-      admin()
-        .from('tasks')
-        .select('id', { count: 'exact', head: true })
-        .eq('parent_id', task.id as string)
-        .in('status', ['done', 'cancelled']),
-      refOf(task.duplicate_of),
-      refOf(task.parent_id),
-      mentionsOf(task.id as string, MENTION_BUDGET),
+      // Children counted as the viewer sees them.
+      restrictTo(
+        admin().from('tasks').select('id', { count: 'exact', head: true }).eq('parent_id', task.id as string),
+        visible,
+      ),
+      restrictTo(
+        admin()
+          .from('tasks')
+          .select('id', { count: 'exact', head: true })
+          .eq('parent_id', task.id as string)
+          .in('status', ['done', 'cancelled']),
+        visible,
+      ),
+      refOf(task.duplicate_of, viewer.id),
+      refOf(task.parent_id, viewer.id),
+      mentionsOf(task.id as string, MENTION_BUDGET, viewer),
     ])
 
   const all = (notes ?? []) as { kind: string; note: string; actor_id: string; created_at: string }[]

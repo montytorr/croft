@@ -4,6 +4,7 @@ import { projectForCheckoutName, projectForRepo } from './project-resolution'
 import { formerKeysByProject, formerRefsOf, liveProjectKey, resolveProject, type FormerKey, type KeyRename } from './project-keys'
 import { peopleByIds } from './people'
 import { TASK_PRIORITIES } from '@/schemas/task'
+import { restrictTo, visibleTasksOr } from './visibility'
 
 /**
  * The briefing a session opens with.
@@ -178,12 +179,14 @@ export const buildContext = async (
   const scopedProject = input.scope === 'project' ? project : null
   if (input.scope === 'project' && !scopedProject) throw new ContextScopeError()
 
+  // Every list below holds only tasks the caller's human may see: a todo of
+  // somebody else's private subject is neither named nor counted (v0.4).
+  const visible = await visibleTasksOr(actor.userId)
+
   // --- what this agent is still holding ---------------------------------
   const held: ContextPayload['held'] = []
   if (actor.actorId) {
-    let query = admin()
-      .from('tasks')
-      .select(HELD_SELECT)
+    let query = restrictTo(admin().from('tasks').select(HELD_SELECT), visible)
       .eq('claimed_by', actor.actorId)
     if (scopedProject) query = query.eq('projects.key', scopedProject)
     const { data, error } = await query
@@ -222,16 +225,12 @@ export const buildContext = async (
   if (project) {
     // Read together: this route is on the path of every session start.
     const [flight, owned] = await Promise.all([
-      admin()
-        .from('tasks')
-        .select(OWNED_SELECT)
+      restrictTo(admin().from('tasks').select(OWNED_SELECT), visible)
         .eq('projects.key', project)
         .in('status', ['doing', 'in-review'])
         .order('updated_at', { ascending: false })
         .limit(8),
-      admin()
-        .from('tasks')
-        .select(OWNED_SELECT)
+      restrictTo(admin().from('tasks').select(OWNED_SELECT), visible)
         .eq('projects.key', project)
         .eq('assignee_user_id', actor.userId)
         .in('status', ['todo', 'backlog', 'doing'])
@@ -294,9 +293,7 @@ export const buildContext = async (
 
   // --- claims nobody is acting on ---------------------------------------
   const cutoff = new Date(Date.now() - LEASE_MINUTES * 60_000).toISOString()
-  let staleQuery = admin()
-    .from('tasks')
-    .select(TASK_SELECT)
+  let staleQuery = restrictTo(admin().from('tasks').select(TASK_SELECT), visible)
     .not('claimed_by', 'is', null)
     .lt('heartbeat_at', cutoff)
   if (scopedProject) staleQuery = staleQuery.eq('projects.key', scopedProject)

@@ -32,12 +32,17 @@ import { formerRefsOf, renameLine, renamesOf, taskRedirectNotice } from '@/lib/p
 import { LABEL, PANE } from './styles'
 import { getSubject } from '@/lib/lab/data'
 import { ProjectLabel } from '@/components/lab/project-label'
+import { VisibilityBadge } from '@/components/lab/visibility'
 import { TODO_PROJECT_KEY } from '@/lib/lab/types'
+import type { Viewer } from '@/lib/api/visibility'
 
 export const dynamic = 'force-dynamic'
 
 // Deduped against the page's own lookup below (React cache(), same request).
-const cachedTask = cache(getTask)
+// Keyed on primitives: cache() compares arguments by identity.
+const cachedTask = cache((userId: string, key: string, number: number, role: Viewer['role']) =>
+  getTask(userId, key, number, { id: userId, role }),
+)
 
 export const generateMetadata = async ({
   params,
@@ -52,7 +57,7 @@ export const generateMetadata = async ({
   // is resolved alongside it, not after it.
   const user = await currentUser()
   if (!user) return { title: ref }
-  const task = await cachedTask(user.id, key, parsed)
+  const task = await cachedTask(user.id, key, parsed, user.role)
   if (!task) return { title: ref }
   const title = `${ref} · ${task.title}`
   return { title: title.length > 60 ? `${title.slice(0, 59)}…` : title }
@@ -99,8 +104,9 @@ const TaskPage = async ({
   const parsed = Number(number)
   if (!Number.isInteger(parsed)) notFound()
 
+  const viewer: Viewer = { id: user.id, role: user.role }
   const [task, formerKeys] = await Promise.all([
-    cachedTask(user.id, key, parsed),
+    cachedTask(user.id, key, parsed, user.role),
     listFormerKeyRecords(),
   ])
 
@@ -122,20 +128,20 @@ const TaskPage = async ({
     notes, comments, attachments, relations, duplicateOf, activity, children, parent,
     alsoProjects, allProjects, mentioned, subject,
   ] = await Promise.all([
-    listNotes(task.id),
-    listComments(task.id),
+    listNotes(task.id, viewer),
+    listComments(task.id, viewer),
     // With a kind each and a stable content_url, so previews never expire on an open page.
-    listTaskAttachments(task.id),
-    listRelations(task.id),
-    task.duplicate_of ? getDuplicateOf(task.duplicate_of) : Promise.resolve(null),
-    listActivity(task.id),
-    listChildren(task.id),
-    task.parent_id ? getParent(task.parent_id) : Promise.resolve(null),
-    listAlsoProjects(task.id),
-    listProjects(user.id),
-    mentionsOf(task.id, 8),
+    listTaskAttachments(task.id, viewer),
+    listRelations(task.id, viewer),
+    task.duplicate_of ? getDuplicateOf(task.duplicate_of, viewer) : Promise.resolve(null),
+    listActivity(task.id, viewer),
+    listChildren(task.id, viewer),
+    task.parent_id ? getParent(task.parent_id, viewer) : Promise.resolve(null),
+    listAlsoProjects(task.id, viewer),
+    listProjects(user.id, {}, viewer),
+    mentionsOf(task.id, 8, viewer),
     // For the subject's lab project on the chip above the title.
-    task.subject ? getSubject(task.subject.number).catch(() => null) : Promise.resolve(null),
+    task.subject ? getSubject(task.subject.number, viewer).catch(() => null) : Promise.resolve(null),
   ])
 
   // What this task used to be called. An alias that only resolves is half an
@@ -262,6 +268,8 @@ const TaskPage = async ({
                   <ProjectLabel project={subject.project} />
                 </Link>
               ) : null}
+              {/* A todo is exactly as visible as its subject: say so where it is worked. */}
+              {subject ? <VisibilityBadge visibility={subject.visibility} members={subject.members.length} /> : null}
               {!task.subject || task.project.key !== TODO_PROJECT_KEY ? (
                 <Link
                   href="/todos"

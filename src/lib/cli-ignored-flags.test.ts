@@ -164,6 +164,10 @@ describe('documented invocations stay silent', () => {
     ['list', 'CAI', '--assignee', 'me'],
     ['next', '--project', 'CAI', '--assignee', 'me'],
     ['check', 'x', '--assignee', 'julien@acme.io'],
+    ['subject', 'add', 'A subject', '--visibility', 'members', '--member', 'mael', '--member', 'sam,me'],
+    ['subject', 'share', 'S-1', '+mael', '-sam', '--visibility', 'members'],
+    ['subject', 'publish', 'S-1'],
+    ['push', 'T-1', '--link', 'CAIRN-1', '--force'],
   ]
 
   it.each(invocations.map((args) => [args.join(' '), args] as const))(

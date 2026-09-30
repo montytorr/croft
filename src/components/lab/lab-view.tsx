@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState, useTransition } from 'react'
-import { Columns3, List, Plus, Search, X } from 'lucide-react'
+import { Columns3, List, Lock, Plus, Search, X } from 'lucide-react'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { EmptyState } from '@/components/empty-state'
 import { Spinner } from '@/components/spinner'
@@ -17,13 +17,21 @@ import { LabList } from './lab-list'
 import { ProjectLabel } from './project-label'
 import { TagChip } from './tag-chip'
 
-export type LabFilters = { project: string; tag: string; owner: 'me' | 'all'; q: string }
+export type LabFilters = {
+  project: string
+  tag: string
+  owner: 'me' | 'all'
+  /** Only subjects not yet in the lab: the viewer's private ones and those shared with them. */
+  restricted: boolean
+  q: string
+}
 
-const labUrl = ({ project, tag, owner, q }: LabFilters) => {
+const labUrl = ({ project, tag, owner, restricted, q }: LabFilters) => {
   const params = new URLSearchParams()
   if (project) params.set('project', project)
   if (tag) params.set('tag', tag)
   if (owner === 'me') params.set('owner', 'me')
+  if (restricted) params.set('private', '1')
   if (q.trim()) params.set('q', q.trim())
   const qs = params.toString()
   return qs ? `/?${qs}` : '/'
@@ -92,15 +100,15 @@ export const LabView = ({
     start(() => router.replace(labUrl({ ...filters, q: query, ...next }), { scroll: false }))
 
   // The text filter follows typing, a beat behind it.
-  const { project, tag, owner, q } = filters
+  const { project, tag, owner, restricted, q } = filters
   useEffect(() => {
     if (query === q) return
     const timer = setTimeout(
-      () => start(() => router.replace(labUrl({ project, tag, owner, q: query }), { scroll: false })),
+      () => start(() => router.replace(labUrl({ project, tag, owner, restricted, q: query }), { scroll: false })),
       280,
     )
     return () => clearTimeout(timer)
-  }, [query, q, project, tag, owner, router])
+  }, [query, q, project, tag, owner, restricted, router])
 
   // `/` focuses the filter, as it does on every list.
   useEffect(() => {
@@ -124,7 +132,7 @@ export const LabView = ({
   const active = subjects.filter((s) => s.stage.category === 'active').length
   const planned = subjects.filter((s) => s.stage.category === 'planned').length
   const concluded = subjects.length - active - planned
-  const filtered = Boolean(filters.project || filters.tag || filters.owner === 'me' || filters.q)
+  const filtered = Boolean(filters.project || filters.tag || filters.owner === 'me' || filters.restricted || filters.q)
   // Matched by name, any case, or id, as the API does — so a link typed by hand
   // still lights its chip.
   const pickedProject = matchProjectFilter(filters.project, projects)
@@ -194,6 +202,23 @@ export const LabView = ({
             { value: 'me', label: 'Mine' },
           ]}
         />
+
+        <button
+          type="button"
+          aria-pressed={filters.restricted}
+          onClick={() => push({ restricted: !filters.restricted })}
+          title="Subjects not yet published to the lab: your private ones and those shared with you"
+          className={cn(
+            'flex h-[1.875rem] shrink-0 items-center gap-1.5 rounded-lg px-2 text-[0.75rem] transition-[background-color,color,box-shadow] duration-[var(--dur-2)] ease-[var(--ease-out)]',
+            filters.restricted
+              ? 'bg-surface text-fg ring-border shadow-[var(--shadow-sm)] ring-1'
+              : 'text-fg-muted hover:text-fg bg-surface-raised',
+          )}
+        >
+          <Lock size={12} aria-hidden />
+          <span className="sm:hidden">Private</span>
+          <span className="hidden sm:inline">Private &amp; shared with me</span>
+        </button>
 
         {projects.length > 0 ? (
           <div className="flex min-w-0 flex-wrap items-center gap-1" role="group" aria-label="Filter by project">
