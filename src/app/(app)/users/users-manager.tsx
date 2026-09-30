@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, ChevronRight, Copy, KeyRound, RotateCcw, UserRoundCog, UserRoundPlus } from 'lucide-react'
+import { ChevronRight, KeyRound, RotateCcw, UserRoundCog, UserRoundPlus } from 'lucide-react'
 import { mutate } from '@/lib/api/mutate'
 import { Button, Field, Input, Select } from '@/components/ui/control'
 import type { AdminUser } from '@/lib/api/users'
@@ -26,8 +26,6 @@ export const UsersManager = ({ users, currentUserId }: { users: AdminUser[]; cur
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [keys, setKeys] = useState<Record<string, UserKey[]>>({})
-  const [freshKey, setFreshKey] = useState<{ userId: string; key: string } | null>(null)
-  const [copied, setCopied] = useState(false)
   // Whose open tasks are being handed over, and to whom (CROFT-310).
   const [handover, setHandover] = useState<{ userId: string; to: string } | null>(null)
 
@@ -125,18 +123,6 @@ export const UsersManager = ({ users, currentUserId }: { users: AdminUser[]; cur
     const payload = await response.json().catch(() => null) as { data?: UserKey[]; error?: string } | null
     if (!response.ok) throw new Error(payload?.error || 'Could not load agent keys.')
     setKeys((current) => ({ ...current, [userId]: payload?.data ?? [] }))
-  })
-
-  const createKey = (userId: string, form: HTMLFormElement) => run(`keys:${userId}`, async () => {
-    const data = new FormData(form)
-    const result = await mutate<{ key: string }>(`/api/v1/users/${userId}/keys`, {
-      method: 'POST',
-      body: { agentName: String(data.get('agentName') ?? ''), name: String(data.get('name') ?? '') },
-    })
-    if (!result.ok) throw new Error(result.error)
-    setFreshKey({ userId, key: result.data.key })
-    form.reset()
-    await loadKeys(userId)
   })
 
   const revokeKey = (userId: string, key: UserKey) => {
@@ -334,24 +320,11 @@ export const UsersManager = ({ users, currentUserId }: { users: AdminUser[]; cur
                                 </li>
                               ))}
                             </ul>
-                            {freshKey?.userId === user.id && (
-                              <div className="enter-rise mb-3 rounded-md border border-[color:color-mix(in_oklab,var(--accent)_30%,transparent)] bg-[color-mix(in_oklab,var(--accent)_8%,transparent)] p-3">
-                                <p className="mb-2 text-[0.6875rem] font-medium">New key — shown once</p>
-                                <div className="flex items-center gap-2">
-                                  <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap text-[0.6875rem]">{freshKey.key}</code>
-                                  <Button size="sm" variant="primary" onClick={async () => {
-                                    await navigator.clipboard.writeText(freshKey.key)
-                                    setCopied(true)
-                                    setTimeout(() => setCopied(false), 1600)
-                                  }}>{copied ? <Check size={12} /> : <Copy size={12} />}{copied ? 'Copied' : 'Copy'}</Button>
-                                </div>
-                              </div>
-                            )}
-                            <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); void createKey(user.id, event.currentTarget) }}>
-                              <Field label="Agent name"><Input name="agentName" required pattern="[a-z][a-z0-9-]{1,40}" placeholder="claude-code" className="w-40" /></Field>
-                              <Field label="Key label"><Input name="name" required placeholder="Workstation key" className="w-44" /></Field>
-                              <Button size="sm" type="submit" disabled={busy === `keys:${user.id}`}>Create key</Button>
-                            </form>
+                            <p className="text-fg-subtle text-[0.6875rem] leading-relaxed">
+                              Keys are paired by the person who holds them: they run <code className="font-mono">croft setup</code> and
+                              approve it in their own browser. You can revoke a key here; you cannot mint one for them, since a key
+                              reads everything its holder can, private subjects included.
+                            </p>
                           </>
                         )}
                       </div>

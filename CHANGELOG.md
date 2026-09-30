@@ -8,6 +8,16 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+### Security
+
+- **No one can mint an agent key for someone else, administrators included** (CROFT-16).
+  `POST /api/v1/users/{id}/keys` now refuses any id but the caller's own (403), and the Users
+  page no longer offers to create one. A key is its holder's identity, so an administrator who
+  could mint one could read everyone's private subjects. People pair their own keys
+  (`croft setup`, approved in their own browser). Administrators still list and revoke anyone's
+  keys, which only ever takes access away. Password reset and disable/restore remain, and are
+  documented in `SECURITY.md`.
+
 ## [0.4.1] — 2026-09-30
 
 ### Fixed

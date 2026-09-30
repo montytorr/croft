@@ -1787,7 +1787,7 @@ export const openapiSpec = () => ({
         responses: { '200': okResponse('Keys, oldest first.', { type: 'array', items: agentKey }), '403': errorResponse },
       },
       post: {
-        summary: 'Create an agent key for an active user',
+        summary: 'Create an agent key for yourself (refused for anyone else, administrators included: people pair their own keys)',
         requestBody: body({
           type: 'object',
           properties: {
