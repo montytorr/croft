@@ -1,13 +1,9 @@
 name: deploy
 
-# Manual until Croft has a host with a runner labelled `croft`. On
-# workflow_run it would queue after every green CI on main, waiting for a
-# runner that does not exist yet. Restore the trigger below once it does.
-#   workflow_run:
-#     workflows: [ci]
-#     types: [completed]
 on:
-  workflow_dispatch:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
 
 # One deploy at a time. A second push mid-build would otherwise race the
 # first for the same container name.
@@ -28,7 +24,12 @@ jobs:
     # Only where the self-hosted runner exists. A mirror of this repository
     # (another organisation's copy, deploying its own way) would otherwise
     # queue this job forever waiting for a runner labelled `croft`.
+    # Off until a host with a runner labelled `croft` exists: set the
+    # repository variable CROFT_DEPLOY_ENABLED to `true` once it does. A job
+    # skipped by its condition never waits for a runner; one without it
+    # would queue after every green CI on main, forever.
     if: >-
+      vars.CROFT_DEPLOY_ENABLED == 'true' &&
       github.repository == 'montytorr/croft' &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
