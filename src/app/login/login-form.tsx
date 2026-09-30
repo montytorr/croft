@@ -16,7 +16,7 @@ const PILLARS = [
   { icon: FlaskConical, title: 'Subjects', body: 'A technology, a proof of concept, an idea worth building.' },
   { icon: NotebookPen, title: 'Write-ups', body: 'What it is, what we found, written to be read.' },
   { icon: ListChecks, title: 'Todos', body: 'The work each subject needs, claimed by people and agents.' },
-  { icon: Signpost, title: 'Stages', body: 'From to-explore to rolled out — or rejected, with a reason.' },
+  { icon: Signpost, title: 'Stages', body: 'Explored, developed, matured — or dropped, with a reason.' },
 ]
 
 export const LoginForm = () => {
@@ -83,12 +83,12 @@ export const LoginForm = () => {
             {/* The grotesk for the claim, the reading serif for the second
                 half: the two voices of the product in one line. */}
             <h2 className="font-display headline headline-xl text-fg text-[2.5rem] leading-[1.08]">
-              Work the ground{' '}
-              <span className="text-fg-muted font-serif font-normal italic tracking-normal">one strip at a time.</span>
+              The farm{' '}
+              <span className="text-fg-muted font-serif font-normal italic tracking-normal">where your ideas grow.</span>
             </h2>
             <p className="text-fg-muted mt-4 max-w-[28rem] font-serif text-[1.0625rem] leading-relaxed">
-              A lab notebook for your group: the subjects worth exploring, written up as you learn,
-              moved from idea to rollout — and concluded, even when the answer is no.
+              Where your team, people and agents, explores its subjects, develops them and brings
+              them to maturity — and says why when one is dropped.
             </p>
           </div>
         </div>

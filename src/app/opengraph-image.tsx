@@ -16,7 +16,7 @@ import { rigsDataUri } from '@/lib/brand-mark'
  * network on every cold render, and a card that sometimes fails is worse than
  * a card set in the default face.
  */
-export const alt = 'Croft — a lab notebook: subjects to explore, written up and walked through stages'
+export const alt = 'Croft — the farm where your ideas grow: subjects explored, developed and matured'
 // Drawn per request: the name and the accent are the instance's.
 export const dynamic = 'force-dynamic'
 export const size = { width: 1200, height: 630 }
@@ -97,7 +97,7 @@ const OpengraphImage = async () => {
               color: FG_MUTED,
             }}
           >
-            A lab notebook for subjects worth exploring — written up, worked, concluded.
+            The farm where your ideas grow — explored, developed, matured.
           </div>
         </div>
       </div>

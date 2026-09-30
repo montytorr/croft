@@ -14,7 +14,7 @@ import './globals.css'
  */
 export const dynamic = 'force-dynamic'
 
-const DESCRIPTION = 'A lab notebook for a working group: subjects to explore, written up and walked through stages.'
+const DESCRIPTION = 'The farm where your ideas grow: subjects explored, developed and brought to maturity by your people and agents.'
 
 /**
  * Where relative metadata URLs — the opengraph-image among them — resolve.
