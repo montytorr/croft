@@ -23,19 +23,21 @@ export type Palette = { light: AccentTokens; dark: AccentTokens }
 
 export const HEX = /^#[0-9a-f]{6}$/i
 
-/** The stock accent, dark variant: the stones on the stock favicon. */
-export const STOCK_MARK = '#7b86e8'
+/** The stock accent, dark variant: heather, the strips on the stock favicon. */
+export const STOCK_MARK = '#d89bc4'
 
 const WHITE = '#ffffff'
-const LIGHT_GROUND = '#ffffff'
-const DARK_GROUND = '#08090a'
-const DARK_TEXT = '#0d0e10'
+/** The two grounds an accent is measured against: paper and peat (--bg). */
+export const LIGHT_GROUND = '#f6f2ea'
+export const DARK_GROUND = '#161316'
+/** Ink, for a fill too light to carry white (--fg, light). */
+export const DARK_TEXT = '#221c20'
 
 /**
  * Text and links carry the accent, so the light variant has to be readable
- * text on white: 4.5. The dark one is held a little higher, 5.5, which is
- * where the stock #7b86e8 sits against its ground — a brand should not come
- * out dimmer than the default it replaces.
+ * text on paper: 4.5. The dark one is held a little higher, 5.5, so a brand
+ * never comes out much dimmer on peat than the stock heather (8.26) it
+ * replaces.
  */
 const LIGHT_MIN = 4.5
 const DARK_MIN = 5.5
@@ -120,9 +122,9 @@ const clear = (hex: string, direction: 1 | -1, ground: string, min: number): str
 
 /**
  * White on the fill unless it would be unreadable. 3 rather than 4.5 because
- * this is button text, medium weight, and the stock dark theme already sets
- * white on #7b86e8 at 3.2 — a stricter line here would flip button text to
- * black on accents that look exactly like the default.
+ * this is button text, medium weight, and a stricter line would flip button
+ * text to ink on mid-tone accents that carry white perfectly well. The stock
+ * dark heather is below it, which is why its buttons are set in ink.
  */
 const onFill = (fill: string) => (contrast(WHITE, fill) >= 3 ? WHITE : DARK_TEXT)
 

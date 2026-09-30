@@ -132,7 +132,7 @@ export const ChangeKeyDialog = ({
                 ? problem
                 : reclaiming
                   ? `${next} was this project's key before — taking it back makes it live again.`
-                  : 'Two to ten letters or digits, starting with a letter.')}
+                  : 'One to ten letters or digits, starting with a letter.')}
           </p>
         </div>
 

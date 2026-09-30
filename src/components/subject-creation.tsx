@@ -1,0 +1,246 @@
+'use client'
+
+import { usePathname, useRouter } from 'next/navigation'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { Avatar } from '@/components/icons'
+import { usePeople } from '@/components/people-context'
+import { Spinner } from '@/components/spinner'
+import { Button } from '@/components/ui/control'
+import { StageGlyph } from '@/components/lab/stage'
+import { TagChip } from '@/components/lab/tag-chip'
+import { mutate } from '@/lib/api/mutate'
+import { createsTodo, typingInField } from '@/lib/lab/ui-shortcuts'
+import type { Stage, Subject, Tag } from '@/lib/lab/types'
+import { cn } from '@/lib/utils'
+
+type Ctx = { open: () => void }
+const SubjectContext = createContext<Ctx>({ open: () => undefined })
+
+export const useCreateSubject = () => useContext(SubjectContext)
+
+const CHIP =
+  'border-border text-fg-muted hover:border-border-strong hover:text-fg relative flex h-[1.75rem] items-center gap-1.5 rounded-md border px-2 text-[0.75rem] transition-colors'
+
+/** The first planned stage, which is where an idea starts unless told otherwise. */
+const defaultStage = (stages: Stage[]) => stages.find((s) => s.category === 'planned') ?? stages[0]
+
+/**
+ * New subject. Only the title is required: press c, name it, press enter, and
+ * you are on its page with the write-up open to be started. Stage, tags and
+ * owner have defaults a click away — the first planned stage, none, and you.
+ */
+const CreateSubject = ({
+  stages,
+  tags,
+  onClose,
+}: {
+  stages: Stage[]
+  tags: Tag[]
+  onClose: () => void
+}) => {
+  const router = useRouter()
+  const { people, currentUserId } = usePeople()
+  const titleRef = useRef<HTMLInputElement>(null)
+  const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
+  const [stageId, setStageId] = useState(defaultStage(stages)?.id ?? '')
+  const [picked, setPicked] = useState<string[]>([])
+  const [owner, setOwner] = useState(currentUserId)
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const stage = stages.find((s) => s.id === stageId)
+  const ownerName = people.find((p) => p.id === owner)?.name ?? 'You'
+
+  useEffect(() => {
+    titleRef.current?.focus()
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const submit = async () => {
+    if (!title.trim() || pending) return
+    setPending(true)
+    setError(null)
+    const result = await mutate<Subject>('/api/v1/subjects', {
+      method: 'POST',
+      body: {
+        title: title.trim(),
+        ...(body.trim() ? { body: body.trim() } : {}),
+        ...(stageId ? { stage: stageId } : {}),
+        tags: picked,
+        owner: owner === currentUserId ? 'me' : owner,
+      },
+    })
+    if (!result.ok) {
+      setPending(false)
+      setError(result.error)
+      return
+    }
+    onClose()
+    router.push(`/subjects/${result.data.number}`)
+    router.refresh()
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[12vh]" onClick={onClose}>
+      <div className="scrim absolute inset-0" aria-hidden />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="New subject"
+        className="border-border bg-surface raised-lg enter-pop relative w-full max-w-[36rem] overflow-hidden rounded-xl border"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="text-fg-subtle px-5 pt-4 text-[0.6875rem] font-medium tracking-[0.06em] uppercase">New subject</p>
+        <input
+          ref={titleRef}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              void submit()
+            }
+          }}
+          maxLength={300}
+          placeholder="What is worth finding out?"
+          aria-label="Title"
+          className="font-display headline text-fg placeholder:text-fg-subtle w-full bg-transparent px-5 pt-1.5 pb-2 text-[1.25rem] outline-none"
+        />
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void submit()
+          }}
+          rows={3}
+          placeholder="Why it matters, where to start — or leave the write-up for later."
+          className="writeup-sm text-fg placeholder:text-fg-subtle w-full resize-none bg-transparent px-5 pb-4 outline-none"
+        />
+
+        {tags.length > 0 ? (
+          <div className="flex flex-wrap gap-1 px-5 pb-3" role="group" aria-label="Tags">
+            {tags.map((tag) => {
+              const on = picked.includes(tag.name)
+              return (
+                <button
+                  key={tag.id}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setPicked((current) => (on ? current.filter((n) => n !== tag.name) : [...current, tag.name]))}
+                  className={cn('rounded-full transition-opacity', !on && 'opacity-60 hover:opacity-100')}
+                >
+                  <TagChip tag={tag} active={on} />
+                </button>
+              )
+            })}
+          </div>
+        ) : null}
+
+        <div className="border-border bg-surface-raised/40 flex flex-wrap items-center gap-1.5 border-t px-5 py-3">
+          {stages.length > 0 ? (
+            <label className={CHIP}>
+              {stage ? <StageGlyph stage={stage} /> : null}
+              {stage?.name ?? 'Stage'}
+              <select
+                value={stageId}
+                onChange={(e) => setStageId(e.target.value)}
+                className="absolute inset-0 cursor-pointer opacity-0"
+                aria-label="Stage"
+              >
+                {stages.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
+          <label className={CHIP}>
+            <Avatar name={ownerName} size={16} />
+            {owner === currentUserId ? 'You' : ownerName}
+            <select
+              value={owner}
+              onChange={(e) => setOwner(e.target.value)}
+              className="absolute inset-0 cursor-pointer opacity-0"
+              aria-label="Owner"
+            >
+              {people.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.id === currentUserId ? `${p.name} (you)` : p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <span className="text-fg-subtle ml-auto hidden text-[0.6875rem] sm:block">↵ create</span>
+          <Button variant="primary" size="sm" onClick={() => void submit()} disabled={!title.trim() || pending} className="px-3">
+            {pending ? <Spinner /> : 'Create subject'}
+          </Button>
+        </div>
+
+        {error ? (
+          <p className="text-danger bg-danger-subtle/60 border-border enter-rise border-t px-5 py-2 text-[0.75rem]" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+/**
+ * Holds the new-subject dialog once, at the root, so `c` works from anywhere
+ * in the lab and any button can open it. On the todo surfaces `c` stays a new
+ * todo (TaskCreationProvider); everywhere else it is a subject.
+ */
+export const SubjectCreationProvider = ({
+  stages,
+  tags,
+  children,
+}: {
+  stages: Stage[]
+  tags: Tag[]
+  children: React.ReactNode
+}) => {
+  const [isOpen, setIsOpen] = useState(false)
+  // Bumped on each open so the dialog remounts with fresh state.
+  const [instance, setInstance] = useState(0)
+  const pathname = usePathname()
+  const labSurface = !createsTodo(pathname)
+
+  const open = useCallback(() => {
+    setInstance((n) => n + 1)
+    setIsOpen(true)
+  }, [])
+  const close = useCallback(() => setIsOpen(false), [])
+
+  useEffect(() => {
+    if (!labSurface) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (typingInField()) return
+      if (e.key === 'c') {
+        e.preventDefault()
+        setInstance((n) => n + 1)
+        setIsOpen(true)
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [labSurface])
+
+  const value = useMemo(() => ({ open }), [open])
+
+  return (
+    <SubjectContext.Provider value={value}>
+      {children}
+      {isOpen ? <CreateSubject key={instance} stages={stages} tags={tags} onClose={close} /> : null}
+    </SubjectContext.Provider>
+  )
+}

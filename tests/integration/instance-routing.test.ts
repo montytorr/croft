@@ -1,6 +1,5 @@
 import { createServer, type Server } from 'node:http'
 import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync, spawn } from 'node:child_process'
@@ -198,9 +197,25 @@ describe('routing a command to its instance', () => {
     const repo = join(home, 'repo')
     await mkdir(repo)
     await run(repo, ['route', 'add', 'work'])
-    const result = await run(home, ['session', 'end', '--id', 's1', '--cwd', repo, '--platform', 'claude'])
+    const result = await run(home, ['check', 'x', '--cwd', repo])
     expect(result.code).toBe(0)
     expect(where()).toEqual({ personal: 0, work: 1 })
+  })
+
+  it('routes a todo (T-n) and a subject (S-n) by the directory: every instance has T', async () => {
+    await configure({ unclassified: { mode: 'default', instance: 'personal' } })
+    for (const name of ['personal', 'work']) {
+      await writeFile(join(home, '.croft', 'instances', name, 'project-keys.json'), JSON.stringify({ at: new Date().toISOString(), keys: ['T', 'S'] }))
+    }
+    expect((await run(home, ['note', 'T-41', 'x'])).code).toBe(0)
+    expect((await run(home, ['subject', 'note', 'S-3', 'x'])).code).toBe(0)
+    expect(where()).toEqual({ personal: 2, work: 0 })
+
+    const repo = join(home, 'lab')
+    await mkdir(repo)
+    await run(repo, ['route', 'add', 'work'])
+    expect((await run(repo, ['claim', 'T-41'])).code).toBe(0)
+    expect(where()).toEqual({ personal: 2, work: 1 })
   })
 
   it('routes a ref by the one instance known to have its project, without asking', async () => {
@@ -353,9 +368,6 @@ describe('routing a command to its instance', () => {
     expect((await run(home, ['note', 'ACME-1', 'x'], { CLAUDE_CODE_SESSION_ID: 'sess-1' })).code).toBe(0)
     expect(where()).toEqual({ personal: 0, work: 1 })
 
-    // The session-end hook passes the id as --id, from outside the session.
-    expect((await run(home, ['session', 'end', '--id', 'sess-1', '--cwd', home, '--platform', 'claude'])).code).toBe(0)
-    expect(where()).toEqual({ personal: 0, work: 2 })
 
     expect((await run(home, ['note', 'ACME-1', 'x'], { CLAUDE_CODE_SESSION_ID: 'sess-2' })).code).toBe(10)
   })
@@ -365,29 +377,6 @@ describe('routing a command to its instance', () => {
     const result = await run(home, ['route', 'add', 'work', '--session'])
     expect(result.code).not.toBe(0)
     expect(result.stderr).toContain('needs a session id')
-  })
-
-  it('sends parked sessions once their directory is routed, without checkpointing', async () => {
-    await configure()
-    const repo = join(home, 'client')
-    await mkdir(repo)
-    await mkdir(join(home, '.croft', 'unrouted'), { recursive: true })
-    const args = ['session', 'end', '--id', 'parked-1', '--platform', 'claude', '--cwd', repo, '--tool-calls', '3']
-    await writeFile(join(home, '.croft', 'unrouted', 'parked-1.json'), JSON.stringify({
-      t: new Date().toISOString(), sessionId: 'parked-1', cwd: repo, platform: 'claude', agent: 'claude-code', args,
-    }))
-
-    const asked = await run(repo, ['note', 'ACME-1', 'x'])
-    expect(asked.code).toBe(10)
-    expect(asked.stderr).toContain('1 earlier session(s) here are waiting')
-
-    const saved = await run(repo, ['route', 'add', 'work'])
-    expect(saved.code).toBe(0)
-    expect(saved.stdout).toContain('sent 1 session(s)')
-    expect(existsSync(join(home, '.croft', 'unrouted', 'parked-1.json'))).toBe(false)
-    expect(seenB).toHaveLength(1)
-    expect(seenB[0]?.body).toContain('parked-1')
-    expect(JSON.parse(seenB[0]?.body ?? '{}').checkpointHeld).toBe(false)
   })
 
   const learnKeys = async () => {
@@ -446,34 +435,6 @@ describe('routing a command to its instance', () => {
     await mkdir(dir)
     await run(dir, ['route', 'add', 'work'])
     expect(JSON.parse(await readFile(join(home, '.croft', 'instances.json'), 'utf8')).note).toBe('hand-written')
-  })
-
-  const park = async (cwd: string, args: string[]) => {
-    await mkdir(join(home, '.croft', 'unrouted'), { recursive: true })
-    await writeFile(join(home, '.croft', 'unrouted', 'p.json'), JSON.stringify({
-      t: new Date().toISOString(), sessionId: 'p', cwd, platform: 'claude', agent: 'claude-code', args,
-    }))
-  }
-
-  it('sends parked sessions even with a CROFT_API_KEY left in the shell', async () => {
-    await configure()
-    const repo = join(home, 'c')
-    await mkdir(repo)
-    await park(repo, ['session', 'end', '--id', 'p', '--platform', 'claude', '--cwd', repo])
-    const saved = await run(repo, ['route', 'add', 'work'], { CROFT_API_KEY: 'crn_leftover' })
-    expect(saved.stdout).toContain('sent 1 session(s)')
-    expect(seenB.map((r) => r.auth)).toEqual(['Bearer crn_work'])
-  })
-
-  it('says why a parked session could not be sent, and keeps it', async () => {
-    await configure()
-    const repo = join(home, 'c')
-    await mkdir(repo)
-    await park(repo, ['session', 'end', '--id', 'p', '--no-such-flag', 'x', '--cwd', repo])
-    const saved = await run(repo, ['route', 'add', 'work'])
-    expect(saved.stdout).toContain('could not be sent yet')
-    expect(saved.stdout).toContain('unknown flag --no-such-flag')
-    expect(existsSync(join(home, '.croft', 'unrouted', 'p.json'))).toBe(true)
   })
 
   it('shows the route and why, lists routes, and never prints a key', async () => {

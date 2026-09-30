@@ -162,10 +162,10 @@ describe('install-cron --run', () => {
   it('refuses a job that is not installed rather than inventing one', async () => {
     const { recorded, environment } = await setUp(alsoFlags)
 
-    const result = await run(['--run', 'openclaw-sessions', '--cron'], environment)
+    const result = await run(['--run', 'vitals', '--cron'], environment)
 
     expect(result.code).toBe(3)
-    expect(result.stderr).toContain('No openclaw-sessions job is installed')
+    expect(result.stderr).toContain('No vitals job is installed')
     expect(existsSync(recorded)).toBe(false)
   })
 

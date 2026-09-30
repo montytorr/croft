@@ -3,111 +3,125 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ---------------------------------------------------------------------------
-   Croft — design tokens, modelled on Linear.
+   Croft — design tokens: a field notebook.
 
-   Dark-first, because that is the reference and where a tool like this is
-   actually used. The ground is a cool near-black rather than a warm one:
-   warmth reads as "document", and this is an instrument.
+   Croft is a lab: subjects are written up, argued over and walked through a
+   pipeline of stages. So the ground is warm paper, not a cool instrument
+   panel — this is a place for reading and writing, and warmth reads as
+   "document" on purpose. Light first (it follows the system), with a full
+   dark theme of peat and lamplight for the evening.
 
-   Colour is carried almost entirely by state — status rings, priority bars,
-   label dots. Text is three greys and nothing else. On a screen showing three
-   hundred rows that restraint is what makes the rows scannable.
+   One accent, heather (hue ~320°), and it means exactly one thing: the
+   primary action, or where you are. State is carried by other colours —
+   stages, statuses, log kinds — none of which is heather, so a heather thing
+   on the page is always "this is the one to press" or "you are here".
+
+   Every ratio below is WCAG 2 contrast, measured against the ground it sits
+   on, not chosen by eye. 4.5 is the line for text; 3.0 for icons and rims.
    --------------------------------------------------------------------------- */
 
 :root {
-  --radius: 6px;
+  --radius: 7px;
 
-  /* light — a faithful inverse, kept usable but not the primary target */
-  --bg:             #ffffff;
-  --bg-elevated:    #f9f9fa;
-  --surface:        #ffffff;
-  --surface-raised: #f2f3f5;
-  --surface-hover:  #f0f1f3;
+  /* light — paper */
+  --bg:             #f6f2ea;  /* the page: unbleached paper */
+  --bg-elevated:    #efe9df;  /* the sidebar and group bands: the notebook's cover board */
+  --surface:        #fbf9f5;  /* a card laid on the page */
+  --surface-raised: #ece6db;
+  --surface-hover:  #f0ebe2;
 
-  --fg:             #0d0e10;
-  --fg-muted:       #61656c;
-  /* 3.25 against white, which is below the line for 11-13px text. */
-  --fg-subtle:      #6f747c;
+  /* Ink, in three strengths. Against --bg: 14.99 : 6.64 : 5.10.
+     Subtle still clears 4.5 on the sidebar (4.71) and on a raised face (4.58),
+     which is where timestamps and refs mostly live. */
+  --fg:             #221c20;
+  --fg-muted:       #5c5358;
+  --fg-subtle:      #6e6469;
 
-  --border:         #e6e7e9;
-  --border-strong:  #d3d5d9;
+  --border:         #e2dace;
+  --border-strong:  #cfc5b7;
 
-  --accent:         #5e6ad2;
+  /* Heather. 6.05 on --bg, 6.42 on --surface, 5.44 on --surface-raised;
+     white on a heather fill is 6.76. */
+  --accent:         #8e3f73;
   --accent-fg:      #ffffff;
-  --accent-subtle:  #eceefb;
-  --ring:           #5e6ad2;
+  --accent-subtle:  #f0e2ea;  /* heather text on it: 5.40 */
+  --ring:           #8e3f73;
 
-  /* The stones of the mark, which always sits on its own dark tile — so this
-     is the dark accent in both themes. An instance's brand overrides it. */
-  --brand-mark:     #7b86e8;
+  /* The mark: rig strips in the dark accent, cut from a peat tile that is the
+     same in both themes (7.10 between them). An instance's brand overrides
+     the strips, never the tile. */
+  --brand-mark:     #d89bc4;
+  --brand-tile:     #2e1d2a;
 
-  --danger:         #c52828;
-  --danger-subtle:  #fdeaea;
+  --danger:         #b3261e;  /* 5.85 */
+  --danger-subtle:  #f8e3df;
 
-  /* status — the six.
-     Darker than they look like they should be, because on white the pastel
-     versions measured 2.2 to 2.6 against the ground: below the 3.0 floor for
-     an icon, let alone the 4.5 for the group headings that now carry them.
-     A status ring you have to hunt for is not carrying its meaning. */
-  --status-backlog:   #6f757e;
-  --status-todo:      #565d68;
-  --status-doing:     #b45309;
-  --status-in-review: #15803d;
-  --status-done:      #4f5bc4;
-  --status-cancelled: #697280;
+  /* Todo status — the six, for the tasks that live under each subject.
+     backlog 4.96 · todo 6.64 · doing (ochre) 5.85 · in review (slate) 5.85 ·
+     done (moss) 4.57 · cancelled 4.96. Done is moss, not the accent: finishing
+     a todo is a state, not an action. */
+  --status-backlog:   #6f666b;
+  --status-todo:      #5c5358;
+  --status-doing:     #8a4f1c;
+  --status-in-review: #3f5f8a;
+  --status-done:      #4a7a2c;
+  --status-cancelled: #6f666b;
 
-  /* type — each reads as text, not only as a dot, so the pill on every row
-     carries its colour. Chosen for 4.5 against this theme's ground, which is
-     why the light set is not simply the dark set. */
-  --type-feature:     #7c3aed;
-  --type-bug:         #c52828;
-  --type-improvement: #1d6fd0;
-  --type-chore:       #565d68;
-  --type-spike:       #a16207;
-  --type-docs:        #15803d;
+  /* Stage categories — the fallback when a stage has no colour of its own,
+     and the tone of each category's label. planned (slate) 4.60 · active
+     (ochre) 5.85 · completed (moss) 4.57 · dropped (clay) 5.29. */
+  --stage-planned:   #5a6f8c;
+  --stage-active:    #8a4f1c;
+  --stage-completed: #4a7a2c;
+  --stage-dropped:   #7d5d50;
 
-  --priority-urgent: #d97706;
-  --priority-high:   #b45309;
-  --priority-medium: #61656c;
-  --priority-low:    #8a8f98;
+  /* The log's kinds. finding (teal) 4.55 · decision (slate) 5.85 · handoff
+     (ochre) 5.85; note and attempt are ink. A decision used to be the accent;
+     here the accent is not a kind of anything. */
+  --log-note:     var(--fg-muted);
+  --log-finding:  #2f7a6e;
+  --log-decision: #3f5f8a;
+  --log-attempt:  var(--fg-subtle);
+  --log-handoff:  #8a4f1c;
+  --log-stage:    var(--fg-subtle);
+
+  /* Todo type — each reads as text on paper. feature 6.11 · bug 5.85 ·
+     improvement 5.48 · chore 6.64 · spike 5.30 · docs 4.65. */
+  --type-feature:     #5b4bb0;
+  --type-bug:         #b3261e;
+  --type-improvement: #2f62a8;
+  --type-chore:       #5c5358;
+  --type-spike:       #8a5a0a;
+  --type-docs:        #3d7a3a;
+
+  --priority-urgent: #b4540a;
+  --priority-high:   #8a4a14;
+  --priority-medium: #5c5358;
+  --priority-low:    #857b80;
 
   /* Row heights are applied directly in the markup: a --spacing-* theme token
-     does not generate an `h-*` utility, and the silent fallback to content
-     height cost a round trip to notice. */
+     does not generate an `h-*` utility. */
 
-  /* Depth.
-     Two layers, not one: a tight dark line that reads as contact with the
-     surface below, and a wide soft one that reads as distance from it. A
-     single large blur looks like fog, which is the difference between a
-     popover that sits above the page and one that floats vaguely near it. */
-  /* Flat: nothing that sits on the page casts a shadow; only what floats
-     above it (md, lg) does. */
+  /* Depth. Nothing that sits on the page casts a shadow; only what floats
+     above it (menus, dialogs, toasts) does, and the shadow is warm — a grey
+     shadow on paper looks like dirt. */
   --shadow-sm: 0 0 #0000;
-  --shadow-md: 0 2px 4px rgba(16, 18, 22, 0.06), 0 8px 20px rgba(16, 18, 22, 0.10);
-  --shadow-lg: 0 4px 8px rgba(16, 18, 22, 0.08), 0 24px 48px rgba(16, 18, 22, 0.16);
-
-  /* The hairline along the top of a raised surface, where the light would
-     catch it. One pixel, and it is most of what separates a panel that looks
-     placed from one that looks pasted. */
+  --shadow-md: 0 2px 4px rgba(46, 29, 42, 0.06), 0 8px 20px rgba(46, 29, 42, 0.10);
+  --shadow-lg: 0 4px 8px rgba(46, 29, 42, 0.08), 0 24px 48px rgba(46, 29, 42, 0.16);
   --highlight: 0 0 #0000;
 
   --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
 
-  /* Motion. One vocabulary for the whole product (CROFT-308).
-     --ease-out is the settle: fast off the mark, long soft landing — what a
-     stone does when it comes to rest on the stack. --ease-spring overshoots a
-     hair, for the few things that should feel placed (the sidebar marker, a
-     popover). Three durations and nothing between them. */
+  /* Motion. Three durations and nothing between them. --ease-out is the
+     settle: fast off the mark, long soft landing. --ease-spring overshoots a
+     hair, for the few things that should feel placed. */
   --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
   --dur-1: 120ms;
   --dur-2: 200ms;
   --dur-3: 320ms;
 
-  /* Material: flat (CROFT-308, second direction — the user chose flat over
-     the lit, grained, glowing version). Solid surfaces and hairlines; depth
-     only where something genuinely floats (menus, dialogs, toasts). The
-     variables stay so nothing that names them breaks; they are neutral. */
+  /* Material: flat. The variables stay so nothing that names them breaks. */
   --grain: none;
   --aurora: transparent;
   --aurora-far: transparent;
@@ -117,63 +131,71 @@
 }
 
 :root.dark {
-  --bg:             #08090a;
-  --bg-elevated:    #0f1011;
-  --surface:        #101113;
-  --surface-raised: #191a1c;
-  --surface-hover:  #1a1b1e;
+  /* dark — peat and lamplight. A warm near-black with a trace of heather in
+     it, never the blue-black of an instrument. */
+  --bg:             #161316;
+  --bg-elevated:    #1c181c;
+  --surface:        #1f1a1f;
+  --surface-raised: #29232a;
+  --surface-hover:  #2b252b;
 
-  --fg:             #f7f8f8;
-  /* Measured, not chosen by eye. Against --bg these are 18.7 : 7.6 : 5.3, and
-     against --surface-raised — popovers, the bulk bar, the raised rows — still
-     6.6 and 4.6. The old pair sat at 6.1 and 3.4, so every timestamp, ref,
-     count and hint in the product was below the 4.5 readable line, and on a
-     raised surface subtle fell to 3.0. Three tiers are still three tiers; they
-     are just all readable now. */
-  --fg-muted:       #9aa0a9;
-  --fg-subtle:      #7f848c;
+  /* Against --bg: 15.61 : 8.39 : 5.92. On a raised face subtle is 4.92,
+     on the sidebar 5.63. */
+  --fg:             #f1ebe7;
+  --fg-muted:       #b7acb1;
+  --fg-subtle:      #9a8f95;
 
-  --border:         #1f2023;
-  --border-strong:  #2c2e33;
+  --border:         #2e272e;
+  --border-strong:  #3e363e;
 
-  --accent:         #7b86e8;
-  --accent-fg:      #ffffff;
-  --accent-subtle:  #23253a;
-  --ring:           #5e6ad2;
+  /* Heather in lamplight: 8.26 on --bg, 6.87 on a raised face. Too light to
+     carry white, so a heather button is set in ink (7.49). */
+  --accent:         #d89bc4;
+  --accent-fg:      #221c20;
+  --accent-subtle:  #3a2734;  /* heather text on it: 6.19 */
+  --ring:           #d89bc4;
 
-  --danger:         #eb5757;
-  --danger-subtle:  #2a1618;
+  --danger:         #ef7a6e;  /* 6.74 */
+  --danger-subtle:  #3a1d1b;
 
-  --status-backlog:   #7c828b;
-  --status-todo:      #9298a1;
-  --status-doing:     #f2c94c;
-  --status-in-review: #4cb782;
-  --status-done:      #7b86e8;
-  --status-cancelled: #757a82;
+  /* backlog 5.17 · todo 6.95 · doing 8.45 · in review 7.24 · done 9.30 ·
+     cancelled 4.52 */
+  --status-backlog:   #8f858a;
+  --status-todo:      #a79ca1;
+  --status-doing:     #e0a458;
+  --status-in-review: #8fa3c8;
+  --status-done:      #9cc47a;
+  --status-cancelled: #857b80;
 
-  /* Darker ground, so the shadows carry further and the highlight is a
-     suggestion rather than a line. */
+  /* planned 7.57 · active 8.45 · completed 9.30 · dropped 7.42 */
+  --stage-planned:   #9aa6c4;
+  --stage-active:    #e0a458;
+  --stage-completed: #9cc47a;
+  --stage-dropped:   #c99a86;
+
+  /* finding 8.21 · decision 7.24 · handoff 8.45 */
+  --log-finding:  #7fb8ac;
+  --log-decision: #8fa3c8;
+  --log-handoff:  #e0a458;
+
   --shadow-sm: 0 0 #0000;
   --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.40), 0 8px 24px rgba(0, 0, 0, 0.45);
   --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.45), 0 24px 56px rgba(0, 0, 0, 0.55);
   --highlight: 0 0 #0000;
 
+  /* feature 8.20 · bug 6.74 · improvement 8.18 · chore 6.95 · spike 10.46 ·
+     docs 9.30 */
+  --type-feature:     #b3a2f0;
+  --type-bug:         #ef7a6e;
+  --type-improvement: #7fb3d5;
+  --type-chore:       #a79ca1;
+  --type-spike:       #e0c068;
+  --type-docs:        #9cc47a;
 
-  --type-feature:     #bb87fc;
-  --type-bug:         #eb5757;
-  --type-improvement: #4ea7fc;
-  --type-chore:       #95a2b3;
-  --type-spike:       #f2c94c;
-  --type-docs:        #4cb782;
-
-  /* Urgent is a filled square, the others are bars, so colour is the second
-     signal rather than the only one. High gets amber because three of the four
-     priorities used to be the same grey — the bar count was the entire
-     difference, which is invisible while scanning. */
-  --priority-urgent: #f2994a;
-  --priority-high:   #e8a33d;
-  --priority-medium: #9aa0a9;
-  --priority-low:    #7f848c;
+  --priority-urgent: #f09a4a;
+  --priority-high:   #e0a458;
+  --priority-medium: #b7acb1;
+  --priority-low:    #9a8f95;
 }
 
 @theme inline {
@@ -207,6 +229,11 @@
 
   --color-priority-urgent: var(--priority-urgent);
 
+  --color-stage-planned:   var(--stage-planned);
+  --color-stage-active:    var(--stage-active);
+  --color-stage-completed: var(--stage-completed);
+  --color-stage-dropped:   var(--stage-dropped);
+
   --shadow-sm: var(--shadow-sm);
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
@@ -215,15 +242,16 @@
   --radius-lg: 8px;
   --radius-sm: 4px;
 
-  /* Croft Cloud's three stacks, so the app and the site that sells it are one
-     family (CROFT-307). Only Inter Tight is downloaded (fonts.ts); the other
-     two are the platform's own. Registered here because Tailwind v4 emits a
-     utility only for a key it knows — an unregistered `font-display` once
-     rendered as the body face with the family downloaded for nothing
-     (CROFT-258). */
-  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
-  --font-display: var(--font-inter-tight), 'Inter Tight', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* Three faces, each with one job (fonts.ts). Schibsted Grotesk for the
+     interface and its headings — a newspaper grotesk, sturdy at 13px and with
+     some character at 28. Newsreader for the write-ups, the log and anything
+     else that is read as prose rather than scanned. JetBrains Mono for refs
+     and code. Registered here because Tailwind v4 emits a utility only for a
+     key it knows (theme-keys.test.ts guards that). */
+  --font-sans: var(--font-schibsted), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: var(--font-schibsted), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-serif: var(--font-newsreader), 'Iowan Old Style', Georgia, serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, 'SF Mono', Menlo, monospace;
 }
 
 @layer base {
@@ -236,18 +264,11 @@
    * One knob for how large the whole interface is.
    *
    * Every size in the app is expressed in rem, so this scales text, row
-   * heights, control heights and spacing together. Raising only the type would
-   * have left 83 fixed pixel heights behind and pushed text out of its own
-   * rows.
-   *
-   * 18px rather than the browser's 16. 17 was tried first and is not worth
-   * having: it takes body text from 13px to 13.8px, which nobody asked for and
-   * nobody would notice. 18 makes it 14.6px, about an eighth larger, which is
-   * a real change while still leaving the task list dense.
-   *
-   * A root size in px still honours browser zoom, which is what somebody who
-   * needs it much larger will reach for. Change this one number to change
-   * everything.
+   * heights, control heights and spacing together. 18px, as the family has
+   * it; what makes Croft calmer than a tracker is not a bigger root but the
+   * leading and the room: body text at 15px on a 1.6 line, and the lab's own
+   * views laid out at a reading pace rather than three hundred rows a screen.
+   * A root size in px still honours browser zoom.
    */
   html {
     font-size: 18px;
@@ -256,10 +277,11 @@
   body {
     background-color: var(--bg);
     color: var(--fg);
-    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-    font-size: 0.8125rem;
-    line-height: 1.5;
-    letter-spacing: -0.0025em;
+    font-family: var(--font-sans);
+    font-size: 0.8333rem;
+    line-height: 1.6;
+    letter-spacing: -0.003em;
+    font-feature-settings: 'ss01' on;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -414,17 +436,16 @@
   /* A dot that is reporting something live. */
   .live-dot { animation: live-ring 2.4s var(--ease-out) infinite; border-radius: 999px; }
 
-  /* A heading, set as Croft Cloud sets its own: with `font-display`, a book
-     weight between regular and medium, tracked in, and balanced so a
-     two-line heading never leaves one word alone on the second. The face
-     stays on the registered `font-display` key, which theme-keys.test.ts
-     guards. */
+  /* A heading: Schibsted Grotesk (`font-display`) at a weight between
+     regular and medium, tracked in a little, and balanced so a two-line
+     heading never leaves one word alone. The face stays on the registered
+     `font-display` key, which theme-keys.test.ts guards. */
   .headline {
-    font-weight: 480;
-    letter-spacing: -0.022em;
+    font-weight: 520;
+    letter-spacing: -0.016em;
     text-wrap: balance;
   }
-  .headline-xl { letter-spacing: -0.03em; }
+  .headline-xl { letter-spacing: -0.024em; }
 
   /* A keyboard hint, as it appears in the command palette. */
   .kbd {
@@ -467,85 +488,67 @@
   }
 
   /* -------------------------------------------------------------------------
-     The login page's stones, which settle onto the stack rather than appear
-     on it.
+     Runrig — the motif.
+
+     A rig is a long strip of ploughed land, raised in the middle and falling
+     to a furrow on either side, laid side by side down a hill. It is what the
+     mark is drawn from, and what a board lane is: a strip of ground that
+     subjects are worked along. Stones belong to Cairn and gables to Bothy;
+     Croft has fields.
      ---------------------------------------------------------------------- */
-  @keyframes stone-settle {
-    from { opacity: 0; transform: translateY(-14px); }
-    70%  { opacity: 1; transform: translateY(1.5px); }
+
+  /* A strip growing up the hill from its foot: the login field, the empty
+     state. Transform-box so each path grows from its own base. */
+  @keyframes rig-grow {
+    from { opacity: 0; transform: translateY(5px) scaleY(0.9); }
     to   { opacity: 1; transform: none; }
   }
-  .login-stone { animation: stone-settle 620ms var(--ease) var(--d, 0ms) backwards; }
-
-  @media (prefers-reduced-motion: reduce) {
-    .login-stone { animation: none; }
-  }
-
-  /* -------------------------------------------------------------------------
-     The knowledge map.
-
-     Positions are computed on the server and are a pure function of the graph,
-     so that a `router.refresh()` every few minutes cannot rearrange the map
-     under whoever is reading it. Everything here moves a node AROUND its
-     anchor and never moves the anchor — which is why it is CSS rather than
-     state: the browser animates it off the main thread and React never learns
-     that anything moved.
-     ---------------------------------------------------------------------- */
-
-  /* Barely a pixel at full zoom. Enough that the corpus looks like something
-     alive rather than a printed diagram, and little enough that no node ever
-     appears to be somewhere it is not. */
-  @keyframes graph-drift {
-    0%   { transform: translate(0, 0); }
-    25%  { transform: translate(1.1px, -0.8px); }
-    50%  { transform: translate(0.2px, 1.2px); }
-    75%  { transform: translate(-1px, 0.4px); }
-    100% { transform: translate(0, 0); }
-  }
-
-  /* The first paint assembles instead of arriving. Staggered by the node's own
-     hash, so the map resolves out of nothing in about a second. */
-  @keyframes graph-rise {
-    from { opacity: 0; transform: scale(0.4); }
-    to   { opacity: 1; transform: scale(1); }
-  }
-
-  .graph-node {
+  .rig-grow {
     transform-box: fill-box;
-    transform-origin: center;
-    animation:
-      graph-rise 420ms var(--ease) var(--rise, 0s) both,
-      graph-drift var(--drift, 7s) ease-in-out var(--delay, 0s) infinite;
+    transform-origin: 50% 100%;
+    animation: rig-grow var(--dur-3) var(--ease-out) var(--d, 0ms) backwards;
   }
 
-  /* An entry joined to nothing sits in the grid at the foot of the map and
-     reads as a count, so there is nothing for breathing to say about it. It
-     also takes a third of the animated groups off a raster loop that otherwise
-     runs for as long as the page is open. */
-  .graph-still {
-    animation: graph-rise 420ms var(--ease) var(--rise, 0s) both;
+  /* A board lane as a rig: the crown of the strip catches the light and the
+     sides fall away to the furrow. Drawn as a soft band down the middle of
+     the lane rather than a border, so a row of lanes reads as ground, not as
+     a row of boxes. --lane (the stage's colour) marks the headland at the
+     top. */
+  .rig-lane {
+    background-color: var(--bg-elevated);
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in oklab, var(--surface) 75%, transparent) 50%,
+      transparent 100%
+    );
+    border-radius: 16px 16px 10px 10px;
   }
 
-  /* Light running along a link, drawn as a dash chasing its own offset. Only
-     ever applied to the links of the node under the pointer. */
-  @keyframes graph-beam {
-    from { stroke-dashoffset: 46; }
-    to   { stroke-dashoffset: 0; }
+  /* The furrow between two lanes: a dotted line in the gap, where the ground
+     dips. Sits in the lane's right margin so it costs no layout. */
+  .rig-furrow { position: relative; }
+  .rig-furrow:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 1.25rem;
+    bottom: 1.25rem;
+    right: calc(var(--furrow, 0.875rem) / -2 - 0.5px);
+    width: 1px;
+    background-image: linear-gradient(to bottom, var(--border-strong) 45%, transparent 0);
+    background-size: 1px 6px;
+    pointer-events: none;
   }
 
-  .graph-beam {
-    fill: none;
-    stroke-linecap: round;
-    stroke-dasharray: 5 41;
-    opacity: 0.9;
-    animation: graph-beam 1.1s linear infinite;
+  /* A list group's band: the stage's colour as a short strip at its left,
+     the band itself paper. */
+  .rig-band {
+    background-color: color-mix(in oklab, var(--bg-elevated) 70%, var(--bg));
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .pop { animation: none; }
-    .graph-node,
-    .graph-still { animation: none; }
-    .graph-beam { animation: none; opacity: 0.35; stroke-dasharray: none; }
+    .pop,
+    .rig-grow { animation: none; }
     * { transition-duration: 1ms !important; }
   }
 }
@@ -561,23 +564,23 @@
    --------------------------------------------------------------------------- */
 
 :root {
-  --code-keyword:  #a074e8;
-  --code-string:   #4a9e5c;
-  --code-number:   #b8762e;
-  --code-comment:  #8a8f98;
-  --code-function: #3d7fd4;
-  --code-type:     #1f9c95;
-  --code-variable: #c05a2e;
+  --code-keyword:  #5b4bb0;
+  --code-string:   #3d7a3a;
+  --code-number:   #8a5a0a;
+  --code-comment:  #857b80;
+  --code-function: #2f62a8;
+  --code-type:     #2f7a6e;
+  --code-variable: #a14a22;
 }
 
 :root.dark {
-  --code-keyword:  #c9a6ff;
-  --code-string:   #8fd694;
-  --code-number:   #f0b072;
-  --code-comment:  #5c6066;
-  --code-function: #7db3ff;
-  --code-type:     #6ad4c8;
-  --code-variable: #f0947a;
+  --code-keyword:  #b3a2f0;
+  --code-string:   #9cc47a;
+  --code-number:   #e0c068;
+  --code-comment:  #7a7076;
+  --code-function: #7fb3d5;
+  --code-type:     #7fb8ac;
+  --code-variable: #e89a7c;
 }
 
 @layer base {
@@ -677,9 +680,8 @@
     cursor: not-allowed;
   }
 
-  /* Thin, themed, and out of the way.
-     The platform scrollbar on a dark surface is a bright slab that draws the
-     eye to the edge of the page rather than the content in it. */
+  /* Thin, themed, and out of the way: a platform scrollbar is a slab that
+     draws the eye to the edge of the page rather than what is on it. */
   * {
     scrollbar-width: thin;
     scrollbar-color: var(--border-strong) transparent;
@@ -712,7 +714,7 @@
   }
 
   /* Type rendering. Heavy hinting on a dark ground thickens small text into
-     mush. */
+     mush, and paper is no kinder to it. */
   body {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -756,4 +758,123 @@
     transition-duration: 1ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   The write-up.
+
+   Prose that people read at length — a subject's write-up, its conclusion,
+   its log — is set in Newsreader at a book size on a generous line, inside a
+   measure a reader can hold. Unlayered on purpose: MarkdownView's elements
+   carry Tailwind utilities (text-sm and friends), which live in a cascade
+   layer, and unlayered rules beat layered ones regardless of specificity.
+   Headings stay in the grotesk, so a write-up has a clear skeleton of
+   sections with the reading voice between them.
+   --------------------------------------------------------------------------- */
+
+.writeup {
+  font-family: var(--font-serif);
+  font-size: 1.0625rem;
+  line-height: 1.7;
+  letter-spacing: 0;
+  font-optical-sizing: auto;
+  color: var(--fg);
+}
+.writeup p,
+.writeup li,
+.writeup blockquote,
+.writeup ul,
+.writeup ol {
+  font-size: 1.0625rem;
+  line-height: 1.7;
+}
+.writeup p { margin-bottom: 0.9em; }
+.writeup blockquote { font-style: italic; }
+.writeup h1,
+.writeup h2,
+.writeup h3,
+.writeup h4 {
+  font-family: var(--font-display);
+  letter-spacing: -0.012em;
+}
+.writeup h1 { font-size: 1.4rem; margin-top: 1.6em; }
+.writeup h2 { font-size: 1.15rem; margin-top: 1.5em; }
+.writeup h3 { font-size: 0.95rem; margin-top: 1.3em; }
+.writeup code,
+.writeup pre { font-family: var(--font-mono); letter-spacing: 0; }
+.writeup :where(p, li) code { font-size: 0.82em; }
+.writeup table { font-family: var(--font-sans); }
+
+/* The same voice a size down, for log entries and the conclusion. */
+.writeup-sm,
+.writeup-sm p,
+.writeup-sm li {
+  font-family: var(--font-serif);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+/* ---------------------------------------------------------------------------
+   The editing surface (Tiptap / ProseMirror).
+
+   Preflight strips lists, headings and quotes of everything, and the editor's
+   document carries no classes of its own, so without these an edit looked
+   nothing like the page it would become. Kept close to MarkdownView, so the
+   edit and the preview beside it agree.
+   --------------------------------------------------------------------------- */
+
+.prose-editor .ProseMirror { outline: none; }
+.prose-editor .ProseMirror > * + * { margin-top: 0.75em; }
+.prose-editor .ProseMirror h1,
+.prose-editor .ProseMirror h2,
+.prose-editor .ProseMirror h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  line-height: 1.3;
+  margin-top: 1.4em;
+}
+.prose-editor .ProseMirror h1 { font-size: 1.4rem; }
+.prose-editor .ProseMirror h2 { font-size: 1.15rem; }
+.prose-editor .ProseMirror h3 { font-size: 0.95rem; color: var(--fg-muted); }
+.prose-editor .ProseMirror ul { list-style: disc; padding-left: 1.3em; }
+.prose-editor .ProseMirror ol { list-style: decimal; padding-left: 1.4em; }
+.prose-editor .ProseMirror li > p { margin: 0; }
+.prose-editor .ProseMirror li::marker { color: var(--fg-subtle); }
+.prose-editor .ProseMirror ul[data-type='taskList'] { list-style: none; padding-left: 0; }
+.prose-editor .ProseMirror ul[data-type='taskList'] li { display: flex; gap: 0.5em; align-items: baseline; }
+.prose-editor .ProseMirror ul[data-type='taskList'] input { accent-color: var(--accent); }
+.prose-editor .ProseMirror blockquote {
+  color: var(--fg-muted);
+  font-style: italic;
+  padding-left: 0.9em;
+  box-shadow: inset 2px 0 0 var(--border-strong);
+}
+.prose-editor .ProseMirror code {
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  background: var(--surface-raised);
+  border-radius: 4px;
+  padding: 0.05em 0.3em;
+}
+.prose-editor .ProseMirror pre {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.55;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75em 1em;
+  overflow-x: auto;
+}
+.prose-editor .ProseMirror pre code { background: none; padding: 0; font-size: inherit; }
+.prose-editor .ProseMirror hr { border: 0; height: 1px; background: var(--border); margin: 1.5em 0; }
+.prose-editor .ProseMirror a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.prose-editor .ProseMirror img { max-width: 100%; border-radius: 8px; border: 1px solid var(--border); }
+.prose-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--fg-subtle);
+  float: left;
+  height: 0;
+  pointer-events: none;
 }

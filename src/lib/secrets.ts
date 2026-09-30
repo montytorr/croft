@@ -119,7 +119,7 @@ const secretSpans = function* (text: string): Generator<SecretSpan> {
     // documented response), never the credential itself.
     if (/^[[{(]/.test(value)) continue
     // A task or issue ref (`signed token=DIS-1234`) names work, not a value.
-    if (/^[A-Z][A-Z0-9]{1,9}-\d+[^A-Za-z0-9]*$/.test(value)) continue
+    if (/^[A-Z][A-Z0-9]{0,9}-\d+[^A-Za-z0-9]*$/.test(value)) continue
     // Code, not a value: `queueItAcceptedToken: acceptedToken,` or
     // `token = rows[0].token;` — an expression ending in a separator that reads
     // as a camelCase name or a member access. A bare `hunter2x,` still counts.

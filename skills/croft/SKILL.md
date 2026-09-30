@@ -1,260 +1,141 @@
 ---
 name: croft
-description: Shared task tracker and memory for agents. Use BEFORE starting work on any subject to check what has already been done, tried, or debugged; and to file, claim, annotate, learn, checkpoint, and close tasks. Triggers on "have we done this before", "check if we fixed", "what did we try for", "create a task", "log this", "learn this", "checkpoint this", "what's the status of", "claim this task", "mark it done", "end the session". Not for work already covered by a task you hold, a question answered by reading a file, or throwaway exploration that changes nothing: it is for durable work and durable answers, not for every request that has a verb in it.
+description: "Lab board for exploring and proving ideas: new tech to evaluate, POCs, things to build before they become real work. Use BEFORE evaluating or prototyping anything to check what the lab already concluded; to file a subject, move it through stages, log findings, add todos, and record the conclusion. Triggers on 'should we use X', 'evaluate', 'try out', 'POC', 'spike on', 'what did we conclude about', 'lab', 'croft', 'subject'. Not for: committed work on a repo tracked in Cairn — push the todo to Cairn instead."
 ---
 
 # Croft
 
-Shared memory for everything worked on here: **tasks** (what needs doing and how it ended),
-**notes** (what was tried, including what failed), **knowledge** (what is now true, outliving
-any task) and **sessions** (recorded for you). `croft check` searches all four at once.
-Refs like `ACME-42` are your project key plus a number.
+The lab board. A **subject** (`S-12`) is one thing being explored or proved: a technology to
+evaluate, a POC, an idea to build before it becomes real work. It has a markdown write-up,
+a work log, tags, an owner, **todos** (`T-41`), a **stage**, and in the end a **conclusion**.
 
-## The lifecycle — every time you do durable work
+> Exploring or proving an idea → croft check first; changing a repo for real → a Cairn task (croft push).
 
-Durable means it changes something, decides something, or rules something out: a fix, a
-config change, a deploy, a migration, an investigation, a delegation. Size is irrelevant.
+## The lifecycle — every subject, every time
 
-1. **Check.** `croft check "<subject>"` before reading deeply, changing anything or
-   delegating; `show` the hits that matter. Do not re-debug something already answered.
-2. **Own it.** Reuse an open task, or file one. From an agent runtime `croft add` **claims
-   by default** (it says so; `--no-start` only files), holding back, saying why, when
-   similar open work exists or you already hold a task there. Otherwise `croft claim <ref>`
-   — it sets `doing` and prints what bears on the task. **Exit 9 means another agent holds
-   it: pick different work**, never force it. What you file is **your human's** unless
-   `--assignee <who>`.
-3. **Record as it happens.** `croft note <ref> "…" --kind attempt|finding|decision|handoff`.
-   **Dead ends are `--kind attempt`** — "tried X, no change" is the note the next agent
-   needs most, because the trying is the expensive part.
-4. **Checkpoint before you yield.** `croft checkpoint <ref> --summary "state + next step"`
-   after each milestone and before pausing, delegating or ending the turn. It alone
-   tells whoever resumes where you got to.
-5. **Written but not landed → `croft update <ref> --status in-review`**, with a note saying
-   which: uncommitted, unmerged, or awaiting deploy. `done` would be a lie and `doing` says
-   someone is still typing.
-6. **Close with how.** `croft done <ref> --resolution "what changed and why" --kind <kind>`:
-   `fixed` · **`verified`** (someone else's fix was already there and you checked — `fixed`
-   would claim their work) · `answered` · `wont-fix` · `duplicate` · `not-reproducible` ·
-   `superseded`. With no `--kind` it records `fixed` and says so. `show` the ref first: a
-   resolution on the wrong task makes that task look answered.
+1. **Check.** `croft check "<subject>"` before evaluating, reading docs or prototyping. The
+   lab may already have concluded ("rejected: no row-level security"). `croft subject show
+   S-n` the hits that matter. `#0` means the subject is new.
+2. **File it.** `croft subject add "pgvector for recall" --tag db,search --body -` (markdown
+   on stdin: the question, why it matters, what would settle it). It lands in the first
+   planned stage unless `--stage`.
+3. **Break it into todos.** `croft subject todo S-12 "benchmark 1M rows" --body -`. From an
+   agent runtime it files `T-n` and **claims by default**. Otherwise `croft claim T-41`.
+   **Exit 9 means another agent holds it: pick different work**, never force it.
+4. **Log as you go.** On the subject: `croft subject note S-12 - --kind finding|attempt|decision`.
+   On a todo: `croft note T-41 "…" --kind attempt`. **Dead ends are `--kind attempt`**:
+   "tried HNSW at m=16, recall 0.71" is the note the next agent needs most.
+5. **Checkpoint before you yield.** `croft checkpoint T-41 --summary "state + next step"`.
+   Written but not landed → `croft update T-41 --status in-review`.
+6. **Close todos with how.** `croft done T-41 --resolution "what was found" --kind <kind>`:
+   `fixed` · **`verified`** (it was already true and you checked) · `answered` · `wont-fix`.
+7. **Move the subject.** `croft subject stage S-12 "exploring"`. Entering a concluding stage
+   (`done`, `rejected`, `rolled out`) **requires a conclusion**:
+   `croft subject stage S-12 rejected --conclusion -`. A refusal saying `conclusion_required`
+   means: pass `--conclusion`. The conclusion is the answer the next `check` finds.
 
-Unfinished at the end of a turn? Leave it `doing` with a checkpoint — never `done` because
-the turn is ending. `release` only when you are handing it back and will not continue.
+**Sweeping the board: one claimed task per sweep.** Hold one todo for the triage and work
+the rest without claiming them: note, stage, close what you can.
 
-**Sweeping a backlog: one claimed task per sweep.** File one task for the triage, hold that,
-and work the rest without claiming them: `note` what you find on each, `update --status`
-where the state is now clear, close what you can with an honest `--kind`. Claiming thirty
-asserts thirty pieces of in-flight work nobody is doing. File new tasks during a sweep
-with `--no-start`.
-
-**When not to file.** A tracker that fires on everything costs more than it records.
-- **A task you hold already covers it** — note on it, or `--parent` a genuinely separate piece.
-- **Another agent holds it** — a live claim in `check` is an answer; pick different work.
-- **Reading a file answers it** — Croft knows what happened to the code, not what it says.
-  `check` first only if the subject has a past (a recurring failure, a decision, a try).
-- **Throwaway exploration** — until you change something or learn something durable.
-- **A fact that expires** ("staging is three commits behind") — a note, or nothing.
-- **Narrating your bookkeeping** — notes are for the next agent, not a progress log.
-
-A session that files nothing is fine: sessions are recorded regardless. The failure is a
-session that changed or ruled something out and left no trace.
+**When not to file.**
+- **It is committed work on a real repo** — that is Cairn's. Push the todo (below).
+- **A subject already covers it** — add a todo or a note to that one.
+- **Reading a file answers it** — no subject needed.
+- **A fact that expires** ("the beta API is down today") — a note, or nothing.
+- **Narrating your bookkeeping** — the log is for the next person, not a progress bar.
 
 ---
 
-## Check, show, recall
+## Refs
+
+- `S-12` — a subject. Used only with `croft subject …`.
+- `T-41` — a todo. It is an ordinary task: `show`, `claim`, `beat`, `note`, `log`,
+  `checkpoint`, `release`, `update`, `done --resolution`, `cancel`, `deps`, `history`.
+
+Single-letter keys on purpose: they never collide with Cairn refs (`CAIRN-331`).
+
+## Subjects
 
 ```bash
-croft check "flaky auth redirect"  # index: one line per hit, answered?, ~token cost
-croft show ACME-42          # digest: the answer, findings, a clipped body
-croft show ACME-42 --full   # everything, when the digest is not enough
-croft log ACME-42           # what agents said · croft history: what actually changed
-croft recall ACME-42        # decisions and facts that bear on this task
-croft know <slug>           # read a knowledge hit
+croft subject list [--stage exploring] [--tag db] [--mine] [--all]   # --all includes archived
+croft subject show S-12 [--full]          # digest: write-up, conclusion, todos, recent log
+croft subject add "<title>" [--stage S] [--tag a,b] [--owner me] [--body -]
+croft subject edit S-12 [--title "T"] [--body -]
+croft subject stage S-12 "<stage>" [--conclusion -|"text"]
+croft subject note S-12 "<text>"|- [--kind finding|decision|attempt|note|handoff]
+croft subject tag S-12 +vector -later     # add and remove tags
+croft subject todo S-12 "<title>" [--body -]
 ```
 
-`#0` means the subject is new. `--kinds task,note,knowledge,session` narrows `check` (the
-default searches all: you cannot know which store holds the answer); `--assignee me|<who>`
-keeps one person's tasks. Never pull bodies in bulk — the index is for choosing what to read.
+`list` prints: ref, stage, todos open/done, tags, `~tokens`, title. A stage change writes a
+`stage` note by itself ("to explore → exploring"); do not narrate it.
 
-`recall` starts from the task: resolutions and decision/finding notes on related tasks and
-knowledge on its files, each with why it was picked. `claim` prints the top of it — read
-it; "do not read that closure as permission for this" is the line you would not know to
-look for.
+**Bodies and notes are markdown**: `##` headings, `-` lists, code and paths in backticks.
+A wall of text is refused, naming what to fix. Secrets are refused everywhere — write
+`$ENV_VAR` or a vault path instead.
 
-## Evidence, as opposed to narration
+## Stages and tags
 
 ```bash
-croft commit ACME-42 a1b2c3d --message "cap pool_size at 15"
-croft push   ACME-42 a1b2c3d --branch main
-croft run    ACME-42 "npm test" --status passed --exit-code 0
+croft stages    # the pipeline, in order, with each stage's category
+croft tags      # the curated tags
 ```
 
-They record; none executes anything. "I fixed it" cannot be checked; `run_result failed
-exit 1` can. Repeats dedupe, so retrying is safe. Name another task's ref in a
-`decision` or `finding` note when your work constrains it — it shows under that task's
-`mentionedIn`; the ref in prose is the link. `croft comment` addresses the human, not the
-next agent.
+Admins curate both in the web app. The seed pipeline:
 
-## Filing, and the body
+| stage | category |
+| --- | --- |
+| to explore · to implement | planned |
+| exploring · implementing · internal testing · ready for rollout | active |
+| done · rolled out | completed (needs a conclusion) |
+| rejected | dropped (needs a conclusion) |
+
+`rejected` with a clear reason is a result, not a failure: it is what stops the next
+person re-evaluating the same thing.
+
+## From the lab to real work: push and sync
+
+When a todo becomes committed work on a repo tracked in Cairn, hand it over:
 
 ```bash
-croft add "title" --project ACME --type bug --body - --assignee bob@acme.io   # body on stdin
+croft push T-41 --to CAIRN      # CAIRN = the Cairn project key
 ```
 
-`--type feature|bug|improvement|chore|spike|docs` · `--priority urgent|high|medium|low`.
-`add` lists similar existing work — read it before continuing.
-
-The title says which task; the body says what it is. **The server refuses a bug or spike
-whose body is under 40 characters**; `--force-empty` is for the rare title that is the
-whole story. What earns its place: what happens vs what you expected; how to see it
-(request, command, log line); what you ruled out; why it matters now. Write it when you
-file — context is never cheaper. A `chore`/`docs` title is often enough; never pad with "n/a".
-
-**Bodies are markdown; an agent's wall of text is refused**, naming what to fix:
-headings, not `WHY:` in capitals; lists and short paragraphs; paths, calls and identifiers
-in backticks. Like this:
-
-```markdown
-## Cause
-`db/pool.ts:40` caps it at 15.
-## Fix
-- raise it to 40
-```
-
-The API refuses `done`/`cancelled` without a resolution (it suggests one from your last
-checkpoint), and refuses a resolution unless the status is closing. Reopening clears the
-resolution; the withdrawn text stays in `history`.
-
-## Knowledge: what we know, not what we did
+This runs `cairn add` with the todo's title and description (plus "From Croft T-41 (subject
+S-12)"), labels the Cairn task `croft:T-41`, and links the two. **From then on Cairn owns the
+status**: work it there (claim, notes, done), not in Croft. `cairn` must be on PATH
+(`CROFT_CAIRN_BIN` overrides).
 
 ```bash
-croft know                              # what applies here
-croft know "postgrest ambiguous embed"  # search
-croft learn "Supavisor pools are per-tenant, not per-connection-string" \
-  --slug supavisor-pools-per-tenant --label supabase --body -
+croft sync      # pull linked Cairn statuses back
 ```
 
-Write it the moment you learn something that will be true next month. If you would want it
-surfaced on an unrelated project, it is knowledge; bound to one task and moment, a note.
+`sync` updates each pushed todo's Cairn status, and when the Cairn task closes it notes the
+subject ("CAIRN-331 done: <resolution>") once. Then decide the subject's stage — often
+`rolled out` with a conclusion.
 
-- **Scope is explicit or inferred, never assumed global.** `--project ACME`, `--entity acme`
-  (a business, stack or subsystem — `croft entities`), or `--global`. With none, `learn`
-  takes this directory's project and **refuses where there is none** — outside a mapped
-  checkout, pass a scope. Scope narrowly only when the fact is narrow; the narrower one
-  is shown first ("true for this business, except here").
-- **A body is required** on `learn`, and a `relearn` body cannot be blank.
-- **Provenance is automatic:** the session is recorded with the fact, and so is the task
-  when this session holds exactly one (`--task <ref>` to name another).
-- **Secrets are refused** on every write that is read back — knowledge, notes, comments,
-  bodies, resolutions, checkpoints (`sk-…`, `ghp_…`, `AKIA…`, private keys, JWTs,
-  `password: <value>`). Write where it lives instead: `$ENV_VAR`, a vault path.
-- **The title is the claim; the slug is the handle** — give a long claim a short `--slug`.
-- **`[[slug]]` in a body is a link**, followable in browser and terminal. A reference that
-  misses while a near-named entry exists is refused, naming the slug you probably meant —
-  take it, it is almost always a misspelling. With nothing close it is accepted with a
-  warning (two entries can cite each other). `[[ACME-42]]` is refused: write task
-  refs bare. `--allow-dangling` is for when the refusal is genuinely wrong.
-- **Correct rather than add.** Two contradictory claims, equally findable, is how every
-  memory store fails. When `learn` lists same-subject entries, supersede the wrong one.
+`croft push T-41 <sha> [--branch B]` (no `--to`) is the other `push`: it records a git push
+on the todo as evidence, like `croft commit` and `croft run`. None of those executes anything.
+
+## Briefing
 
 ```bash
-croft relearn <slug> --body - --reason "why"    # it changed (old version kept)
-croft relearn <slug> --entity E --project none  # re-scope: none clears a side; --global both
-croft unlearn <old> --superseded-by <new>       # it was wrong
-croft verify <slug>                             # still true; you checked
-croft know <slug> --history
+croft context --brief   # a few lines: stage counts, your active subjects, the rule
 ```
 
-A fact is linked to the backticked paths in its body, its source task's files, and any
-`--files a,b`. **`stale`** means those files were reworked since it was confirmed;
-**`unverified Nd`** means a fact naming no file has gone 14+ days unconfirmed — age, not
-evidence of change. Either way: check it, then `verify` or `relearn`. Confirming an old
-fact is as useful as a new one, and faster.
+A SessionStart hook prints this. When Cairn's briefing is installed it carries Croft's block
+instead, so you see it once.
 
-`know --unused|--gaps|--orphans|--dangling` show what is *not* connected. **Scripted reads
-are not recalls:** pass `--sweep` (or `CROFT_SWEEP=1`) when looping over entries.
+## Output and exit codes
 
-**If this machine also has Trig** (the map of what exists): ask *could a re-scan
-rediscover this?* Yes → `trig learn`; no → `croft learn`. Unsure → Croft: Trig ingests
-Croft knowledge on every scan, while a fact hand-written into Trig is never superseded.
+TSV by default: a `#count` line, a header, rows, with a `~tokens` column for what opening a
+row costs. `--json` to parse, `--pretty` for a person. `croft --help` is the reference.
+Never pull bodies in bulk; the index is for choosing what to read.
 
-## Claims and liveness
-
-```bash
-croft claim ACME-42      # sets doing; exit 9 = held by someone else
-croft beat ACME-42       # optional heartbeat during long silent work
-croft checkpoint ACME-42 --summary "migration written, tests not run"
-croft release ACME-42    # handing it back: a held doing task returns to todo
-```
-
-- A claim is execution state, independent of status: `doing` and unclaimed means a human
-  is on it. Only claim open work — reopen settled work first if it truly needs revision.
-- **A claim is not ownership.** The assignee is the human accountable before and after
-  it. `list --mine` is what you hold; `--assignee me`, what your human owns; `croft
-  people`, who can be assigned.
-- **A checkpoint on an unheld open task claims it** (and says so); a note does not. Neither
-  steals: a checkpoint on someone else's claim is refused.
-- **After 15 silent minutes** a lease is stale and another agent may take it over.
-- **After 2 hours with no sign of life** the maintenance sweep (`reconcile`, where
-  installed) releases the claim and leaves a note: `doing` → `todo`, `in-review` keeps its
-  status. Sign of life is a beat, a note, a checkpoint you wrote, an edit, or your own
-  commit/push/run. Notes and checkpoints survive the release; the checkpoint is where the
-  next agent starts.
-- **At session end the runtime checkpoints tasks the session worked on, never over a
-  checkpoint you wrote** unless this very session holds the claim; a checkpoint written
-  meanwhile always wins. A held task it did not touch gets a "still held" line (not a sign
-  of life) only if it has no checkpoint. Your own checkpoint is the handoff.
-
-Sessions are created by the runtime; there is no `session create`. For a manual handoff
-with a real session id, `croft session end --id <id>` — never fabricate one.
-
-## Dependencies, parents, duplicates
-
-```bash
-croft deps ACME-42                   # what blocks this, and what it blocks
-croft blockedby ACME-42 ACME-40      # ACME-40 must finish first (unblockedby removes)
-croft block ACME-42 --reason "…"     # stuck on something outside Croft
-croft add "write the migration" --project ACME --parent ACME-42
-croft children ACME-42               # the split, and how much is closed
-croft done ACME-42 --duplicate-of ACME-31 --resolution "same cause; fixed there"
-```
-
-A task with open blockers is not ready, whatever its status says. A dependency shows on
-both tasks; "waiting on ACME-40" in a note is prose nobody queries. Parents are
-containment, blockers ordering. Name a duplicate's original.
-
-## Briefing and what next
-
-```bash
-croft context                 # what you hold, in flight, where the last session stopped
-croft context --scope project [--project KEY]
-croft next [--project KEY] [--assignee me]  # the recommendation, and why it won
-croft map ACME                # this checkout is that project (once per repo)
-```
-
-A hook usually runs `context` at session start; run it when you have lost your place.
-Read **"Started and dropped here"**: work begun and abandoned — finish it or close it with
-why. **"Assigned to you, nobody on it"** is your human's open work no agent holds.
-`--scope project` restricts held work and the last session to the resolved project and
-fails rather than guess. `next` ranks work you hold above work dropped with a checkpoint
-above anything not begun, your human's first within each; another's says whose. Blocked
-or actively held work is absent, not ranked last. A renamed key (`AC-113 is now HOL-113`)
-keeps resolving — write the new ref.
-
-## Before you stop
-
-Close what you finished (resolution, right `--kind`); `note --kind attempt` what failed;
-`learn` what stays true, scoped; checkpoint what you still hold. Nothing writes your
-checkpoint for you.
-
-## Output and rare verbs
-
-TSV by default (`#count`, a header, rows); `--json` to parse, `--pretty` for a human;
-`croft --help` is the reference. `replay` sends writes queued offline. `task delete <ref>
---confirm <ref>` is for junk only; `cancel` keeps the record and the reason.
+- **Exit 2** — an unknown flag, or one the command never read. Nothing was filtered; fix the flag.
+- **Exit 9** — another agent holds the todo. Pick different work.
+- **Exit 10** — several Croft instances and none known here. Ask the user which, run the
+  `croft route add <instance>` it prints, retry. Never pick one yourself.
 
 Requires `croft` on PATH and a key per runtime (`~/.croft/env`; a person pairs them with
-`croft setup`): the key is who wrote a thing.
-**Exit 10: several Croft instances, none known here.** Ask the user which, run the `croft
-route add …` it prints, retry. Never pick one yourself. Stale/ambiguous project keys exit 10;
-use `--instance` only when certain.
+`croft setup --url <instance>`): the key is who wrote a thing.

@@ -1,19 +1,19 @@
 #!/usr/bin/env node
 /**
- * Wires Croft's memory hooks into the agent runtimes on this machine.
+ * Wires Croft's one hook into the agent runtimes on this machine:
  *
- * Two mechanisms, the same two everywhere:
- *   session start  -> inject the briefing
- *   session end    -> record what happened, checkpoint what is still held
+ *   session start  -> inject the lab briefing (`croft context --brief`)
  *
- * There used to be a third, PreToolUse(Read) -> what is known about that file.
- * It was taken out by hand on every machine (CCS-40): it had no cache and no
- * debounce, so every Read in every session cost a node spawn and a fresh
- * HTTPS request, and on Codex, which has no Read tool, it never matched at
- * all. This installer went on writing it back, so it now removes it instead —
- * only its own entry; anyone else's PreToolUse hooks are left where they are.
- * The hook script still answers a PreToolUse event for anyone who wires it by
- * hand.
+ * Croft records no sessions — Cairn does — so there is no session-end hook,
+ * and the Stop/SessionEnd/PreCompact/per-Read entries older installs wrote are
+ * taken out again (only this installer's own; anyone else's are left alone).
+ *
+ * Yields to Cairn. Where Cairn's own SessionStart hook is installed (an entry
+ * tagged "cairn-memory": true, or OpenClaw's cairn-briefing hook linked),
+ * Cairn's briefing already carries Croft's block, and a second briefing
+ * competing for the top of every session is how both get skimmed. So for that
+ * runtime Croft's hook is not installed (and a previous one is removed), and
+ * this prints "briefing: carried by Cairn".
  *
  * Idempotent: run it again after an upgrade and it replaces its own entries
  * without touching anyone else's. Every entry it owns is tagged, and tagging
@@ -25,7 +25,7 @@
  * skill; run it by hand only to re-wire the hooks on their own.
  */
 import { execFileSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
@@ -36,11 +36,14 @@ const HOME = homedir()
 const REPO = dirname(import.meta.dirname)
 
 const CONTEXT = join(HOME, '.croft', 'hooks', 'croft-context.mjs')
-const SESSION_END = join(HOME, '.croft', 'hooks', 'croft-session-end.mjs')
-const LEARN_NUDGE = join(HOME, '.croft', 'hooks', 'croft-learn-nudge.mjs')
+/** Scripts older installs copied beside it, removed now that nothing runs them. */
+const RETIRED_SCRIPTS = ['croft-session-end.mjs', 'croft-learn-nudge.mjs']
 
 /** Marks the entries this installer owns, so re-running replaces rather than duplicates. */
 const TAG = 'croft-memory'
+/** Marks Cairn's entries. Where its SessionStart hook is, Cairn carries Croft's briefing. */
+const CAIRN_TAG = 'cairn-memory'
+const CARRIED = 'briefing: carried by Cairn'
 
 const log = (...a) => console.log(...a)
 
@@ -102,12 +105,11 @@ const readJson = (path) => {
 // --- the hook scripts themselves -------------------------------------------
 
 const installScripts = () => {
-  if (DRY) return log(`  would copy hooks into ${dirname(CONTEXT)}`)
+  if (DRY) return log(`  would copy the hook into ${dirname(CONTEXT)}`)
   mkdirSync(dirname(CONTEXT), { recursive: true })
   copyFileSync(join(REPO, 'hooks', 'croft-context.mjs'), CONTEXT)
-  copyFileSync(join(REPO, 'hooks', 'croft-session-end.mjs'), SESSION_END)
-  copyFileSync(join(REPO, 'hooks', 'croft-learn-nudge.mjs'), LEARN_NUDGE)
-  log(`  scripts -> ${dirname(CONTEXT)}`)
+  for (const name of RETIRED_SCRIPTS) rmSync(join(dirname(CONTEXT), name), { force: true })
+  log(`  script -> ${CONTEXT}`)
 }
 
 /**
@@ -124,9 +126,9 @@ const installScripts = () => {
  *
  * So recognise the script by NAME. Not by absolute path: an entry written when
  * the scripts lived somewhere else -- a different home, a checkout, a copy
- * under /opt -- still invokes the same two files, and matching the full path
- * would miss exactly the stale entry that most needs replacing. Nothing else
- * on a machine runs a file called `croft-session-end.mjs`.
+ * under /opt -- still invokes the same files, and matching the full path
+ * would miss exactly the stale entry that most needs replacing. The retired
+ * script names stay in the list so their old entries are still recognised.
  */
 const SCRIPT_NAMES = ['croft-context.mjs', 'croft-session-end.mjs', 'croft-learn-nudge.mjs']
 
@@ -168,6 +170,19 @@ const foreignHooks = (hooks) =>
     ),
   )
 
+/**
+ * Cairn's SessionStart hook, by its tag or, for one installed before the tag,
+ * by its script's name — the same two ways Cairn's installer knows its own.
+ */
+const isCairnHook = (hook) =>
+  Boolean(hook?.[CAIRN_TAG]) || (typeof hook?.command === 'string' && hook.command.includes('cairn-context.mjs'))
+
+const cairnBriefs = (hooks, event = 'SessionStart') =>
+  (Array.isArray(hooks?.[event]) ? hooks[event] : []).some((g) => (g?.hooks ?? []).some(isCairnHook))
+
+/** Events older installs of this script wrote to, and that it now only cleans. */
+const RETIRED_EVENTS = ['PreToolUse', 'SessionEnd', 'PreCompact', 'Stop']
+
 const isSafeHookCli = (value) => /^[A-Za-z0-9_./:+-]+$/.test(value)
 
 const canonicalHermesHooks = (hooks) =>
@@ -184,27 +199,6 @@ const canonicalHermesHooks = (hooks) =>
 
 // --- Claude Code ------------------------------------------------------------
 
-/**
- * Claude Code has a real SessionEnd, and for a long time that was taken to mean
- * it needed nothing else. It does.
- *
- * A session is written when it ends, and a session that runs for days does not
- * end. On the machine this was found on, four transcripts had been open since
- * 2026-09-18 -- one of them 39 MB -- and the last session recorded from that
- * host was the minute those four began, 54 hours earlier. Nothing was broken:
- * the hooks fired, the key authenticated, the parser worked. The trigger simply
- * never came.
- *
- * So PreCompact as well. A long session compacts repeatedly, and compaction is
- * the one event that is guaranteed to happen to a session too long to end --
- * it is what happens INSTEAD of ending. Recording there costs nothing extra in
- * correctness, because `croft session end` upserts on (platform, id): the row
- * is rewritten in place, progressively richer, and the compaction that finally
- * precedes a real SessionEnd just writes the same row once more.
- *
- * The same upsert is what makes Codex's per-turn checkpoint below safe: Stop
- * fires every turn and has never duplicated a row.
- */
 const installClaude = () => {
   const path = join(HOME, '.claude', 'settings.json')
   if (!existsSync(path)) return log('  no ~/.claude/settings.json — skipped')
@@ -215,41 +209,32 @@ const installClaude = () => {
   const settings = readJson(path)
   settings.hooks ??= {}
 
-  const mine = (command, extra = {}) => ({ type: 'command', command, [TAG]: true, ...extra })
-
-  const replace = (event, matcher, ...entries) => {
-    const groups = (settings.hooks[event] ?? []).filter(
-      (g) => !(g.hooks ?? []).some(isMine),
-    )
-    groups.push(matcher ? { matcher, hooks: entries } : { hooks: entries })
-    settings.hooks[event] = groups
+  const retired = RETIRED_EVENTS.filter((event) => strip(settings.hooks, event))
+  const carried = cairnBriefs(settings.hooks)
+  if (carried) {
+    strip(settings.hooks, 'SessionStart')
+  } else {
+    const groups = (settings.hooks.SessionStart ?? []).filter((g) => !(g.hooks ?? []).some(isMine))
+    groups.push({
+      matcher: 'startup|resume|clear|compact',
+      hooks: [{ type: 'command', command: `node ${CONTEXT}`, [TAG]: true, timeout: 10 }],
+    })
+    settings.hooks.SessionStart = groups
   }
 
-  replace('SessionStart', 'startup|resume|clear|compact', mine(`node ${CONTEXT}`, { timeout: 10 }))
-  const unwired = strip(settings.hooks, 'PreToolUse')
-  replace('SessionEnd', null, mine(`node ${SESSION_END}`, { timeout: 120, async: true }))
-  // No matcher: both `manual` and `auto` compactions are the same event to us,
-  // and naming them would only add a spelling to get wrong.
-  replace('PreCompact', null, mine(`node ${SESSION_END}`, { timeout: 120, async: true }))
-  // Not async: a Stop hook can only block by answering before the turn ends.
-  replace('Stop', null, mine(`node ${LEARN_NUDGE}`, { timeout: 10 }))
-
-  if (writeJson(path, settings, before)) {
-    log('  claude: SessionStart, SessionEnd, PreCompact, Stop (asks once per session to croft learn)')
-    if (unwired) log('  claude: removed the per-Read PreToolUse hook (CCS-40)')
-  }
+  const wrote = writeJson(path, settings, before)
+  if (carried) log(`  claude: ${CARRIED}`)
+  else if (wrote) log('  claude: SessionStart (lab briefing)')
+  if (wrote && retired.length) log(`  claude: removed Croft's old ${retired.join(', ')} hook(s)`)
 }
 
 // --- Codex ------------------------------------------------------------------
 
 /**
- * Codex shares Claude Code's wire format exactly, so the same scripts serve it.
- * Codex long had no SessionEnd, so the recorder ran on Stop as a session end:
- * every turn closed the session and checkpointed held tasks (CROFT-319). Codex
- * has SessionEnd now (0.155 at least). Stop records a live checkpoint
- * (`--ongoing`: no end time, held tasks untouched) so a session left open still
- * shows what it did, and SessionEnd closes it. Every handler has to be trusted
- * in config.toml before it runs, which this cannot do for you.
+ * Codex shares Claude Code's wire format exactly, so the same script serves it.
+ * Every handler has to be trusted in config.toml before it runs, which this
+ * cannot do for you — and why `writeJson` never rewrites a file whose hooks
+ * already say this (see `canonical`).
  */
 const installCodex = () => {
   const path = join(HOME, '.codex', 'hooks.json')
@@ -259,47 +244,43 @@ const installCodex = () => {
   const config = readJson(path)
   config.hooks ??= {}
 
-  const mine = (command, extra = {}) => ({ type: 'command', command, [TAG]: true, ...extra })
-
-  const replace = (event, matcher, ...entries) => {
-    const groups = (config.hooks[event] ?? []).filter((g) => !(g.hooks ?? []).some(isMine))
-    groups.push(matcher ? { matcher, hooks: entries } : { hooks: entries })
-    config.hooks[event] = groups
-  }
-
   // CROFT_AGENT names the runtime, and the CLI picks the matching key out of
   // ~/.croft/env. Without it every runtime on a machine shares one key, and
-  // the key is the identity -- which is how one host had Codex's work all
-  // filed under OpenClaw's name.
+  // the key is the identity.
   const env = 'CROFT_AGENT=codex CROFT_PLATFORM=codex'
 
-  replace('SessionStart', 'startup|resume|clear', mine(`${env} node ${CONTEXT}`, { timeout: 10 }))
-  const unwired = strip(config.hooks, 'PreToolUse')
-  replace(
-    'Stop',
-    null,
-    mine(`${env} node ${SESSION_END} --ongoing`, { timeout: 120, async: true }),
-    mine(`${env} node ${LEARN_NUDGE}`, { timeout: 10 }),
-  )
-  replace('SessionEnd', null, mine(`${env} node ${SESSION_END}`, { timeout: 120, async: true }))
+  const retired = RETIRED_EVENTS.filter((event) => strip(config.hooks, event))
+  const carried = cairnBriefs(config.hooks)
+  if (carried) {
+    strip(config.hooks, 'SessionStart')
+  } else {
+    const groups = (config.hooks.SessionStart ?? []).filter((g) => !(g.hooks ?? []).some(isMine))
+    groups.push({
+      matcher: 'startup|resume|clear',
+      hooks: [{ type: 'command', command: `${env} node ${CONTEXT}`, [TAG]: true, timeout: 10 }],
+    })
+    config.hooks.SessionStart = groups
+  }
 
   // The trust warning is printed only when the file actually moved. Printed
   // every run it is wallpaper, and the one run where it matters reads the same
   // as the twenty where it did not.
-  if (writeJson(path, config, before)) {
-    log('  codex: SessionStart, Stop (live checkpoint; asks once per session to croft learn), SessionEnd')
-    if (unwired) log('  codex: removed the per-Read PreToolUse hook (CCS-40)')
-    log('  codex: entries must be trusted on next launch — [hooks.state] in config.toml')
-    log('  codex: needs CROFT_API_KEY_CODEX (`croft setup` pairs one), or it writes as')
-    log('         whoever owns the plain CROFT_API_KEY')
+  const wrote = writeJson(path, config, before)
+  if (carried) log(`  codex: ${CARRIED}`)
+  if (wrote) {
+    if (!carried) log('  codex: SessionStart (lab briefing)')
+    if (retired.length) log(`  codex: removed Croft's old ${retired.join(', ')} hook(s)`)
+    if (!carried) {
+      log('  codex: the entry must be trusted on next launch — [hooks.state] in config.toml')
+      log('  codex: needs CROFT_API_KEY_CODEX (`croft setup` pairs one), or it writes as')
+      log('         whoever owns the plain CROFT_API_KEY')
+    }
   }
 
   // Said, never done. These are somebody else's hooks, and this installer has
   // no business removing them — but anything on Stop runs after EVERY turn,
   // and a session-end script written for Claude Code that makes a model call
-  // becomes one billed call per turn. That is
-  // what Quarry's hook did here after CCS-40 took it out of Claude Code only
-  // (CROFT-290), and nothing said so.
+  // becomes one billed call per turn (CROFT-290).
   const foreign = foreignHooks(config.hooks)
   if (foreign.length > 0) {
     log(`  codex: ${foreign.length} hook(s) in ${path} are not Croft's — left untouched:`)
@@ -350,10 +331,18 @@ const installHermes = () => {
   const hooks = JSON.parse(JSON.stringify(before))
   const command = `env CROFT_AGENT=hermes CROFT_PLATFORM=hermes CROFT_CLI=${hookCli} node ${CONTEXT}`
   const current = Array.isArray(hooks.pre_llm_call) ? hooks.pre_llm_call : []
-  hooks.pre_llm_call = [...current.filter((entry) => !isMine(entry)), { command, timeout: 10 }]
+  const carried = current.some(isCairnHook)
+  const others = current.filter((entry) => !isMine(entry))
+  if (carried) {
+    if (others.length) hooks.pre_llm_call = others
+    else delete hooks.pre_llm_call
+  } else {
+    hooks.pre_llm_call = [...others, { command, timeout: 10 }]
+  }
+  if (carried) log(`  Hermes Agent by Nous Research: ${CARRIED}`)
 
   if (canonicalHermesHooks(before) === canonicalHermesHooks(hooks)) {
-    return log('  Hermes Agent by Nous Research: pre_llm_call — unchanged')
+    return carried ? undefined : log('  Hermes Agent by Nous Research: pre_llm_call — unchanged')
   }
   if (DRY) return log('  Hermes Agent by Nous Research: would configure pre_llm_call')
 
@@ -368,6 +357,7 @@ const installHermes = () => {
   // A zero exit from `config set` is a claim, not a result. No Hermes runs on
   // any machine here, so every promise this installer makes about it rests on
   // reading back what it wrote rather than trusting the status it was handed.
+  if (carried) return log('  Hermes Agent by Nous Research: removed Croft\'s pre_llm_call entry')
   if (!hermesHookInstalled()) {
     console.error('  Hermes Agent by Nous Research: `hermes config set` reported success but the hook is not in the config it reads back — nothing was installed')
     process.exitCode = 1
@@ -408,9 +398,8 @@ const hermesHookInstalled = () => {
  * is told about it with its own documented command, `hooks install --link`,
  * which adds that one directory to extraDirs and enables the hook.
  *
- * Session recording is not here: OpenClaw has no session-end event either,
- * and its transcripts are swept by the `openclaw-sessions` job in
- * scripts/install-cron.mjs.
+ * Not linked where Cairn's cairn-briefing hook is: Cairn's briefing carries
+ * Croft's block there.
  */
 const OPENCLAW_HOOK = join(HOME, '.croft', 'hooks', 'openclaw', 'croft-briefing')
 const OPENCLAW_HOOK_FILES = ['HOOK.md', 'handler.ts']
@@ -454,6 +443,12 @@ const openclawRunsGateway = () => {
   return Boolean(gateway.mode || gateway.port || config?.agents || config?.channels)
 }
 
+/** Cairn's own briefing hook, enabled in this gateway's config. */
+const cairnBriefingLinked = () => {
+  const internal = readJson(openclawConfig())?.hooks?.internal
+  return internal?.enabled !== false && internal?.entries?.['cairn-briefing']?.enabled === true
+}
+
 const openclawLinked = () => {
   const internal = readJson(openclawConfig())?.hooks?.internal
   return (
@@ -478,11 +473,7 @@ const copyOpenclawHook = () => {
 }
 
 const openclawTail = () => {
-  log('  openclaw: `croft setup` installs the `openclaw-sessions` job for you when it can find')
-  log('            the sessions directory; running this installer alone, wire it up yourself with')
-  log('            scripts/install-cron.mjs. set CROFT_AGENT=openclaw where the gateway starts,')
-  log('            and see docs/openclaw.md for the AGENTS.md block — `learn` needs an explicit')
-  log('            scope outside a mapped checkout')
+  log('  openclaw: set CROFT_AGENT=openclaw where the gateway starts; see docs/openclaw.md')
 }
 
 /**
@@ -516,6 +507,13 @@ const installOpenclaw = () => {
       : `no config at ${openclawConfig()}`
     log(`  openclaw: ${why} — this account runs no gateway; skipped.`)
     log('            Run the installer as the gateway\'s user, or pass --openclaw to link here anyway.')
+    return
+  }
+  if (cairnBriefingLinked()) {
+    log(`  openclaw: ${CARRIED}`)
+    if (openclawLinked()) {
+      log(`  openclaw: ${OPENCLAW_HOOK_NAME} is enabled too — set hooks.internal.entries.${OPENCLAW_HOOK_NAME}.enabled to false in ${openclawConfig()}`)
+    }
     return
   }
   if (DRY) {
@@ -557,7 +555,7 @@ const version = () => {
   }
 }
 
-log(`Installing Croft memory hooks${DRY ? ' (dry run)' : ''}`)
+log(`Installing Croft hooks${DRY ? ' (dry run)' : ''}`)
 log(`  ${version()}`)
 installScripts()
 installClaude()

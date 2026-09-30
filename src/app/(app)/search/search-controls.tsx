@@ -161,10 +161,9 @@ export const SearchControls = ({
         onChange={(v) => push({ kind: v || 'all' })}
         placeholder="Everything"
         options={[
-          { value: 'task', label: 'Tasks' },
-          { value: 'note', label: 'Work-log notes' },
-          { value: 'knowledge', label: 'Knowledge' },
-          { value: 'session', label: 'Sessions' },
+          { value: 'subject', label: 'Subjects' },
+          { value: 'task', label: 'Todos' },
+          { value: 'note', label: 'Todo notes' },
         ]}
       />
       <Filter

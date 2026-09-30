@@ -12,6 +12,20 @@ import {
 } from '@/schemas/task'
 import { knowledgeCreate, knowledgeUpdate } from '@/schemas/knowledge'
 import { sessionUpsert } from '@/schemas/session'
+import {
+  cairnConnectionSchema,
+  cairnLinkSchema,
+  createStageSchema,
+  createSubjectNoteSchema,
+  createSubjectSchema,
+  createSubjectTodoSchema,
+  createTagSchema,
+  reorderSchema,
+  updateStageSchema,
+  updateSubjectSchema,
+  updateTagSchema,
+} from '@/schemas/subject'
+import { STAGE_CATEGORIES, SUBJECT_NOTE_KINDS } from '@/lib/lab/types'
 
 /**
  * The spec is generated from the same Zod schemas the routes validate with,
@@ -41,6 +55,7 @@ const errorResponse = {
             enum: [
               'unauthorized', 'forbidden', 'not_found', 'validation_failed',
               'conflict', 'already_claimed', 'session_closed', 'resolution_required',
+              'conclusion_required', 'stage_in_use',
               'secret_detected', 'rate_limited', 'internal_error',
             ],
           },
@@ -152,6 +167,91 @@ const okResponse = (description: string, data: Record<string, unknown> = { type:
   description,
   content: { 'application/json': { schema: envelope(data) } },
 })
+
+const stageSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    name: { type: 'string', example: 'exploring' },
+    color: { type: 'string', example: '#6b7fa6' },
+    category: { type: 'string', enum: [...STAGE_CATEGORIES] },
+    position: { type: 'integer' },
+  },
+  required: ['id', 'name', 'color', 'category', 'position'],
+}
+
+const tagSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    name: { type: 'string' },
+    color: { type: 'string' },
+    position: { type: 'integer' },
+  },
+  required: ['id', 'name', 'color', 'position'],
+}
+
+const subjectSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    ref: { type: 'string', example: 'S-12' },
+    number: { type: 'integer' },
+    title: { type: 'string' },
+    body: { type: ['string', 'null'], description: 'The write-up. Absent from list rows.' },
+    stage: stageSchema,
+    tags: { type: 'array', items: tagSchema },
+    owner: {
+      type: ['object', 'null'],
+      properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' } },
+    },
+    conclusion: { type: ['string', 'null'] },
+    concluded_at: { type: ['string', 'null'], format: 'date-time', description: 'Absent from list rows.' },
+    todos: { type: 'object', properties: { open: { type: 'integer' }, done: { type: 'integer' } } },
+    position: { type: 'integer' },
+    actor_id: { type: 'string' },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
+    archived_at: { type: ['string', 'null'], format: 'date-time' },
+  },
+}
+
+const subjectNoteSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    kind: { type: 'string', enum: [...SUBJECT_NOTE_KINDS] },
+    note: { type: 'string' },
+    actor_type: { type: 'string', enum: ['human', 'agent'] },
+    actor_id: { type: 'string' },
+    created_at: { type: 'string', format: 'date-time' },
+  },
+}
+
+const subjectTodoSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    ref: { type: 'string', example: 'T-41' },
+    number: { type: 'integer' },
+    title: { type: 'string' },
+    status: { type: 'string', enum: [...TASK_STATUSES] },
+    claimed_by: { type: ['string', 'null'] },
+    cairn_ref: { type: ['string', 'null'], example: 'CAIRN-331' },
+    cairn_status: { type: ['string', 'null'] },
+    updated_at: { type: 'string', format: 'date-time' },
+  },
+}
+
+const cairnConnectionShape = {
+  type: 'object',
+  properties: {
+    url: { type: ['string', 'null'] },
+    key_set: { type: 'boolean' },
+    last_synced_at: { type: ['string', 'null'], format: 'date-time' },
+  },
+  required: ['url', 'key_set', 'last_synced_at'],
+}
 
 const person = {
   type: 'object',
@@ -568,7 +668,7 @@ export const openapiSpec = () => ({
         requestBody: body({
           type: 'object',
           properties: {
-            key: { type: 'string', pattern: '^[A-Z][A-Z0-9]{1,9}$', example: 'CAI' },
+            key: { type: 'string', pattern: '^[A-Z][A-Z0-9]{0,9}$', example: 'CAI' },
             title: { type: 'string' },
             description: { type: 'string' },
           },
@@ -1369,6 +1469,202 @@ export const openapiSpec = () => ({
           required: ['name', 'accent'],
         }),
         responses: { '200': okResponse('Saved.'), '400': errorResponse, '403': errorResponse },
+      },
+    },
+    '/subjects': {
+      get: {
+        summary: 'List subjects on the lab board',
+        description:
+          'Ordered by stage position, then position within the stage. Archived subjects are ' +
+          'left out unless `archived=true`, which returns only archived ones.',
+        parameters: [
+          { name: 'stage', in: 'query', schema: { type: 'string' }, description: 'Stage name (any case) or id.' },
+          { name: 'tag', in: 'query', schema: { type: 'string' }, description: 'Tag name or id.' },
+          { name: 'owner', in: 'query', schema: { type: 'string' }, description: '`me`, a user id, an email or a display name.' },
+          { name: 'q', in: 'query', schema: { type: 'string' }, description: 'Full text over title, write-up and conclusion.' },
+          { name: 'archived', in: 'query', schema: { type: 'string', enum: ['true', 'false'] } },
+        ],
+        responses: { '200': okResponse('SubjectSummary[]', { type: 'array', items: subjectSchema }), '400': errorResponse },
+      },
+      post: {
+        summary: 'File a subject',
+        description:
+          'Without `stage`, it lands in the first planned stage. `tags` are names of existing tags ' +
+          '(unknown ones are refused with the valid list). `owner` defaults to the caller; `null` leaves it unowned. ' +
+          'Filing straight into a completed or dropped stage needs a `conclusion` (`conclusion_required`).',
+        requestBody: body(json(createSubjectSchema)),
+        responses: { '201': okResponse('The subject.', subjectSchema), '400': errorResponse, '404': errorResponse },
+      },
+    },
+    '/subjects/brief': {
+      get: {
+        summary: 'The lab block of a session briefing',
+        parameters: [{ name: 'cwd', in: 'query', schema: { type: 'string' }, description: 'Accepted; not yet used.' }],
+        responses: {
+          '200': okResponse('Counts per stage name, and up to three active/planned subjects the caller owns.', {
+            type: 'object',
+            properties: {
+              counts: { type: 'object', additionalProperties: { type: 'integer' } },
+              mine: { type: 'array', items: subjectSchema },
+            },
+          }),
+        },
+      },
+    },
+    '/subjects/{ref}': {
+      parameters: [{ name: 'ref', in: 'path', required: true, schema: { type: 'string', example: 'S-12' } }],
+      get: {
+        summary: 'Show a subject (`S-12`, `12` or its id)',
+        responses: { '200': okResponse('The subject, with its write-up.', subjectSchema), '404': errorResponse },
+      },
+      patch: {
+        summary: 'Edit a subject',
+        description:
+          'Moving into a completed or dropped stage without a conclusion (already recorded or sent with ' +
+          'the move) is refused with `conclusion_required`. Every stage change appends a `stage` note ' +
+          '(`to explore → exploring`). `tags` replaces the whole set. `archived: true` takes it off the board.',
+        requestBody: body(json(updateSubjectSchema)),
+        responses: { '200': okResponse('The subject.', subjectSchema), '400': errorResponse, '404': errorResponse },
+      },
+    },
+    '/subjects/{ref}/notes': {
+      parameters: [{ name: 'ref', in: 'path', required: true, schema: { type: 'string', example: 'S-12' } }],
+      get: {
+        summary: "A subject's work log, newest first",
+        parameters: [{ name: 'kind', in: 'query', schema: { type: 'string', enum: [...SUBJECT_NOTE_KINDS] } }],
+        responses: { '200': okResponse('SubjectNote[]', { type: 'array', items: subjectNoteSchema }), '404': errorResponse },
+      },
+      post: {
+        summary: 'Append to the work log',
+        description:
+          'Idempotent on (subject, kind + text): a retry answers 200 `{duplicate: true}`. `stage` notes are ' +
+          'written by the server and cannot be posted.',
+        requestBody: body(json(createSubjectNoteSchema)),
+        responses: {
+          '201': okResponse('The note.', subjectNoteSchema),
+          '200': okResponse('Already recorded: `{duplicate: true}`.'),
+          '404': errorResponse,
+        },
+      },
+    },
+    '/subjects/{ref}/todos': {
+      parameters: [{ name: 'ref', in: 'path', required: true, schema: { type: 'string', example: 'S-12' } }],
+      get: {
+        summary: "A subject's todos, open ones first",
+        responses: { '200': okResponse('SubjectTodo[]', { type: 'array', items: subjectTodoSchema }), '404': errorResponse },
+      },
+      post: {
+        summary: 'Add a todo',
+        description:
+          'A todo is a task in the system project `T` (created on first use), linked to the subject. ' +
+          'Every task verb — claim, note, done — works on its `T-n` ref.',
+        requestBody: body(json(createSubjectTodoSchema)),
+        responses: { '201': okResponse('The todo.', subjectTodoSchema), '400': errorResponse, '404': errorResponse },
+      },
+    },
+    '/stages': {
+      get: {
+        summary: 'The board stages, in order',
+        responses: { '200': okResponse('Stage[]', { type: 'array', items: stageSchema }) },
+      },
+      post: {
+        summary: 'Add a stage (administrators)',
+        requestBody: body(json(createStageSchema)),
+        responses: { '201': okResponse('The stage.', stageSchema), '403': errorResponse, '409': errorResponse },
+      },
+    },
+    '/stages/reorder': {
+      post: {
+        summary: 'Reorder the stages (administrators)',
+        description: '`ids` must name every stage exactly once.',
+        requestBody: body(json(reorderSchema)),
+        responses: { '200': okResponse('Stage[]', { type: 'array', items: stageSchema }), '400': errorResponse, '403': errorResponse },
+      },
+    },
+    '/stages/{id}': {
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+      patch: {
+        summary: 'Rename, recolour, recategorise or move a stage (administrators)',
+        requestBody: body(json(updateStageSchema)),
+        responses: { '200': okResponse('The stage.', stageSchema), '403': errorResponse, '404': errorResponse, '409': errorResponse },
+      },
+      delete: {
+        summary: 'Delete a stage (administrators)',
+        description: 'Refused with `stage_in_use` (409) while any subject, archived ones included, is in it.',
+        responses: { '200': okResponse('Deleted.'), '403': errorResponse, '404': errorResponse, '409': errorResponse },
+      },
+    },
+    '/tags': {
+      get: {
+        summary: 'The curated tags',
+        responses: { '200': okResponse('Tag[]', { type: 'array', items: tagSchema }) },
+      },
+      post: {
+        summary: 'Add a tag (administrators)',
+        description: 'Names are stored lower-case and unique.',
+        requestBody: body(json(createTagSchema)),
+        responses: { '201': okResponse('The tag.', tagSchema), '403': errorResponse, '409': errorResponse },
+      },
+    },
+    '/tags/{id}': {
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+      patch: {
+        summary: 'Rename, recolour or move a tag (administrators)',
+        requestBody: body(json(updateTagSchema)),
+        responses: { '200': okResponse('The tag.', tagSchema), '403': errorResponse, '404': errorResponse, '409': errorResponse },
+      },
+      delete: {
+        summary: 'Delete a tag (administrators); it comes off every subject',
+        responses: { '200': okResponse('Deleted, with how many subjects carried it.'), '403': errorResponse, '404': errorResponse },
+      },
+    },
+    '/integrations/cairn': {
+      get: {
+        summary: 'The Cairn connection (administrators)',
+        description: 'Never returns the key — only whether one is set.',
+        responses: { '200': okResponse('CairnConnection', cairnConnectionShape), '403': errorResponse },
+      },
+      put: {
+        summary: 'Connect to a Cairn (signed-in administrator only)',
+        description: '`apiKey` omitted keeps the stored key; `null` clears it. `url: null` disconnects.',
+        requestBody: body(json(cairnConnectionSchema)),
+        responses: { '200': okResponse('CairnConnection', cairnConnectionShape), '400': errorResponse, '403': errorResponse },
+      },
+    },
+    '/integrations/cairn/sync': {
+      post: {
+        summary: "Pull every pushed todo's status from Cairn",
+        description:
+          'Updates `cairn_status` on each linked todo. The first time Cairn reports one done or cancelled, ' +
+          'the outcome (`CAIRN-331 done: <resolution>`) is appended to the subject log, once. A Cairn task ' +
+          'that cannot be read is listed in `failed` and does not stop the rest. 409 when not connected.',
+        responses: {
+          '200': okResponse('What the sync did.', {
+            type: 'object',
+            properties: {
+              checked: { type: 'integer' },
+              updated: { type: 'integer' },
+              concluded: { type: 'integer' },
+              failed: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: { ref: { type: 'string' }, cairn_ref: { type: 'string' }, error: { type: 'string' } },
+                },
+              },
+              last_synced_at: { type: ['string', 'null'], format: 'date-time' },
+            },
+          }),
+          '409': errorResponse,
+        },
+      },
+    },
+    '/tasks/{ref}/cairn-link': {
+      parameters: [{ name: 'ref', in: 'path', required: true, schema: { type: 'string', example: 'T-41' } }],
+      post: {
+        summary: 'Record that this task was filed in Cairn (`croft push`)',
+        requestBody: body(json(cairnLinkSchema)),
+        responses: { '200': okResponse('The link.'), '400': errorResponse, '404': errorResponse, '409': errorResponse },
       },
     },
     '/people': {

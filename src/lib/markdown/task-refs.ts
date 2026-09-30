@@ -5,7 +5,7 @@ import { visit, SKIP } from 'unist-util-visit'
  * project key: the same shape matches `UTF-8`, `HTTP-404` and `SHA-256`, and
  * linkifying those would be worse than linkifying nothing.
  */
-const REF = /\b([A-Z][A-Z0-9]{1,9})-(\d{1,6})\b/g
+const REF = /\b([A-Z][A-Z0-9]{0,9})-(\d{1,6})\b/g
 
 type TextNode = { type: 'text'; value: string }
 type LinkNode = {

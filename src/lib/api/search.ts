@@ -1,5 +1,6 @@
 import { admin } from '@/lib/db/client'
 import { issuedUnderFormerKey, lookupFormerKey, type KeyRename } from './project-keys'
+import { subjectByRefQuery } from './subjects'
 
 /**
  * Query construction for prior-work discovery.
@@ -104,7 +105,7 @@ export type SearchRow = {
  * pass still runs underneath it — what references this task is a genuinely
  * useful second answer, just not the only one.
  */
-const REF_QUERY = /^\s*([A-Za-z][A-Za-z0-9]{1,9})-(\d{1,6})\s*$/
+const REF_QUERY = /^\s*([A-Za-z][A-Za-z0-9]{0,9})-(\d{1,6})\s*$/
 
 /**
  * A bare number is an address too.
@@ -340,7 +341,7 @@ const rankTasks = async (
  * exist, a work-log note, was the one table nothing searched.
  */
 export type SearchAllRow = {
-  kind: 'task' | 'note' | 'knowledge' | 'session'
+  kind: 'task' | 'note' | 'knowledge' | 'session' | 'subject'
   id: string
   ref: string
   title: string
@@ -386,12 +387,36 @@ export const searchAll = async (
       })()
     : []
 
+  // `S-12` names a subject the same way `CAI-42` names a task.
+  const wantsSubjects = !filters.project && (!filters.kinds || filters.kinds.includes('subject'))
+  const subject = wantsSubjects ? await subjectByRefQuery(q) : null
+  const exactSubject: SearchAllRow[] = subject
+    ? [{
+        kind: 'subject',
+        id: subject.id,
+        ref: subject.ref,
+        title: subject.title,
+        subtitle: subject.conclusion ? subject.conclusion.replace(/\s+/g, ' ').slice(0, 120) : null,
+        project_key: null,
+        status: subject.stage.name,
+        type: 'subject',
+        answered: Boolean(subject.conclusion),
+        updated_at: subject.updated_at,
+        body_bytes: (subject.body?.length ?? 0) + (subject.conclusion?.length ?? 0),
+        rank: 1,
+        widened: false,
+      }]
+    : []
+
   const addressedIds = new Set(addressed.map((t) => t.id))
   const withExact =
-    addressed.length > 0
+    addressed.length > 0 || exactSubject.length > 0
       ? [
+          ...exactSubject,
           ...addressed.map(asSearchAllRow),
-          ...rows.filter((r) => !(r.kind === 'task' && addressedIds.has(r.id))),
+          ...rows.filter(
+            (r) => !(r.kind === 'task' && addressedIds.has(r.id)) && !(r.kind === 'subject' && r.id === subject?.id),
+          ),
         ]
       : rows
 

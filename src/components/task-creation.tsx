@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation'
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { CreateTask } from './create-task'
+import { createsTodo, typingInField } from '@/lib/lab/ui-shortcuts'
 
 type Ctx = { open: () => void }
 const CreateContext = createContext<Ctx>({ open: () => undefined })
@@ -38,16 +39,15 @@ export const TaskCreationProvider = ({
     setIsOpen(true)
   }, [])
 
+  // `c` is a todo only on the todo surfaces; elsewhere it is a new subject,
+  // which SubjectCreationProvider answers.
+  const todoSurface = createsTodo(pathname)
+
   useEffect(() => {
+    if (!todoSurface) return
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return
-      const el = document.activeElement
-      if (
-        el instanceof HTMLElement &&
-        (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
-      ) {
-        return
-      }
+      if (typingInField()) return
       if (e.key === 'c') {
         e.preventDefault()
         setInstance((n) => n + 1)
@@ -56,7 +56,7 @@ export const TaskCreationProvider = ({
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [])
+  }, [todoSurface])
 
   const value = useMemo(() => ({ open }), [open])
 
@@ -81,10 +81,10 @@ export const NewTaskButton = () => {
     <button
       type="button"
       onClick={open}
-      title="New task — c"
+      title="New todo — c"
       className="border-border bg-surface text-fg-muted hover:border-border-strong hover:bg-surface-raised hover:text-fg flex h-[1.625rem] items-center gap-1.5 rounded-md border px-2 text-[0.75rem] shadow-[var(--shadow-sm)] transition-[color,background-color,border-color] duration-[var(--dur-1)] ease-[var(--ease-out)] active:scale-[0.98]"
     >
-      New task
+      New todo
       <kbd className="kbd hidden sm:inline-flex">c</kbd>
     </button>
   )

@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = { title: 'Search' }
 
-export const KINDS = ['all', 'task', 'note', 'knowledge', 'session'] as const
+export const KINDS = ['all', 'subject', 'task', 'note'] as const
 export type Kind = (typeof KINDS)[number]
 
 const SearchPage = async ({
@@ -40,7 +40,7 @@ const SearchPage = async ({
 
   // A type or status filter is a statement about tasks, so it selects the
   // task-only path along with an explicit `kind=task`. That path keeps
-  // selection and bulk edit, which mean nothing for a session or a fact.
+  // selection and bulk edit, which mean nothing for a subject.
   const taskOnly = kind === 'task' || Boolean(type) || Boolean(status)
 
   let rows: SearchRow[] = []
@@ -117,8 +117,8 @@ const SearchPage = async ({
           <p className="text-danger px-4 py-8 text-[0.8125rem]">{failure}</p>
         ) : query.length < 2 ? (
           <EmptyState
-            title="Search tasks, work-log notes, knowledge and past sessions at once."
-            hint="Closed work is included on purpose — a recorded answer is the point."
+            title="Search subjects, todos and their notes at once."
+            hint="Concluded and closed work is included on purpose — a recorded answer is the point."
           />
         ) : count === 0 ? (
           <EmptyState
@@ -127,7 +127,7 @@ const SearchPage = async ({
                 Nothing found for <span className="text-fg">{query}</span>.
               </>
             }
-            hint="This subject looks new."
+            hint="Nobody has looked into this yet — it could be a new subject."
           />
         ) : !taskOnly ? (
           <UnifiedResults rows={unified} query={query} />

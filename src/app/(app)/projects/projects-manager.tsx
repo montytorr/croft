@@ -270,7 +270,7 @@ export const ProjectsManager = ({
               ? `${retiredBy.key} used to be ${retiredBy.current}'s key and can never be reused — every ${retiredBy.key}-n ref still leads to ${retiredBy.current}.`
               : keyTaken
               ? `${key.toUpperCase()} is already in use.`
-              : 'The key prefixes every ref this project issues — ACME-1, ACME-2. Two to ten characters, starting with a letter. Changing it later keeps old refs working, but it is worth getting right.'}
+              : 'The key prefixes every ref this project issues — ACME-1, ACME-2. One to ten characters, starting with a letter. Changing it later keeps old refs working, but it is worth getting right.'}
           </p>
         </div>
       )}

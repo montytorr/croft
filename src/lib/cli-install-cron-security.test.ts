@@ -20,8 +20,8 @@ import { afterEach, describe, expect, it } from 'vitest'
  * F3 — `--install --only X` used to rewrite the whole managed block, which
  * silently dropped every previously-installed job not named in `X`. `croft
  * setup` calls this with `--only` on every run, so a second run used to
- * quietly un-schedule reconcile/vitals/openclaw-sessions the moment a caller
- * asked for just one of them. This pins that a scoped re-run keeps the rest.
+ * quietly un-schedule reconcile the moment a caller asked for just
+ * agent-files. This pins that a scoped re-run keeps the rest.
  *
  * All of this is exercised against a fake `crontab` executable on PATH that
  * reads from and writes to a plain file, so nothing here ever touches a real
@@ -49,8 +49,8 @@ const RECORDER = `import { writeFileSync } from 'node:fs'
 writeFileSync(process.env.RECORD, JSON.stringify({ args: process.argv.slice(2) }))
 `
 
-/** A machine with a fake crontab (a plain file) and everything reconcile,
- * vitals, agent-files and openclaw-sessions each need to be "applicable". */
+/** A machine with a fake crontab (a plain file) and everything reconcile and
+ * agent-files each need to be "applicable". */
 const setUp = async () => {
   const directory = await mkdtemp(join(tmpdir(), 'croft-install-cron-security-'))
   temporaryDirectories.push(directory)
@@ -66,18 +66,13 @@ if [ "$1" = "-l" ]; then cat "$FAKE_CRONTAB"; else cat > "$FAKE_CRONTAB"; fi
 `)
   await chmod(fakeCrontab, 0o755)
 
-  // reconcile and vitals require only CLI to exist; agent-files requires its
-  // sync script and node; openclaw-sessions requires its sessions directory,
-  // the session-end hook, and node.
+  // reconcile requires only the CLI to exist; agent-files requires its sync
+  // script and node.
   const cli = join(directory, 'croft')
   await writeFile(cli, "#!/usr/bin/env node\nconsole.log('all-instances')\n")
 
   const recorder = join(directory, 'recorder.mjs')
   await writeFile(recorder, RECORDER)
-
-  const hooks = join(directory, 'hooks')
-  await mkdir(hooks, { recursive: true })
-  await writeFile(join(hooks, 'croft-session-end.mjs'), '// stub\n')
 
   const recorded = join(directory, 'recorded.json')
 
@@ -95,7 +90,6 @@ if [ "$1" = "-l" ]; then cat "$FAKE_CRONTAB"; else cat > "$FAKE_CRONTAB"; fi
       CROFT_NODE_PATH: process.execPath,
       CROFT_SYNC_SCRIPT: recorder,
       CROFT_LOG_DIR: directory,
-      CROFT_HOOKS_DIR: hooks,
     },
   }
 }
@@ -144,60 +138,72 @@ describe('install-cron.mjs — crontab quoting (F2)', () => {
     expect(record.args).toContain('weekly: 100% done')
   })
 
-  it('refuses a CROFT_SUMMARY_CLI override carrying a newline or %', async () => {
+  it('refuses a notify target carrying a line break, which would forge a crontab line', async () => {
     const { environment } = await setUp()
-    const result = await run(['--cron'], { ...environment, CROFT_SUMMARY_CLI: '/bin/x\n* * * * * evil' })
+    const result = await run(['--cron'], { ...environment, CROFT_NOTIFY_FILES: 'CROFT-1\n* * * * * evil' })
     expect(result.code).toBe(2)
-    expect(result.stderr).toContain('CROFT_SUMMARY_CLI contains a newline, carriage return or %')
+    expect(result.stderr).toContain('CROFT_NOTIFY_FILES contains a newline')
   })
 })
 
 describe('install-cron.mjs — --only keeps other jobs (F3)', () => {
-  it('keeps reconcile and vitals when a later --only openclaw-sessions run installs just that job', async () => {
-    const { directory, crontabFile, environment } = await setUp()
+  it('keeps reconcile when a later --only agent-files run re-renders just that job', async () => {
+    const { crontabFile, environment } = await setUp()
 
-    const first = await run(['--install', '--only', 'agent-files,reconcile,vitals', '--cron'], environment)
+    const first = await run(['--install', '--only', 'agent-files,reconcile', '--cron'], environment)
     expect(first.code).toBe(0)
     const afterFirst = await readFile(crontabFile, 'utf8')
     expect(afterFirst).toContain('# reconcile:')
-    expect(afterFirst).toContain('# vitals:')
     expect(afterFirst).toContain('# agent-files:')
 
-    const sessions = join(directory, 'sessions')
-    await mkdir(sessions, { recursive: true })
-    const second = await run(
-      ['--install', '--only', 'openclaw-sessions', '--cron'],
-      { ...environment, CROFT_OPENCLAW_SESSIONS: sessions },
-    )
+    const second = await run(['--install', '--only', 'agent-files', '--cron'], environment)
     expect(second.code).toBe(0)
 
     const afterSecond = await readFile(crontabFile, 'utf8')
-    // The jobs this run never named are untouched, not dropped.
+    // The job this run never named is untouched, not dropped.
     expect(afterSecond).toContain('# reconcile:')
-    expect(afterSecond).toContain('# vitals:')
     expect(afterSecond).toContain('# agent-files:')
-    expect(afterSecond).toContain('# openclaw-sessions:')
-    expect(afterSecond).toContain(sessions)
     // Exactly one line per job: a merge, not an accidental duplicate.
     expect(afterSecond.match(/# reconcile:/g)).toHaveLength(1)
+    expect(afterSecond.match(/# agent-files:/g)).toHaveLength(1)
+  })
+
+  it('drops a retired memory job (vitals, openclaw-sessions) left in the block by an older install', async () => {
+    const { crontabFile, environment } = await setUp()
+    await writeFile(
+      crontabFile,
+      [
+        '17 3 * * * /usr/bin/someone-elses-backup',
+        '# >>> croft maintenance (managed by scripts/install-cron.mjs)',
+        '# vitals: Asks daily whether the memory is still being written.',
+        "0 8 * * * '/x/croft' 'vitals'",
+        '# <<< croft maintenance',
+        '',
+      ].join('\n'),
+    )
+    const result = await run(['--install', '--only', 'agent-files', '--cron'], environment)
+    expect(result.code).toBe(0)
+    const after = await readFile(crontabFile, 'utf8')
+    expect(after).not.toContain('vitals')
+    expect(after).toContain('# agent-files:')
+    expect(after).toContain('someone-elses-backup')
   })
 
   it('removes just the named job with --remove --only, keeping the others', async () => {
     const { crontabFile, environment } = await setUp()
-    await run(['--install', '--only', 'agent-files,reconcile,vitals', '--cron'], environment)
+    await run(['--install', '--only', 'agent-files,reconcile', '--cron'], environment)
 
     const removed = await run(['--remove', '--only', 'reconcile', '--cron'], environment)
     expect(removed.code).toBe(0)
 
     const after = await readFile(crontabFile, 'utf8')
     expect(after).not.toContain('# reconcile:')
-    expect(after).toContain('# vitals:')
     expect(after).toContain('# agent-files:')
   })
 
   it('still fully removes the managed block on a plain --remove with no --only', async () => {
     const { crontabFile, environment } = await setUp()
-    await run(['--install', '--only', 'agent-files,reconcile,vitals', '--cron'], environment)
+    await run(['--install', '--only', 'agent-files,reconcile', '--cron'], environment)
 
     const removed = await run(['--remove', '--cron'], environment)
     expect(removed.code).toBe(0)

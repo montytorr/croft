@@ -16,6 +16,8 @@ export const TASK_FIELDS =
   'checkpoint_summary, checkpoint_payload, checkpoint_at, checkpoint_version, blocked_reason, blocked_at, ' +
   'resolution, resolution_kind, resolved_at, resolved_by, duplicate_of, parent_id, ' +
   'memory_session_id, observation_ids, created_at, updated_at, ' +
+  // A todo's subject, and the Cairn task `croft push` handed it to.
+  'subject_id, cairn_ref, cairn_status, cairn_synced_at, ' +
   'project:projects!project_id!inner(id, key, title, status)'
 
 /** Terse columns for list/search output. See the CLI's output discipline. */
@@ -34,7 +36,7 @@ export const parseRef = (raw: string): TaskRef | null => {
   const value = decodeURIComponent(raw).trim()
   if (UUID.test(value)) return { id: value }
 
-  const match = /^([A-Za-z][A-Za-z0-9]{1,9})-(\d+)$/.exec(value)
+  const match = /^([A-Za-z][A-Za-z0-9]{0,9})-(\d+)$/.exec(value)
   if (!match?.[1] || !match[2]) return null
   return { key: match[1].toUpperCase(), number: Number(match[2]) }
 }

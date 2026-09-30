@@ -2,6 +2,7 @@
 
 import { createContext, useContext } from 'react'
 import { cn } from '@/lib/utils'
+import { MARK_TILE, RIG_PATHS } from '@/lib/brand-mark'
 
 /**
  * What this instance is called, from the root layout down to anything that
@@ -19,17 +20,26 @@ export const BrandProvider = ({ brand, children }: { brand: Brand; children: Rea
 export const useBrand = () => useContext(BrandContext)
 
 /**
- * The mark: three stones on the dark tile, exactly as the favicon draws them.
- * The stones take --brand-mark, which the instance's accent sets, so each
- * Croft's mark is the same croft in its own colour.
+ * The mark: three rig strips cut from the peat tile, exactly as the favicon
+ * draws them. The strips take --brand-mark, which the instance's accent sets,
+ * so each Croft's mark is the same field in its own colour. `colour` pins it
+ * instead — the branding preview draws a mark that is not saved yet.
  */
-export const BrandMark = ({ size = 20, className }: { size?: number; className?: string }) => (
+export const BrandMark = ({
+  size = 20,
+  className,
+  colour = 'var(--brand-mark)',
+}: {
+  size?: number
+  className?: string
+  colour?: string
+}) => (
   <svg viewBox="0 0 32 32" width={size} height={size} aria-hidden className={cn('shrink-0', className)}>
-    <rect width="32" height="32" rx="7" fill="#08090a" />
-    <g fill="var(--brand-mark)">
-      <rect x="10" y="5.75" width="12" height="5.5" rx="2.75" />
-      <rect x="6" y="13.25" width="20" height="5.5" rx="2.75" />
-      <rect x="9" y="20.75" width="14" height="5.5" rx="2.75" />
+    <rect width="32" height="32" rx="7" fill={MARK_TILE} />
+    <g fill={colour} stroke={colour} strokeWidth="0.8" strokeLinejoin="round">
+      {RIG_PATHS.map((d) => (
+        <path key={d} d={d} />
+      ))}
     </g>
   </svg>
 )

@@ -9,7 +9,6 @@ import {
 } from '@/lib/data'
 import { projectRedirectNotice, renameLine, renamesOf } from '@/lib/project-rename'
 import { RedirectNotice } from '@/components/redirect-notice'
-import { entitiesForProject } from '@/lib/api/knowledge'
 import { ProjectIcon } from '@/components/icons'
 import { ViewSwitch } from './view-switch'
 import { parseProjectView, viewCookieName } from '@/lib/project-view'
@@ -64,9 +63,8 @@ const ProjectPage = async ({
   }
 
   const includeClosed = closed === '1'
-  const [{ tasks, closedHidden, recentlyClosed }, entities, allProjects] = await Promise.all([
+  const [{ tasks, closedHidden, recentlyClosed }, allProjects] = await Promise.all([
     listTasks(project.id, { includeClosed }),
-    entitiesForProject(user.id, project.key),
     listProjects(user.id, { includeArchived: true }),
   ])
 
@@ -105,23 +103,7 @@ const ProjectPage = async ({
           </span>
         )}
         <ChevronRight size={13} className="text-fg-subtle hidden sm:block" aria-hidden />
-        <span className="text-fg hidden text-[0.8125rem] sm:block">Tasks</span>
-        {/* Which groupings this project belongs to, so "why am I seeing this
-            fact here" has an answer where the work happens rather than only in
-            settings. Hidden on a phone; the crumbs go first there too. */}
-        {entities.length > 0 && (
-          <span className="text-fg-subtle ml-1 hidden items-center gap-1 text-[0.6875rem] lg:flex">
-            {entities.map((key) => (
-              <Link
-                key={key}
-                href={`/knowledge?entity=${key}`}
-                className="border-border hover:text-fg rounded border px-1.5 py-px font-mono transition-colors"
-              >
-                {key}
-              </Link>
-            ))}
-          </span>
-        )}
+        <span className="text-fg hidden text-[0.8125rem] sm:block">Todos</span>
         {project.status === 'archived' && (
           <span className="border-border text-fg-subtle ml-1 rounded border px-1.5 py-px text-[0.625rem] uppercase tracking-wide">
             Archived

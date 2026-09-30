@@ -3,10 +3,10 @@ import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { failFromDb } from '@/lib/api/db-errors'
 import { admin } from '@/lib/db/client'
-import { findTask, TASK_LIST_FIELDS } from '@/lib/api/tasks'
+import { TASK_LIST_FIELDS } from '@/lib/api/tasks'
+import { createTaskInProject } from '@/lib/api/task-create'
 import { resolveProject } from '@/lib/api/project-keys'
 import { resolveAssignee, withAssignees } from '@/lib/api/people'
-import { refuseUnreadableBody } from '@/lib/api/task-body'
 import { createTaskSchema, TASK_STATUSES, TASK_TYPES } from '@/schemas/task'
 
 export const dynamic = 'force-dynamic'
@@ -128,70 +128,9 @@ export const POST = route<{ id: string }, z.infer<typeof createTaskSchema>>({
     if (!resolved) return fail('not_found', `No project ${params.id}.`)
     const { project, renamed } = resolved
 
-    // Same rule as writing to an existing task (F1): a project archived here
-    // is most likely the copy a move to another instance left behind, and a
-    // stale-cached CLI filing a new task into it would strand the task the
-    // same way a claim or a note would.
-    if (project.status === 'archived') {
-      return fail(
-        'conflict',
-        `${project.key} is archived — most likely because it moved to another Croft instance and ` +
-          `this is the copy left behind. If it moved, point the CLI at the other one with ` +
-          `--instance <the other instance>. To file work here instead, restore ${project.key} first: ` +
-          `\`croft project restore ${project.key}\`.`,
-        { project: project.key, projectStatus: 'archived' },
-      )
-    }
+    const created = await createTaskInProject(actor, project, body)
+    if (!created.ok) return created.response
 
-    const unreadable = refuseUnreadableBody(actor, body.description, `croft add "<title>" --project ${project.key} --body -`)
-    if (unreadable) return unreadable
-
-    // A new task has no id yet, so it cannot be its own ancestor — the cycle
-    // walk that re-parenting needs is unnecessary here.
-    let parentId: string | null = null
-    if (body.parentRef) {
-      const parent = await findTask(actor, body.parentRef, 'id')
-      if (!parent) return fail('not_found', `No task ${body.parentRef}.`)
-      parentId = parent.id
-    }
-
-    const owner = await resolveAssignee(body.assignee ?? 'me', actor.userId)
-    if (!owner.ok) return fail(owner.code, owner.error)
-
-    const { data, error } = await admin()
-      .from('tasks')
-      .insert({
-        project_id: project.id,
-        parent_id: parentId,
-        title: body.title,
-        description: body.description ?? null,
-        type: body.type,
-        status: body.status,
-        priority: body.priority,
-        labels: body.labels,
-        due_date: body.dueDate ?? null,
-        actor_type: actor.actorType,
-        actor_id: actor.actorId,
-        assignee_user_id: owner.person.id,
-      })
-      .select('id, number, title, type, status, priority, labels, assignee_user_id, created_at')
-      .single()
-
-    if (error) return failFromDb(error)
-
-    await admin().from('task_activity_events').insert({
-      owner_user_id: actor.userId,
-      project_id: project.id,
-      task_id: data.id,
-      actor_type: actor.actorType,
-      actor_id: actor.actorId,
-      event: 'created',
-      data: { type: body.type, status: body.status, assignee: owner.person.name, ...(actor.host ? { host: actor.host } : {}) },
-    })
-
-    return ok(
-      { ...data, assignee: owner.person, ref: `${project.key}-${data.number}`, ...(renamed ? { renamed_from: renamed } : {}) },
-      { status: 201 },
-    )
+    return ok({ ...created.task, ...(renamed ? { renamed_from: renamed } : {}) }, { status: 201 })
   },
 })

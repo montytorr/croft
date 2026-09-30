@@ -160,7 +160,7 @@ export const CreateTask = ({
       >
         <div className="border-border flex items-center gap-2 border-b px-4 py-2.5">
           <ProjectIcon size={12} projectKey={project || undefined} />
-          <span className="text-fg-subtle text-[0.6875rem]">New task in {project || '—'}</span>
+          <span className="text-fg-subtle text-[0.6875rem]">New todo in {project || '—'}</span>
         </div>
 
         <input

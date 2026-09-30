@@ -37,11 +37,13 @@ describe('refuseUnreadableBody (CROFT-312)', () => {
   })
 
   it.each([
-    ['create', 'src/app/api/v1/projects/[id]/tasks/route.ts'],
+    // Every creator — the project route and a subject's todo list — goes
+    // through createTaskInProject, so the rule is checked there.
+    ['create', 'src/lib/api/task-create.ts'],
     ['update', 'src/app/api/v1/tasks/[ref]/route.ts'],
   ])('is applied where a task body is written: %s', (_verb, file) => {
     const source = readFileSync(join(process.cwd(), file), 'utf8')
     expect(source).toMatch(/const unreadable = refuseUnreadableBody\(actor, body\.description,/)
-    expect(source).toContain('if (unreadable) return unreadable')
+    expect(source).toMatch(/if \(unreadable\) return/)
   })
 })

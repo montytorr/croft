@@ -161,10 +161,9 @@ describe('croft add, for a person', () => {
   })
 })
 
-const closeServer = (activity: unknown[], recalled: unknown[] = []): Reply => (req) => {
+const closeServer = (activity: unknown[]): Reply => (req) => {
   if (req.method === 'PATCH') return { id: 't', number: 7, status: 'done', resolution: 'x', resolution_kind: 'fixed' }
   if (req.path.includes('/activity')) return activity
-  if (req.path.includes('/recall')) return { decisions: [], knowledge: recalled }
   return {}
 }
 
@@ -212,23 +211,12 @@ describe('croft done', () => {
     }
   })
 
-  /** CROFT-323: the close is the last moment anyone asks what the work taught. */
-  it('asks an agent whether the task taught anything, with the command to record it', async () => {
-    const base = await serve(closeServer([{ event: 'claimed', data: {} }]), [])
-    const { stderr } = await run(['done', 'ACME-7', '--resolution', 'shipped', '--kind', 'fixed'], base, 'codex')
-    expect(stderr).toContain('Did ACME-7 establish anything the next agent should know')
-    expect(stderr).toContain('croft learn "<title>" --project ACME --task ACME-7 --body -')
-  })
-
-  it('does not ask when something was already learned on the task, or it was a duplicate', async () => {
-    const learned = [{ slug: 'x', why: ['learned on this task'] }]
-    const base = await serve(closeServer([{ event: 'claimed', data: {} }], learned), [])
-    const { stderr } = await run(['done', 'ACME-7', '--resolution', 'shipped', '--kind', 'fixed'], base, 'codex')
+  it('no longer asks what the task taught: Croft keeps no memory store', async () => {
+    const seen: Seen[] = []
+    const base = await serve(closeServer([{ event: 'claimed', data: {} }]), seen)
+    const { stderr } = await run(['done', 'T-7', '--resolution', 'shipped', '--kind', 'fixed'], base, 'codex')
     expect(stderr).not.toContain('establish anything')
-
-    const again = await serve(closeServer([{ event: 'claimed', data: {} }]), [])
-    const duplicate = await run(['done', 'ACME-7', '--resolution', 'same bug', '--duplicate-of', 'ACME-3'], again, 'codex')
-    expect(duplicate.stderr).not.toContain('establish anything')
+    expect(seen.some((s) => s.path.includes('/recall'))).toBe(false)
   })
 
   it('does not warn a person, who is documented as never claiming', async () => {
@@ -236,7 +224,6 @@ describe('croft done', () => {
     const base = await serve(closeServer(CLOSE_ONLY), seen)
     const { stderr } = await run(['done', 'ACME-7', '--resolution', 'shipped', '--kind', 'fixed'], base)
     expect(stderr).not.toContain('without ever being claimed')
-    expect(stderr).not.toContain('establish anything')
     expect(seen.some((s) => s.path.includes('/activity'))).toBe(false)
   })
 })
@@ -277,17 +264,17 @@ describe('the briefing', () => {
   const briefing = {
     project: 'ACME',
     held: [{ ref: 'ACME-7', title: 'Wire the relay', status: 'doing', quiet: false }],
-    inFlight: [], knowledge: [], staleClaims: [], lastSession: null,
+    inFlight: [], staleClaims: [],
   }
 
   it('carries the working rules in a few hundred bytes', async () => {
     const base = await serve(() => briefing, [])
     const { stdout } = await run(['context', '--project', 'ACME'], base)
-    const start = stdout.indexOf('Start with: croft check')
+    const start = stdout.indexOf('Exploring or proving an idea → croft check first')
     expect(start).toBeGreaterThan(-1)
     const rules = stdout.slice(start).trim()
-    expect(Buffer.byteLength(rules)).toBeLessThanOrEqual(300)
-    for (const rule of ['Claim what you work', 'one task per sweep', '--kind attempt', 'checkpoint', 'in-review', 'done --kind fixed|verified|answered']) {
+    expect(Buffer.byteLength(rules)).toBeLessThanOrEqual(360)
+    for (const rule of ['a Cairn task (croft push)', '--kind finding|attempt|decision', 'Claim the todo you work', '--conclusion -', 'done --resolution']) {
       expect(rules).toContain(rule)
     }
   })
@@ -299,11 +286,11 @@ describe('the briefing', () => {
   })
 
   it('keeps the rules out of a single-file answer', async () => {
-    const file = { path: 'src/a.ts', tasks: [{ ref: 'ACME-7', status: 'doing', title: 'x' }], knowledge: [], sessions: [] }
+    const file = { path: 'src/a.ts', tasks: [{ ref: 'ACME-7', status: 'doing', title: 'x' }] }
     const base = await serve(() => ({ ...briefing, file }), [])
     const { stdout } = await run(['context', '--file', 'src/a.ts'], base)
     expect(stdout).toContain('Croft knows about src/a.ts')
-    expect(stdout).not.toContain('Start with')
+    expect(stdout).not.toContain('Exploring or proving')
   })
 })
 

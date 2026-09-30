@@ -1,0 +1,290 @@
+import { randomUUID } from 'node:crypto'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+
+/**
+ * The lab, end to end through the real route handlers and a real database:
+ * file a subject, move it along the board, meet the conclusion rule, give it
+ * a todo that is a genuine task in project T, keep a log, find it in search,
+ * and hand the todo to Cairn and read the outcome back.
+ */
+
+const auth = vi.hoisted(() => ({ actor: null as null | Record<string, unknown> }))
+
+vi.mock('@/lib/api/auth', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api/auth')>()
+  return { ...actual, authenticate: async () => auth.actor }
+})
+
+import { pool } from '@/lib/db/client'
+import { GET as listSubjectsRoute, POST as createSubjectRoute } from '@/app/api/v1/subjects/route'
+import { GET as showSubjectRoute, PATCH as patchSubjectRoute } from '@/app/api/v1/subjects/[ref]/route'
+import { GET as listNotesRoute, POST as addNoteRoute } from '@/app/api/v1/subjects/[ref]/notes/route'
+import { GET as listTodosRoute, POST as addTodoRoute } from '@/app/api/v1/subjects/[ref]/todos/route'
+import { GET as briefRoute } from '@/app/api/v1/subjects/brief/route'
+import { POST as createStageRoute } from '@/app/api/v1/stages/route'
+import { DELETE as deleteStageRoute } from '@/app/api/v1/stages/[id]/route'
+import { POST as createTagRoute } from '@/app/api/v1/tags/route'
+import { GET as cairnGetRoute, PUT as cairnPutRoute } from '@/app/api/v1/integrations/cairn/route'
+import { POST as cairnSyncRoute } from '@/app/api/v1/integrations/cairn/sync/route'
+import { POST as cairnLinkRoute } from '@/app/api/v1/tasks/[ref]/cairn-link/route'
+import { GET as showTaskRoute } from '@/app/api/v1/tasks/[ref]/route'
+import { GET as searchRoute } from '@/app/api/v1/search/route'
+
+const databaseUrl = process.env.DATABASE_URL
+if (!databaseUrl) throw new Error('DATABASE_URL is required for integration tests')
+
+const ORIGIN = 'https://croft.example.test'
+const adminId = randomUUID()
+const memberId = randomUUID()
+const RUN = randomUUID().slice(0, 8)
+const WORD = `zebrafish${RUN.replace(/[^a-z]/g, '')}quokka`
+
+const actorFor = (userId: string, role: 'admin' | 'member', actorType: 'human' | 'agent' = 'human') => ({
+  userId,
+  actorType,
+  actorId: actorType === 'human' ? `lab-${role}@example.test` : `claude-code · lab-${role}@example.test`,
+  userDisplayName: `Lab ${role}`,
+  role,
+  rateKey: `lab-${randomUUID()}`,
+  sessionId: null,
+  agentName: actorType === 'agent' ? 'claude-code' : undefined,
+})
+
+const headers = { 'content-type': 'application/json', authorization: 'Bearer test' }
+const call = async <P extends Record<string, string>>(
+  handler: (req: Request, ctx: { params: Promise<P> }) => Promise<Response>,
+  method: string,
+  path: string,
+  params: P = {} as P,
+  body?: unknown,
+) => {
+  const response = await handler(
+    new Request(`${ORIGIN}/api/v1${path}`, {
+      method,
+      headers: method === 'GET' ? {} : headers,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }),
+    { params: Promise.resolve(params) },
+  )
+  return { status: response.status, json: (await response.json()) as Record<string, any> }
+}
+
+let todoProjectExisted = false
+let savedConnection: Record<string, unknown> | null = null
+const subjectIds: string[] = []
+const tagIds: string[] = []
+const stageIds: string[] = []
+
+beforeAll(async () => {
+  for (const [id, role] of [[adminId, 'admin'], [memberId, 'member']] as const) {
+    await pool().query('insert into app_users (id, email, encrypted_password, role) values ($1,$2,$3,$4)', [
+      id,
+      `lab-${role}-${id}@example.test`,
+      'not-used',
+      role,
+    ])
+  }
+  todoProjectExisted = (await pool().query(`select 1 from projects where key = 'T'`)).rowCount === 1
+  savedConnection = (await pool().query('select * from cairn_connection where id')).rows[0] ?? null
+})
+
+afterAll(async () => {
+  vi.unstubAllGlobals()
+  if (subjectIds.length) {
+    await pool().query('delete from tasks where subject_id = any($1::uuid[])', [subjectIds])
+    await pool().query('delete from subjects where id = any($1::uuid[])', [subjectIds])
+  }
+  if (tagIds.length) await pool().query('delete from tags where id = any($1::uuid[])', [tagIds])
+  if (stageIds.length) await pool().query('delete from subject_stages where id = any($1::uuid[])', [stageIds])
+  if (!todoProjectExisted) {
+    await pool().query(`delete from projects where key = 'T' and owner_user_id = any($1::uuid[])`, [[adminId, memberId]])
+  }
+  await pool().query('delete from cairn_connection where id')
+  if (savedConnection) {
+    const c = savedConnection
+    await pool().query(
+      'insert into cairn_connection (id, url, api_key, last_synced_at, updated_at, updated_by) values (true,$1,$2,$3,$4,$5)',
+      [c.url, c.api_key, c.last_synced_at, c.updated_at, c.updated_by],
+    )
+  }
+  await pool().query('delete from app_users where id = any($1::uuid[])', [[adminId, memberId]])
+  await pool().end()
+})
+
+beforeEach(() => {
+  auth.actor = actorFor(adminId, 'admin')
+})
+
+describe('the lab board', () => {
+  let ref = ''
+  let todoRef = ''
+
+  it('files a subject into the first planned stage, with curated tags', async () => {
+    const tag = await call(createTagRoute, 'POST', '/tags', {}, { name: `Lab-${RUN}` })
+    expect(tag.status).toBe(201)
+    expect(tag.json.data.name).toBe(`lab-${RUN}`)
+    tagIds.push(tag.json.data.id)
+
+    const unknownTag = await call(createSubjectRoute, 'POST', '/subjects', {}, { title: 'x', tags: ['no-such-tag-anywhere'] })
+    expect(unknownTag.status).toBe(400)
+
+    const created = await call(createSubjectRoute, 'POST', '/subjects', {}, {
+      title: `Evaluate ${WORD} for semantic recall`,
+      body: 'A write-up.',
+      tags: [`LAB-${RUN}`],
+    })
+    expect(created.status).toBe(201)
+    const subject = created.json.data
+    subjectIds.push(subject.id)
+    ref = subject.ref
+    expect(ref).toMatch(/^S-\d+$/)
+    expect(subject.stage.category).toBe('planned')
+    expect(subject.tags.map((t: { name: string }) => t.name)).toEqual([`lab-${RUN}`])
+    expect(subject.owner).toEqual({ id: adminId, name: expect.any(String) })
+    expect(subject.todos).toEqual({ open: 0, done: 0 })
+  })
+
+  it('writes a stage note on every move', async () => {
+    const moved = await call(patchSubjectRoute, 'PATCH', `/subjects/${ref}`, { ref }, { stage: 'Exploring' })
+    expect(moved.status).toBe(200)
+    expect(moved.json.data.stage.name).toBe('exploring')
+
+    const notes = await call(listNotesRoute, 'GET', `/subjects/${ref}/notes`, { ref })
+    expect(notes.json.data[0]).toMatchObject({ kind: 'stage', note: 'to explore → exploring' })
+  })
+
+  it('refuses a completed stage without a conclusion, and accepts one with it', async () => {
+    const refused = await call(patchSubjectRoute, 'PATCH', `/subjects/${ref}`, { ref }, { stage: 'done' })
+    expect(refused.status).toBe(400)
+    expect(refused.json.code).toBe('conclusion_required')
+
+    const done = await call(patchSubjectRoute, 'PATCH', `/subjects/${ref}`, { ref }, {
+      stage: 'done',
+      conclusion: 'Recall improved on the eval set.',
+    })
+    expect(done.status).toBe(200)
+    expect(done.json.data.conclusion).toBe('Recall improved on the eval set.')
+    expect(done.json.data.concluded_at).toEqual(expect.any(String))
+
+    const reopened = await call(patchSubjectRoute, 'PATCH', `/subjects/${ref}`, { ref }, { stage: 'exploring' })
+    expect(reopened.json.data.concluded_at).toBeNull()
+  })
+
+  it('adds a todo that is a real task in project T, linked to the subject', async () => {
+    auth.actor = actorFor(adminId, 'admin', 'agent')
+    const todo = await call(addTodoRoute, 'POST', `/subjects/${ref}/todos`, { ref }, { title: 'Benchmark the index' })
+    expect(todo.status).toBe(201)
+    todoRef = todo.json.data.ref
+    expect(todoRef).toMatch(/^T-\d+$/)
+    expect(todo.json.data.status).toBe('todo')
+
+    const task = await call(showTaskRoute, 'GET', `/tasks/${todoRef}`, { ref: todoRef })
+    expect(task.status).toBe(200)
+    expect(task.json.data.subject_id).toBe(subjectIds[0])
+
+    const event = await pool().query(
+      `select 1 from task_activity_events where task_id = $1 and event = 'created'`,
+      [todo.json.data.id],
+    )
+    expect(event.rowCount).toBe(1)
+
+    const todos = await call(listTodosRoute, 'GET', `/subjects/${ref}/todos`, { ref })
+    expect(todos.json.data.map((t: { ref: string }) => t.ref)).toEqual([todoRef])
+
+    const shown = await call(showSubjectRoute, 'GET', `/subjects/${ref}`, { ref })
+    expect(shown.json.data.todos).toEqual({ open: 1, done: 0 })
+  })
+
+  it('keeps notes idempotent and refuses hand-written stage notes', async () => {
+    const first = await call(addNoteRoute, 'POST', `/subjects/${ref}/notes`, { ref }, { note: 'HNSW beats IVF here.', kind: 'finding' })
+    expect(first.status).toBe(201)
+    const again = await call(addNoteRoute, 'POST', `/subjects/${ref}/notes`, { ref }, { note: 'HNSW beats IVF here.', kind: 'finding' })
+    expect(again.status).toBe(200)
+    expect(again.json.data).toEqual({ duplicate: true })
+
+    const stage = await call(addNoteRoute, 'POST', `/subjects/${ref}/notes`, { ref }, { note: 'x', kind: 'stage' })
+    expect(stage.status).toBe(400)
+  })
+
+  it('is found by search, and by its ref', async () => {
+    const byWord = await call(searchRoute, 'GET', `/search?q=${WORD}`)
+    expect(byWord.status).toBe(200)
+    expect(byWord.json.data.results[0]).toMatchObject({ kind: 'subject', ref, status: 'exploring' })
+
+    const byRef = await call(searchRoute, 'GET', `/search?q=${ref}`)
+    expect(byRef.json.data.results[0]).toMatchObject({ kind: 'subject', ref })
+  })
+
+  it('lists and briefs by owner', async () => {
+    const mine = await call(listSubjectsRoute, 'GET', '/subjects?owner=me')
+    expect(mine.json.data.map((s: { ref: string }) => s.ref)).toContain(ref)
+
+    const byTag = await call(listSubjectsRoute, 'GET', `/subjects?tag=lab-${RUN}`)
+    expect(byTag.json.data.map((s: { ref: string }) => s.ref)).toEqual([ref])
+
+    const brief = await call(briefRoute, 'GET', '/subjects/brief')
+    expect(brief.json.data.counts.exploring).toBeGreaterThanOrEqual(1)
+    expect(brief.json.data.mine.map((s: { ref: string }) => s.ref)).toContain(ref)
+  })
+
+  it('refuses to delete a stage while a subject is in it; admins only', async () => {
+    auth.actor = actorFor(memberId, 'member')
+    const forbidden = await call(createStageRoute, 'POST', '/stages', {}, { name: `nope-${RUN}`, category: 'active' })
+    expect(forbidden.status).toBe(403)
+
+    auth.actor = actorFor(adminId, 'admin')
+    const stage = await call(createStageRoute, 'POST', '/stages', {}, { name: `parked-${RUN}`, category: 'active' })
+    expect(stage.status).toBe(201)
+    stageIds.push(stage.json.data.id)
+
+    await call(patchSubjectRoute, 'PATCH', `/subjects/${ref}`, { ref }, { stage: stage.json.data.id })
+    const inUse = await call(deleteStageRoute, 'DELETE', `/stages/${stage.json.data.id}`, { id: stage.json.data.id })
+    expect(inUse.status).toBe(409)
+    expect(inUse.json.code).toBe('stage_in_use')
+
+    await call(patchSubjectRoute, 'PATCH', `/subjects/${ref}`, { ref }, { stage: 'exploring' })
+    const deleted = await call(deleteStageRoute, 'DELETE', `/stages/${stage.json.data.id}`, { id: stage.json.data.id })
+    expect(deleted.status).toBe(200)
+    stageIds.pop()
+  })
+
+  it('links a todo to Cairn and writes the outcome to the log exactly once', async () => {
+    auth.actor = actorFor(adminId, 'admin', 'agent')
+    const agentPut = await call(cairnPutRoute, 'PUT', '/integrations/cairn', {}, { url: 'https://cairn.example', apiKey: 'sk_test_12345678' })
+    expect(agentPut.status).toBe(403)
+
+    auth.actor = actorFor(adminId, 'admin')
+    const put = await call(cairnPutRoute, 'PUT', '/integrations/cairn', {}, { url: 'https://cairn.example/', apiKey: 'sk_test_12345678' })
+    expect(put.json.data).toEqual({ url: 'https://cairn.example', key_set: true, last_synced_at: null })
+    expect(JSON.stringify((await call(cairnGetRoute, 'GET', '/integrations/cairn')).json)).not.toContain('sk_test')
+
+    const cairnRef = `CAIRN-${100_000 + Math.floor(Math.random() * 900_000)}`
+    const linked = await call(cairnLinkRoute, 'POST', `/tasks/${todoRef}/cairn-link`, { ref: todoRef }, { cairnRef, cairnStatus: 'todo' })
+    expect(linked.status).toBe(200)
+    expect(linked.json.data).toMatchObject({ ref: todoRef, cairn_ref: cairnRef, cairn_status: 'todo' })
+
+    const requests: { url: string; auth: string | null }[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      requests.push({ url, auth: new Headers(init.headers).get('authorization') })
+      if (!url.endsWith(`/api/v1/tasks/${cairnRef}`)) {
+        return new Response(JSON.stringify({ success: false, error: 'No task.' }), { status: 404 })
+      }
+      return new Response(JSON.stringify({ success: true, data: { status: 'done', resolution: 'Shipped the index.' } }))
+    })
+
+    const first = await call(cairnSyncRoute, 'POST', '/integrations/cairn/sync')
+    expect(first.status).toBe(200)
+    expect(requests.find((r) => r.url === `https://cairn.example/api/v1/tasks/${cairnRef}`)?.auth).toBe('Bearer sk_test_12345678')
+    const second = await call(cairnSyncRoute, 'POST', '/integrations/cairn/sync')
+    expect(second.status).toBe(200)
+
+    const notes = await call(listNotesRoute, 'GET', `/subjects/${ref}/notes`, { ref })
+    const outcome = notes.json.data.filter((n: { note: string }) => n.note.startsWith(`${cairnRef} done`))
+    expect(outcome).toHaveLength(1)
+    expect(outcome[0]).toMatchObject({ kind: 'finding', note: `${cairnRef} done: Shipped the index.` })
+    expect(notes.json.data.some((n: { kind: string; note: string }) => n.kind === 'handoff' && n.note.includes(cairnRef))).toBe(true)
+
+    const task = await call(showTaskRoute, 'GET', `/tasks/${todoRef}`, { ref: todoRef })
+    expect(task.json.data.cairn_status).toBe('done')
+  })
+})

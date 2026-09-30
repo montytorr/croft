@@ -30,7 +30,7 @@ const resolve = (idOrKey: string) =>
 const updateProject = z.object({
   title: z.string().min(1).max(200).optional(),
   description: z.string().max(100_000).nullable().optional(),
-  key: z.string().regex(/^[A-Z][A-Z0-9]{1,9}$/).optional(),
+  key: z.string().regex(/^[A-Z][A-Z0-9]{0,9}$/).optional(),
   status: z.enum(['planning', 'active', 'paused', 'completed', 'archived']).optional(),
 })
 

@@ -10,9 +10,8 @@ import type { PluggableList } from 'unified'
 import { cn } from '@/lib/utils'
 import { CodeBlock } from '@/components/code-block'
 import { useProjectKeys } from '@/components/project-keys'
-import { useKnowledgeSlugs } from '@/components/knowledge-slugs'
 import { remarkTaskRefs } from '@/lib/markdown/task-refs'
-import { remarkKnowledgeRefs } from '@/lib/markdown/knowledge-refs'
+import { remarkSubjectRefs } from '@/lib/lab/ui-subject-refs'
 
 /**
  * react-markdown hands every component the hast node it came from. Spread onto
@@ -85,36 +84,9 @@ const components: Components = {
   ),
   li: ({ className, ...p }) => <li className={cn('pl-0.5 leading-relaxed', className)} {...dom(p)} />,
   a: ({ href, children, ...rest }) => {
-    // A linkified task ref is in-app navigation, not an outbound link: opening
-    // it in a new tab would make following a chain of references unbearable.
-    const knowledgeRef = (rest as Record<string, unknown>)['data-knowledge-ref']
-    if (typeof knowledgeRef === 'string' && href) {
-      // Marked when the target does not exist, so a reference to something
-      // nobody wrote reads as a loose end rather than as a working link.
-      const missing = (rest as Record<string, unknown>)['data-knowledge-missing'] === 'true'
-      // And not a link at all. It used to be one, and following it landed on
-      // the generic empty state — "That task or project does not exist, or it
-      // was deleted" — which is the wrong noun for a knowledge slug and tells
-      // the reader the entry was lost rather than never written. The tooltip
-      // already says "— yet"; the mark should not then invite a click that
-      // contradicts it.
-      if (missing) {
-        return (
-          <span
-            title={`No knowledge "${knowledgeRef}" — yet`}
-            className="text-fg-subtle decoration-fg-subtle/60 decoration-dotted cursor-help underline underline-offset-[3px]"
-          >
-            {children}
-          </span>
-        )
-      }
-      return (
-        <Link href={href} prefetch className={cn(LINK, 'hover:underline')}>
-          {children}
-        </Link>
-      )
-    }
-
+    // A linkified ref (a todo's or a subject's) is in-app navigation, not an
+    // outbound link: opening it in a new tab would make following a chain of
+    // references unbearable.
     const taskRef = (rest as Record<string, unknown>)['data-task-ref']
     if (typeof taskRef === 'string' && href) {
       return (
@@ -220,25 +192,30 @@ const components: Components = {
   ),
 }
 
-export const MarkdownView = ({ children }: { children: string }) => {
+/**
+ * Rendered markdown. `prose` sets it as a write-up — the Newsreader serif at a
+ * reading size (`.writeup` in globals.css) — for the text people read at
+ * length; the default stays at the interface's size for notes and comments.
+ */
+export const MarkdownView = ({
+  children,
+  prose,
+  className,
+}: {
+  children: string
+  prose?: 'writeup' | 'writeup-sm'
+  className?: string
+}) => {
   const keys = useProjectKeys()
-  // Only where the COMPLETE set of slugs is in hand. Given a partial list the
-  // plugin would mark every entry missing from it as never written, so the
-  // provider's default is null and this stays off rather than lying.
-  const slugs = useKnowledgeSlugs()
   // react-markdown re-parses whenever the plugin array changes identity, so
   // this must not be rebuilt on every render.
   const remarkPlugins = useMemo<PluggableList>(
-    () => [
-      remarkGfm,
-      [remarkTaskRefs, { keys }],
-      [remarkKnowledgeRefs, slugs ? { known: slugs } : {}],
-    ],
-    [keys, slugs],
+    () => [remarkGfm, remarkSubjectRefs, [remarkTaskRefs, { keys }]],
+    [keys],
   )
 
   return (
-    <div className="text-fg">
+    <div className={cn('text-fg', prose, className)}>
       <Markdown
         remarkPlugins={remarkPlugins}
         // detect: false — only highlight blocks that declare a language.

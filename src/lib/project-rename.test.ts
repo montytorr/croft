@@ -107,8 +107,8 @@ describe('keyChangeProblem', () => {
   })
 
   it('applies the same rule as the API', () => {
-    for (const bad of ['H', '1AB', 'HO-L', 'ABCDEFGHIJK', 'HÖL']) {
-      expect(keyChangeProblem(bad, context)).toBe('Two to ten letters or digits, starting with a letter.')
+    for (const bad of ['1AB', 'HO-L', 'ABCDEFGHIJK', 'HÖL']) {
+      expect(keyChangeProblem(bad, context)).toBe('One to ten letters or digits, starting with a letter.')
     }
     expect(keyChangeProblem('  ', context)).toBe('Type the new key.')
   })

@@ -109,11 +109,40 @@ process.exit(64)
     expect(JSON.parse(await readFile(hooks, 'utf8')).pre_llm_call).toBeUndefined()
   })
 
+  it('yields to Cairn: takes its own entry out where Cairn briefs Hermes', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'croft-hermes-cairn-test-'))
+    temporaryDirectories.push(directory)
+    const bin = join(directory, 'bin')
+    const hooks = join(directory, 'hooks.json')
+    await mkdir(bin)
+    const cairn = { command: 'env CAIRN_AGENT=hermes node /h/.cairn/hooks/cairn-context.mjs', timeout: 10 }
+    const croft = { command: 'env CROFT_AGENT=hermes node /h/.croft/hooks/croft-context.mjs', timeout: 10 }
+    await writeFile(hooks, JSON.stringify({ pre_llm_call: [cairn, croft] }))
+    await writeFile(join(bin, 'hermes'), `#!/usr/bin/env node
+const fs = require('node:fs')
+const args = process.argv.slice(2)
+if (args[1] === 'get') { process.stdout.write(fs.readFileSync(process.env.FAKE_HOOKS, 'utf8')); process.exit(0) }
+if (args[1] === 'set') { fs.writeFileSync(process.env.FAKE_HOOKS, args[4]); process.exit(0) }
+process.exit(64)
+`)
+    await chmod(join(bin, 'hermes'), 0o755)
+    const out = await run('node', ['scripts/install-hooks.mjs'], {
+      ...process.env,
+      HOME: directory,
+      PATH: `${bin}:${process.env.PATH}`,
+      FAKE_HOOKS: hooks,
+      CROFT_OPENCLAW_BIN: 'openclaw-not-installed',
+    })
+    expect(out.code, out.stderr).toBe(0)
+    expect(out.stdout).toContain('Hermes Agent by Nous Research: briefing: carried by Cairn')
+    expect(JSON.parse(await readFile(hooks, 'utf8')).pre_llm_call).toEqual([cairn])
+  })
+
   it('injects the Croft briefing only for Hermes first turns', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'croft-hermes-context-test-'))
     temporaryDirectories.push(directory)
     const fakeCroft = join(directory, 'croft')
-    await writeFile(fakeCroft, '#!/bin/sh\nprintf "## Croft [MES]\\nKnown here: affiliate governance\\n"\n')
+    await writeFile(fakeCroft, '#!/bin/sh\nprintf "Croft — lab: 2 exploring\\n  S-12 exploring  pgvector for recall\\n"\n')
     await chmod(fakeCroft, 0o755)
     const environment = { ...process.env, CROFT_CLI: fakeCroft }
 
@@ -123,7 +152,7 @@ process.exit(64)
       extra: { is_first_turn: true },
     }))
     expect(first.code).toBe(0)
-    expect(JSON.parse(first.stdout)).toEqual({ context: '## Croft [MES]\nKnown here: affiliate governance' })
+    expect(JSON.parse(first.stdout)).toEqual({ context: 'Croft — lab: 2 exploring\n  S-12 exploring  pgvector for recall' })
 
     const later = await run('node', ['hooks/croft-context.mjs'], environment, JSON.stringify({
       hook_event_name: 'pre_llm_call',
@@ -139,7 +168,7 @@ process.exit(64)
       is_first_turn: true,
     }))
     expect(compatibilityFirstTurn.code).toBe(0)
-    expect(JSON.parse(compatibilityFirstTurn.stdout)).toEqual({ context: '## Croft [MES]\nKnown here: affiliate governance' })
+    expect(JSON.parse(compatibilityFirstTurn.stdout)).toEqual({ context: 'Croft — lab: 2 exploring\n  S-12 exploring  pgvector for recall' })
 
     // Neither location carries the key: no briefing is possible, so say so
     // rather than look like an ordinary later turn.

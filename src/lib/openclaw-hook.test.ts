@@ -238,6 +238,24 @@ describe('the installer links the OpenClaw briefing hook', () => {
   })
 })
 
+describe('the installer yields the OpenClaw briefing to Cairn', () => {
+  it('links nothing where cairn-briefing is enabled, and says Cairn carries it', async () => {
+    const { home, env, calls, hookDir } = await setup()
+    await writeFile(
+      join(home, '.openclaw', 'openclaw.json'),
+      JSON.stringify({
+        gateway: { mode: 'local', port: 18789 },
+        hooks: { internal: { enabled: true, entries: { 'cairn-briefing': { enabled: true } } } },
+      }),
+    )
+    const out = await run([], env)
+    expect(out.code, out.stderr).toBe(0)
+    expect(out.stdout).toContain('openclaw: briefing: carried by Cairn')
+    expect(await calls()).toEqual([])
+    expect(existsSync(hookDir)).toBe(false)
+  })
+})
+
 describe('the OpenClaw briefing hook', () => {
   const fakeCroft = async (script: string) => {
     const bin = await temp('croft-openclaw-cli-')
@@ -270,7 +288,7 @@ describe('the OpenClaw briefing hook', () => {
     expect(croft?.missing).toBe(false)
     expect(croft?.path).toBe(join(workspace, FILE_NAME))
     expect(croft?.content.startsWith(RULE)).toBe(true)
-    expect(croft?.content).toContain(`args=context --cwd ${workspace}`)
+    expect(croft?.content).toContain(`args=context --brief --cwd ${workspace}`)
     expect(croft?.content).toContain('agent=openclaw')
     expect(croft?.content).toContain('## Croft [ACME]')
   })
@@ -318,11 +336,11 @@ describe('the OpenClaw briefing hook', () => {
     expect(existsSync(marker)).toBe(false)
   })
 
-  it('keeps the rule short, and in step with the lifecycle the skill teaches', async () => {
-    expect(Buffer.byteLength(RULE)).toBeLessThan(1200)
-    for (const needle of ['croft check', 'claim', '--kind attempt', 'checkpoint', 'in-review', 'verified', '--global']) {
-      expect(RULE).toContain(needle)
-    }
+  it('keeps the rule to the one line that decides lab work from repo work', async () => {
+    expect(Buffer.byteLength(RULE)).toBeLessThan(400)
+    expect(RULE).toContain(
+      'Exploring or proving an idea → croft check first; changing a repo for real → a Cairn task (croft push).',
+    )
     const hookMd = await readFile(join(REPO, 'hooks/openclaw/croft-briefing/HOOK.md'), 'utf8')
     expect(hookMd).toMatch(/^---\nname: croft-briefing\n/)
     expect(hookMd).toContain('"events": ["agent:bootstrap"]')

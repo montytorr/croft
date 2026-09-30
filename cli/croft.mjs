@@ -179,9 +179,11 @@ const requestedInstance = () => {
 // ---------------------------------------------------------------------------
 const HOME = homedir()
 const SESSION_ROUTES_DIR = join(CROFT_DIR, 'session-routes')
-const UNROUTED_DIR = join(CROFT_DIR, 'unrouted')
 const SESSION_ID = /^[A-Za-z0-9._:-]{1,100}$/
-const REF_ARG = /^([A-Z][A-Z0-9]{1,9})-\d+$/
+// One letter is a key too: todos live in project T (T-41). S-n is a subject,
+// which belongs to no project and never routes by key.
+const REF_ARG = /^([A-Z][A-Z0-9]{0,9})-\d+$/
+const TODO_KEY = 'T'
 
 /** For messages: a path under the home directory, without the username in it. */
 const tilde = (path) => (path === HOME ? '~' : path.startsWith(`${HOME}/`) ? `~${path.slice(HOME.length)}` : path)
@@ -366,11 +368,8 @@ const refreshInstanceKeysFor = async (name, instances) => {
   }
 }
 
-/** `session end --id` speaks for a session the hook is not running inside. */
 const routeSession = () => {
-  const argv = process.argv.slice(2)
-  const raw = argv[0] === 'session' ? earlyFlag('id') : undefined
-  const id = (raw || process.env.CROFT_SESSION_ID || process.env.CLAUDE_CODE_SESSION_ID || process.env.CODEX_THREAD_ID || '').trim()
+  const id = (process.env.CROFT_SESSION_ID || process.env.CLAUDE_CODE_SESSION_ID || process.env.CODEX_THREAD_ID || '').trim()
   return SESSION_ID.test(id) ? id : null
 }
 
@@ -381,19 +380,6 @@ const sessionRoute = (session, instances) => {
     return instances[instance] ? instance : null
   } catch {
     return null
-  }
-}
-
-/** Sessions parked by the session-end hook because nobody had said where they go. */
-const parkedSessions = () => {
-  try {
-    return readdirSync(UNROUTED_DIR)
-      .filter((f) => f.endsWith('.json'))
-      .flatMap((f) => {
-        try { return [{ file: join(UNROUTED_DIR, f), ...JSON.parse(readFileSync(join(UNROUTED_DIR, f), 'utf8')) }] } catch { return [] }
-      })
-  } catch {
-    return []
   }
 }
 
@@ -523,7 +509,6 @@ const resolveRoute = async ({ config, dir, session, ref }) => {
 
 const undecidedMessage = ({ key, repo }, instances, session) => {
   const here = repo ? 'this repository' : 'this directory'
-  const waiting = parkedSessions().filter((p) => p.cwd && routeKey(p.cwd).key === key).length
   return [
     `croft: this machine uses several Croft instances (${Object.keys(instances).join(', ')}) and nothing says ` +
       `which one ${tilde(key)} is for. Ask the user which one, save the answer, then re-run the command:`,
@@ -531,7 +516,6 @@ const undecidedMessage = ({ key, repo }, instances, session) => {
     ...(key !== HOME && key !== '/' ? [`  croft route add <instance> --folder    ${tilde(key)} and everything under it`] : []),
     ...(session ? ['  croft route add <instance> --session   this session only'] : []),
     '  (--instance <name> on a command uses that instance for it alone)',
-    ...(waiting ? [`${waiting} earlier session(s) here are waiting for the answer and are sent when it is saved.`] : []),
   ].join('\n')
 }
 
@@ -659,7 +643,8 @@ const EARLY_COMMAND = earlyPositional[0]
 const JUST_HELP = (!EARLY_COMMAND && !process.argv.includes('--version')) || EARLY_COMMAND === 'help' || process.argv.includes('--help')
 const INTERACTIVE = Boolean(process.stdin.isTTY && process.stderr.isTTY) && !LOCAL_ONLY.has(EARLY_COMMAND) &&
   !process.argv.includes('--all-instances') &&
-  !JUST_HELP && !process.argv.includes('--version') && EARLY_COMMAND !== 'version'
+  !JUST_HELP && !process.argv.includes('--version') && EARLY_COMMAND !== 'version' &&
+  !process.argv.includes('--brief')
 
 const selectInstance = async () => {
   const { name: requested, error } = requestedInstance()
@@ -682,7 +667,10 @@ const selectInstance = async () => {
   const refWord = EARLY_COMMAND === 'task' && earlyPositional[1] === 'delete'
     ? earlyPositional[2]
     : earlyPositional[1]
-  const ref = REF_ARG.exec(refWord ?? '')?.[1]
+  // Every Croft instance has a T project, so T-41 says nothing about which
+  // instance it is on; the directory decides, as for a command with no ref.
+  const refKey = EARLY_COMMAND === 'subject' ? undefined : REF_ARG.exec(refWord ?? '')?.[1]
+  const ref = refKey === TODO_KEY || refKey === 'S' ? undefined : refKey
   const route = await resolveRoute({ config: INSTANCES, dir: ROUTE_DIR, session: ROUTE_SESSION, ref })
   if (route.hint) process.stderr.write(`${route.hint}\n`)
   if (route.error) return { undecided: route.error }
@@ -723,19 +711,6 @@ const SESSION = (() => {
 })()
 
 /**
- * A read that is part of a sweep, not a recall (CROFT-289).
- *
- * 1,169 of 1,243 knowledge reads were audit loops fetching 10-141 slugs a
- * minute, and every one marked its entry as recalled — so `know --unused`
- * could not find the facts nobody uses. The server also tags bursts by rate;
- * this is the explicit form, for a script that knows it is sweeping:
- * `CROFT_SWEEP=1 croft know <slug>` or `--sweep`.
- */
-// Read through `flags` when a request is made, so the flag counts as used by
-// whichever verb it was passed to rather than being reported as ignored.
-const sweeping = () => process.env.CROFT_SWEEP === '1' || Boolean(flags.sweep)
-
-/**
  * Which machine is speaking.
  *
  * A key names a runtime and a human, and the same key names go onto every
@@ -759,7 +734,6 @@ const HOST = (() => {
 const authHeaders = (extra = {}) => ({
   Authorization: `Bearer ${KEY}`,
   ...(SESSION ? { 'X-Croft-Session': SESSION } : {}),
-  ...(sweeping() ? { 'X-Croft-Read': 'sweep' } : {}),
   ...(HOST ? { 'X-Croft-Host': HOST } : {}),
   ...extra,
 })
@@ -912,23 +886,6 @@ const detectAgent = () => {
 const AGENT = detectAgent()
 
 /**
- * The session platform for `session end|checkpoint` without `--platform`.
- * A session is one row per (platform, id), so an agent that follows the skill's
- * manual handoff from Codex or OpenClaw and is filed as `claude` writes a
- * second row beside its hook's (CROFT-321). The hook always says; this only
- * decides for a caller that did not.
- */
-const SESSION_PLATFORMS = { 'claude-code': 'claude', codex: 'codex', openclaw: 'openclaw' }
-const PLATFORM_SOURCES = new Set(['claude', 'codex', 'openclaw', 'other'])
-const defaultPlatform = () => {
-  // Hermes's hooks set CROFT_PLATFORM=hermes: a value the server's enum would
-  // refuse, and before this default existed the CLI never read it here.
-  const named = process.env.CROFT_PLATFORM?.trim()
-  if (named) return PLATFORM_SOURCES.has(named) ? named : 'other'
-  return AGENT ? (SESSION_PLATFORMS[AGENT] ?? 'other') : 'claude'
-}
-
-/**
  * An explicit CROFT_API_KEY in the environment always wins -- it is how a
  * one-off command borrows another identity. Otherwise the runtime's own key is
  * preferred, and the plain one is the fallback, so a machine that has not been
@@ -1079,25 +1036,23 @@ const flags = new Proxy(typedFlags, {
  * the help text is in this set. Add to both, or the test says so.
  */
 const KNOWN_FLAGS = new Set([
-  'adopt', 'agent', 'all', 'all-instances', 'allow-dangling', 'also-project', 'archived', 'assignee', 'body',
-  'branch', 'completed',
-  'confirm', 'cwd', 'dangling', 'default', 'days', 'description', 'dir', 'dry-run',
-  'duplicate-of', 'duration-ms', 'entity', 'exit-code', 'file', 'files', 'folder',
-  'force', 'force-empty', 'full', 'gaps', 'global', 'help', 'history', 'hours', 'id', 'instance',
-  'json', 'key', 'kind', 'kinds', 'label', 'learned', 'limit', 'maintenance', 'max-parents',
-  'message', 'mine', 'name', 'next', 'no-checkpoint', 'no-hooks', 'no-jobs', 'no-parent',
-  'no-skill', 'no-start', 'notify', 'older',
-  'orphans', 'output', 'parent', 'platform', 'pretty', 'priority', 'project',
-  'reason', 'remote', 'repo', 'request', 'resolution', 'runtimes', 'scheduled', 'scope',
-  'session', 'show-toplevel', 'slug', 'start', 'started', 'status', 'summary',
-  'superseded', 'superseded-by', 'sweep', 'task', 'tasks', 'title', 'tool-calls',
-  'type', 'unused', 'url', 'verified', 'version',
+  'adopt', 'all', 'all-instances', 'also-project', 'archived', 'assignee', 'body', 'branch', 'brief',
+  'conclusion', 'confirm', 'cwd', 'default', 'dir', 'dry-run', 'duplicate-of', 'duration-ms', 'exit-code',
+  'file', 'folder', 'force', 'force-empty', 'full', 'help', 'instance', 'json', 'key', 'kind', 'kinds',
+  'label', 'limit', 'link', 'maintenance', 'message', 'mine', 'name', 'no-hooks', 'no-jobs', 'no-parent',
+  'no-skill', 'no-start', 'older', 'output', 'owner', 'parent', 'pretty', 'priority', 'project', 'reason',
+  'remote', 'repo', 'resolution', 'runtimes', 'scope', 'session', 'stage', 'start', 'status', 'summary', 'tag',
+  'tasks', 'title', 'to', 'type', 'url', 'version',
 ])
+
+const REPEATABLE = new Set(['tag', 'label'])
 
 for (let i = 0; i < argv.length; i += 1) {
   const arg = argv[i]
   if (arg.startsWith('--')) {
-    const [name, inline] = arg.slice(2).split('=')
+    const eq = arg.indexOf('=')
+    const name = eq === -1 ? arg.slice(2) : arg.slice(2, eq)
+    const inline = eq === -1 ? undefined : arg.slice(eq + 1)
     if (!KNOWN_FLAGS.has(name)) {
       const near = [...KNOWN_FLAGS]
         .filter((known) => known.startsWith(name.slice(0, 3)) || name.startsWith(known.slice(0, 3)))
@@ -1110,9 +1065,13 @@ for (let i = 0; i < argv.length; i += 1) {
       )
       process.exit(2)
     }
-    if (inline !== undefined) flags[name] = inline
-    else if (argv[i + 1] && !argv[i + 1].startsWith('--')) flags[name] = argv[++i]
-    else flags[name] = true
+    const value = inline !== undefined
+      ? inline
+      : argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[++i] : true
+    // Repeatable: `--tag a --tag b` is two tags, not the last one.
+    if (REPEATABLE.has(name) && typedFlags[name] !== undefined && value !== true) {
+      typedFlags[name] = [...[typedFlags[name]].flat(), value]
+    } else flags[name] = value
   } else positional.push(arg)
 }
 
@@ -1840,7 +1799,7 @@ const refreshProjectKeys = async (force) => {
   }
 }
 
-const request = async (method, path, body, { soft = false } = {}) => {
+const request = async (method, path, body, { soft = false, onError } = {}) => {
   requireKey()
   if (method !== 'GET') mutated = true
   const isCheckpoint = path.split('?')[0].endsWith('/checkpoint')
@@ -1908,9 +1867,9 @@ const request = async (method, path, body, { soft = false } = {}) => {
   }
 
   if (!payload.success) {
-    // `soft` callers are probing, not asserting. `croft know <word>` tries the
-    // word as a slug first and falls back to searching, and dying on the miss
-    // made the fallback unreachable.
+    // A caller that can say something better about one refusal says it.
+    if (onError) onError(payload, res.status)
+    // `soft` callers are probing, not asserting: a miss is an answer.
     if (soft) return null
     // Surface the server's guidance verbatim — it names valid enum values and,
     // on a refused close, suggests a resolution. Swallowing that would turn a
@@ -1962,7 +1921,6 @@ const request = async (method, path, body, { soft = false } = {}) => {
   // Recorded here rather than at each call site: one place that already knows
   // the method, the path and that the server said yes.
   if (method !== 'GET') {
-    rememberWrite(method, path, payload.data)
     updateRememberedOwnership(path, payload.data)
     // The server just answered, so anything put aside while it was down can go
     // now. No cron and nothing to remember to run: the next write drains it.
@@ -2153,87 +2111,6 @@ const updateRememberedOwnership = (path, data) => {
   }
 }
 
-/**
- * A breadcrumb per successful write, so a session does not have to be guessed at.
- *
- * The session-end hook used to recover task refs with a regex over the
- * transcript, preferring refs on a line that also contained a `croft` command.
- * A good heuristic, and still a guess: a dry run returned CAI-42 and
- * LEGACY-1164 — refs out of documentation examples — instead of the tasks the
- * session actually worked. Those links feed search, and a session linked to
- * everything answers yes to everything, which is the same as knowing nothing.
- *
- * This end knows exactly what it acted on and whether the server accepted it.
- *
- * It was keyed on time alone, because Codex and OpenClaw name sessions in ways
- * this process could not see while every runtime agrees on a clock. Time alone
- * is not enough once several sessions share the clock: the hook filtered the
- * window by directory and, when nothing matched, fell back to the whole
- * window -- so one session's writes were attributed to another's transcript.
- * A session working on a trading bot was told it was holding a knowledge-map
- * task, and two map tasks were stamped with a checkpoint about HERMES-107.
- *
- * So the session id goes in the breadcrumb when there is one, and the hook
- * filters on it exactly. A runtime that cannot name itself writes no session
- * and keeps the old behaviour; nothing is lost that was previously correct.
- */
-const ACTED_PATH = join(CROFT_DIR, 'acted.jsonl')
-const ACTED_MAX_BYTES = 256 * 1024
-const ACTED_KEEP_LINES = 2000
-
-/** Which ref a write acted on, from the server's answer or failing that the path. */
-const refOfWrite = (path, data) => {
-  const fromBody = typeof data?.ref === 'string' ? data.ref : null
-  if (fromBody && /^[A-Z][A-Z0-9]{1,9}-\d+$/.test(fromBody)) return fromBody
-  const fromPath = /\/api\/v1\/tasks\/([^/?]+)/.exec(path)?.[1]
-  if (!fromPath) return null
-  const decoded = decodeURIComponent(fromPath).toUpperCase()
-  return /^[A-Z][A-Z0-9]{1,9}-\d+$/.test(decoded) ? decoded : null
-}
-
-/** `claim`, `note`, `done` — the sub-resource, or the method when there is none. */
-const verbOfWrite = (method, path) => {
-  const tail = /\/api\/v1\/tasks\/[^/?]+\/([a-z-]+)/.exec(path)?.[1]
-  if (tail) return tail
-  if (path.includes('/tasks') && method === 'POST') return 'add'
-  return { POST: 'add', PATCH: 'update', DELETE: 'delete' }[method] ?? method.toLowerCase()
-}
-
-/**
- * Append-only and self-trimming. A file that grows forever on a machine an
- * agent writes to every few seconds is a slow leak, and one that is rewritten
- * on every call would lose a concurrent write from a sibling agent.
- */
-const rememberWrite = (method, path, data) => {
-  const ref = refOfWrite(path, data)
-  if (!ref) return
-  try {
-    mkdirSync(dirname(ACTED_PATH), { recursive: true })
-    if (existsSync(ACTED_PATH) && statSync(ACTED_PATH).size > ACTED_MAX_BYTES) {
-      const kept = readFileSync(ACTED_PATH, 'utf8').trim().split('\n').slice(-ACTED_KEEP_LINES)
-      writeFileSync(ACTED_PATH, `${kept.join('\n')}\n`)
-    }
-    appendFileSync(
-      ACTED_PATH,
-      `${JSON.stringify({
-        t: new Date().toISOString(),
-        ref,
-        verb: verbOfWrite(method, path),
-        cwd: process.cwd(),
-        agent: AGENT,
-        // Machine-wide, because the session-end hook reads it before it knows
-        // which instance a session belongs to.
-        ...(INSTANCE.name ? { instance: INSTANCE.name } : {}),
-        // Absent on a runtime that cannot name its session. The hook treats
-        // absent as "cannot tell", never as "not mine".
-        ...(SESSION ? { session: SESSION } : {}),
-      })}\n`,
-    )
-  } catch {
-    // A breadcrumb is a convenience for the hook. Never fail a write over one.
-  }
-}
-
 /** HOL-113 from a full task row or a digest, whichever this is. */
 const refOfTask = (data) => {
   if (typeof data?.ref === 'string') return data.ref
@@ -2339,14 +2216,10 @@ const renderContext = (d, { fileOnly = false } = {}) => {
   // reader learns to skip -- and then the one time it matters, it is skipped.
   if (fileOnly) {
     const f = d.file
-    if (!f || (!f.tasks.length && !f.knowledge.length)) return ''
+    if (!f?.tasks?.length) return ''
     out.push(`## Croft knows about ${f.path}`)
     for (const t of f.tasks) {
       out.push(`  ${t.ref}  ${t.status}${t.resolved ? ' (answered)' : ''}  ${truncate(t.title, 54)}`)
-    }
-    for (const k of f.knowledge) out.push(`  ${k.slug}  -- ${truncate(k.title, 54)}`)
-    for (const sn of f.sessions.slice(0, 1)) {
-      if (sn.nextSteps) out.push(`  last session here: ${truncate(sn.nextSteps, 160)}`)
     }
     return `${out.join('\n')}\n`
   }
@@ -2418,24 +2291,6 @@ const renderContext = (d, { fileOnly = false } = {}) => {
     }
   }
 
-  // A live session is worth naming even before it has next steps: it is
-  // another agent working in this directory right now.
-  if (d.lastSession?.ongoing) {
-    const said = d.lastSession.nextSteps ?? d.lastSession.request
-    out.push('', `A session here is still open (${d.lastSession.agent ?? 'unknown'})${said ? ':' : ''}`)
-    if (said) out.push(`  ${truncate(said, 400)}`)
-  } else if (d.lastSession?.nextSteps) {
-    out.push('', `Last session here left off (${d.lastSession.agent ?? 'unknown'}):`)
-    out.push(`  ${truncate(d.lastSession.nextSteps, 400)}`)
-  }
-
-  if (d.knowledge?.length) {
-    out.push('', 'Known here (croft know <slug>):')
-    for (const k of d.knowledge) {
-      out.push(`  ${k.slug}${factMark(k) ? `  [${factMark(k)}]` : ''}  -- ${truncate(k.title, 58)}`)
-    }
-  }
-
   if (d.staleClaims?.length) {
     out.push('', 'Stale claims (lease expired, takeable):')
     for (const t of d.staleClaims) out.push(`  ${t.ref}  held ${t.heldFor} by ${t.claimedBy}`)
@@ -2443,10 +2298,9 @@ const renderContext = (d, { fileOnly = false } = {}) => {
 
   if (d.file) {
     const f = d.file
-    if (f.tasks.length || f.knowledge.length) {
+    if (f.tasks?.length) {
       out.push('', `About ${f.path}:`)
       for (const t of f.tasks) out.push(`  ${t.ref}  ${t.status}  ${truncate(t.title, 56)}`)
-      for (const k of f.knowledge) out.push(`  ${k.slug}  -- ${truncate(k.title, 56)}`)
     }
   }
 
@@ -2461,13 +2315,266 @@ const renderContext = (d, { fileOnly = false } = {}) => {
  * (CROFT-294) are each one line here; kept under 300 bytes so the briefing
  * stays a briefing.
  */
+const LAB_RULE =
+  'Exploring or proving an idea → croft check first; changing a repo for real → a Cairn task (croft push).'
+
 const BRIEFING_RULES = [
-  'Start with: croft check "<subject>". Claim what you work (agents\' add claims it); one task per sweep.',
-  'Dead end: note --kind attempt. Before yielding: checkpoint. Not landed: update --status in-review.',
-  'Close: done --kind fixed|verified|answered. Bodies: markdown. For someone else: add --assignee.',
+  LAB_RULE,
+  'Log findings as you go: croft subject note S-n - --kind finding|attempt|decision. Claim the todo you work.',
+  'Conclude: croft subject stage S-n "<stage>" --conclusion -. Close todos: done --resolution. Bodies: markdown.',
 ]
 
 const truncate = (s, n) => (!s ? '' : s.length > n ? `${s.slice(0, n - 1)}…` : s)
+
+/** One TSV cell from whatever the server sent: a name for an object, no tabs or newlines. */
+const cellOf = (v) =>
+  v == null || v === false
+    ? ''
+    : typeof v === 'object'
+      ? String(v.name ?? v.ref ?? v.title ?? '')
+      : String(v).replace(/[\t\r\n]+/g, ' ')
+
+// ---------------------------------------------------------------------------
+// the lab: subjects, stages, tags, and the pairing with Cairn
+// ---------------------------------------------------------------------------
+const SUBJECT_REF = /^(?:[Ss]-)?(\d{1,7})$/
+const SUBJECT_NOTE_KINDS = ['note', 'finding', 'decision', 'attempt', 'handoff']
+/** Used only when /stages cannot be read: the seed's concluding stages. */
+const SEED_CONCLUDING = new Set(['done', 'rejected', 'rolled out'])
+const CONCLUDING = new Set(['completed', 'dropped'])
+
+const subjectArg = (value, usage) => {
+  const raw = String(need(value, usage)).trim()
+  const match = SUBJECT_REF.exec(raw)
+  if (!match) {
+    die(
+      `"${raw}" is not a subject ref — subjects are S-n (e.g. S-12).` +
+        (REF_ARG.test(raw) ? ` ${raw} is a todo: use the task verbs (croft show ${raw}).` : ''),
+    )
+  }
+  return `S-${Number(match[1])}`
+}
+
+/**
+ * What `croft subject show` would cost, when the server does not say. A
+ * summary carries no body, so this is a floor, marked as an estimate by the
+ * same `~` every other token column uses.
+ */
+const subjectTokens = (s) =>
+  s.tokens ?? Math.ceil((String(s.title ?? '').length + String(s.body ?? '').length + String(s.conclusion ?? '').length) / 4) + 20
+
+const SUBJECT_COLUMNS = ['ref', 'stage', 'todos', 'tags', 'tokens', 'title']
+const subjectRow = (s) => ({
+  ref: s.ref ?? (s.number !== undefined ? `S-${s.number}` : ''),
+  stage: cellOf(s.stage),
+  todos: `${s.todos?.open ?? 0}/${s.todos?.done ?? 0}`,
+  tags: (s.tags ?? []).map((t) => cellOf(t)).join(','),
+  tokens: `~${subjectTokens(s)}`,
+  title: truncate(s.title, 70),
+})
+/** A list, whether the server sent it bare or under a key. */
+const asList = (d, key) => (Array.isArray(d) ? d : Array.isArray(d?.[key]) ? d[key] : Array.isArray(d?.results) ? d.results : [])
+const emitSubjects = (list) => emit(list, { rows: (d) => asList(d, 'subjects').map(subjectRow), columns: SUBJECT_COLUMNS })
+
+const todoRow = (t) => ({
+  ref: t.ref ?? refOfTask(t) ?? '',
+  status: t.status ?? '',
+  held: t.claimed_by ?? '',
+  cairn: t.cairn_ref ? `${t.cairn_ref}${t.cairn_status ? ` ${t.cairn_status}` : ''}` : '',
+  title: truncate(t.title, 70),
+})
+
+const DAY = (at) => (typeof at === 'string' ? at.slice(0, 16).replace('T', ' ') : '')
+
+/**
+ * A subject as a model reads it: what it is, where it stands, what it
+ * concluded, what is left to do, then the write-up and the log. A digest by
+ * default — every finding and decision, the last few of everything else, a
+ * clipped body — and a line on stderr saying what was withheld.
+ */
+const renderSubject = (s, notes, todos, { full }) => {
+  const out = [`${s.ref}  ${cellOf(s.stage)}  ${s.title}`]
+  const facts = [
+    s.owner?.name ? `owner ${s.owner.name}` : 'no owner',
+    s.tags?.length ? `tags ${s.tags.map((t) => cellOf(t)).join(', ')}` : '',
+    s.updated_at ? `updated ${DAY(s.updated_at)}` : '',
+    s.archived_at ? 'archived' : '',
+  ].filter(Boolean)
+  out.push(facts.join(' · '))
+  if (s.conclusion) out.push('', `conclusion${s.concluded_at ? ` (${DAY(s.concluded_at)})` : ''}:`, ...indent(s.conclusion))
+
+  const open = todos.filter((t) => !['done', 'cancelled'].includes(t.status))
+  out.push('', `todos: ${open.length} open / ${todos.length - open.length} closed`)
+  for (const t of full ? todos : open) {
+    const row = todoRow(t)
+    out.push(`  ${row.ref}  ${row.status}${row.held ? `  held by ${row.held}` : ''}  ${row.title}${row.cairn ? `  [Cairn ${row.cairn}]` : ''}`)
+  }
+
+  const BODY_CLIP = 1500
+  const body = String(s.body ?? '').trim()
+  let withheldBody = 0
+  if (body) {
+    const shown = full || body.length <= BODY_CLIP ? body : `${body.slice(0, BODY_CLIP)}…`
+    withheldBody = body.length - Math.min(body.length, full ? body.length : BODY_CLIP)
+    out.push('', 'write-up:', ...indent(shown))
+  }
+
+  const ordered = [...notes].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+  const KEEP = new Set(['finding', 'decision', 'handoff'])
+  const recent = new Set(ordered.filter((n) => !KEEP.has(n.kind)).slice(-5))
+  const shownNotes = full ? ordered : ordered.filter((n) => KEEP.has(n.kind) || recent.has(n))
+  if (ordered.length) {
+    out.push('', `log${shownNotes.length < ordered.length ? ` (${shownNotes.length} of ${ordered.length})` : ''}:`)
+    for (const n of shownNotes) {
+      const text = full ? n.note : truncate(String(n.note).replace(/\s+/g, ' '), 400)
+      out.push(`  ${DAY(n.created_at)}  ${n.kind}  ${n.actor_id ?? ''}`, ...indent(text, '    '))
+    }
+  }
+  const withheldNotes = ordered.length - shownNotes.length
+  const withheld = withheldBody || withheldNotes
+    ? { body: withheldBody, notes: withheldNotes, tokens: Math.ceil((body.length + ordered.reduce((n, x) => n + String(x.note).length, 0)) / 4) }
+    : null
+  return { text: `${out.join('\n')}\n`, withheld }
+}
+
+const indent = (text, pad = '  ') => String(text).trim().split('\n').map((l) => `${pad}${l}`)
+
+const tagChanges = (args) => {
+  const add = []
+  const remove = []
+  for (const arg of args.flatMap((a) => String(a).split(',')).map((a) => a.trim()).filter(Boolean)) {
+    if (arg.startsWith('-')) remove.push(arg.slice(1).toLowerCase())
+    else add.push(arg.replace(/^\+/, '').toLowerCase())
+  }
+  return { add: add.filter(Boolean), remove: remove.filter(Boolean) }
+}
+
+/** Refused, said with what to do: the agent's next call is the fix. */
+const conclusionRefusal = (ref, stage) => (payload) => {
+  if (payload.code !== 'conclusion_required') return
+  die(
+    `${ref} -> "${stage}" needs a conclusion: ${payload.error}\n` +
+      `re-run with --conclusion "<what the lab concluded, and why>" (or --conclusion - to read markdown from stdin)`,
+  )
+}
+
+/**
+ * Cairn's CLI, found the way Quarry finds its own: an explicit override, then
+ * where `cairn setup` installs it, then PATH. null when there is none.
+ */
+const resolveCairn = () => {
+  const override = process.env.CROFT_CAIRN_BIN?.trim()
+  if (override) return existsSync(override) ? override : die(`CROFT_CAIRN_BIN=${override} does not exist`)
+  const installed = join(HOME, '.local', 'bin', 'cairn')
+  if (existsSync(installed)) return installed
+  for (const dir of (process.env.PATH ?? '').split(':')) {
+    if (dir && existsSync(join(dir, 'cairn'))) return join(dir, 'cairn')
+  }
+  return null
+}
+
+const NO_CAIRN =
+  'croft push needs Cairn\'s CLI, and `cairn` is not in ~/.local/bin or on PATH. ' +
+  'Install it (`cairn setup --url <your Cairn>`), or point CROFT_CAIRN_BIN at it.'
+
+const runCairn = (bin, args, input) => {
+  // A script path (a checkout, a test double) runs under this node.
+  const [cmd, argv] = /\.m?js$/.test(bin) ? [process.execPath, [bin, ...args]] : [bin, args]
+  return spawnSync(cmd, argv, {
+    input: input ?? '',
+    encoding: 'utf8',
+    timeout: 60_000,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  })
+}
+
+/**
+ * The ref `cairn add` printed. Its TSV is `key<TAB>value` per field; `ref`
+ * first, then project.key + number, then a JSON answer, in that order.
+ */
+const parseCairnRef = (stdout) => {
+  const text = String(stdout ?? '')
+  const direct = /^ref\t([A-Z][A-Z0-9]{0,9}-\d+)\s*$/m.exec(text)?.[1]
+  if (direct) return direct
+  const key = /^project\.key\t([A-Z][A-Z0-9]{0,9})\s*$/m.exec(text)?.[1]
+  const number = /^number\t(\d+)\s*$/m.exec(text)?.[1]
+  if (key && number) return `${key}-${number}`
+  try {
+    const parsed = JSON.parse(text)
+    if (typeof parsed?.ref === 'string') return parsed.ref
+  } catch {
+    // not JSON either
+  }
+  return null
+}
+
+/** Croft's todo types are Cairn's; anything unknown files as a feature. */
+const CAIRN_TYPES = { feature: 'feature', bug: 'bug', improvement: 'improvement', chore: 'chore', spike: 'spike', docs: 'docs' }
+
+/** Every todo paired with a Cairn task: one listing of T, or subject by subject. */
+const linkedTodos = async () => {
+  const listed = await request('GET', `/api/v1/projects/${TODO_KEY}/tasks?limit=500`, undefined, { soft: true })
+  const tasks = listed?.tasks ?? []
+  if (tasks.length && tasks.some((t) => 'cairn_ref' in t)) {
+    return tasks.filter((t) => t.cairn_ref).map((t) => ({ ...t, ref: refOfTask(t) ?? `${TODO_KEY}-${t.number}` }))
+  }
+  const subjects = asList(await request('GET', '/api/v1/subjects?archived=1', undefined, { soft: true }), 'subjects')
+  const todos = await Promise.all(
+    subjects.map((s) => request('GET', `/api/v1/subjects/${s.ref}/todos`, undefined, { soft: true })),
+  )
+  return todos.flatMap((list) => asList(list, 'todos')).filter((t) => t.cairn_ref)
+}
+
+const CAIRN_NOT_CONFIGURED = new Set(['cairn_not_configured', 'not_configured', 'no_connection', 'integration_not_configured'])
+
+/**
+ * The briefing in at most five lines, for a SessionStart hook — Croft's own,
+ * or Cairn's when it carries Croft's block. Silent on every failure: a
+ * briefing that errors is worse than none, and this runs unasked at the top
+ * of every session.
+ */
+const BRIEF_DEADLINE_MS = Number(process.env.CROFT_BRIEF_DEADLINE_MS ?? 2500)
+const renderBrief = (d, stages) => {
+  const concluding = Array.isArray(stages)
+    ? new Set(stages.filter((s) => CONCLUDING.has(s.category)).map((s) => s.name))
+    : SEED_CONCLUDING
+  const order = new Map((Array.isArray(stages) ? stages : []).map((s, i) => [s.name, s.position ?? i]))
+  const counts = Object.entries(d?.counts ?? {})
+    .filter(([name, n]) => Number(n) > 0 && !concluding.has(name))
+    .sort((a, b) => (order.get(a[0]) ?? 999) - (order.get(b[0]) ?? 999))
+  const mine = (d?.mine ?? []).slice(0, 3)
+  if (!counts.length && !mine.length) return ''
+  const lines = [`Croft — lab: ${counts.length ? counts.map(([name, n]) => `${n} ${name}`).join(' · ') : 'nothing open'}`]
+  for (const s of mine) {
+    const open = s.todos?.open ?? 0
+    lines.push(`  ${s.ref} ${cellOf(s.stage)}  ${truncate(s.title, 60)}${open ? ` — ${open} todo${open === 1 ? '' : 's'}` : ''}`)
+  }
+  lines.push(LAB_RULE)
+  return `${lines.join('\n')}\n`
+}
+
+const brief = async () => {
+  const cwd = String(flags.cwd ?? process.cwd())
+  if (INSTANCE_REFUSAL || IDENTITY_REFUSAL || !KEY || !BASE) return
+  const get = async (path) => {
+    try {
+      const res = await fetch(`${BASE}${path}`, { headers: authHeaders(), signal: AbortSignal.timeout(BRIEF_DEADLINE_MS) })
+      const payload = await res.json()
+      return payload?.success ? payload.data : null
+    } catch {
+      return null
+    }
+  }
+  const [data, stages] = await Promise.all([
+    get(`/api/v1/subjects/brief?${new URLSearchParams({ cwd })}`),
+    get('/api/v1/stages'),
+  ])
+  if (!data) return
+  if (FORMAT === 'json') return emit(data)
+  const text = renderBrief(data, stages)
+  if (text) process.stdout.write(text)
+}
+
 
 /**
  * A task row as TSV names its assignee in one line, not five: the name is
@@ -2480,171 +2587,119 @@ const named = (task) => {
   return { ...rest, assignee: assignee.name }
 }
 
-/**
- * How far to trust a fact, in one word. `stale` is evidence: sessions reworked
- * the files it names. `unverified Nd` is only age, for a fact that names no
- * file (CROFT-289), and is worded apart so it never reads as the first.
- */
-const factMark = (k) =>
-  k.stale ? 'stale' : k.unverified_days ? `unverified ${k.unverified_days}d` : ''
-
 // ---------------------------------------------------------------------------
 // commands
 // ---------------------------------------------------------------------------
-const HELP = `croft — agent-first task tracker and shared memory
+const HELP = `croft — the lab board: subjects to explore and prove, their todos and conclusions
 
   ALWAYS START HERE
-    croft check "<subject>"        what has already been done or debugged
-                                   searches tasks, work-log notes, knowledge and
-                                   sessions; --kinds task,note,knowledge,session;
-                                   --assignee me|<who>: only that person's tasks
+    croft check "<subject>"        what the lab already tried, found or concluded
+                                   searches subjects, todos and work-log notes;
+                                   --kinds subject,task,note; --assignee me|<who>
+    Exploring or proving an idea → croft check first; changing a repo for real
+    → a Cairn task (croft push).
 
-  read
-    croft next [--project K] [--assignee me|<who>]
-                                   what to pick up, and why — ranked, never blocked;
-                                   your human's work first, anyone else's says whose
-    croft list [--project K] [--status S] [--type T] [--label L] [--mine] [--assignee me|<who>]
-                                   --mine: what this agent holds now; --assignee: whose it is
-    croft show <ref> [--full]      e.g. CAI-42; a digest unless --full
-    croft log <ref> [--kind K]     the work log
-    croft projects
+  subjects (refs S-12)
+    croft subject add "<title>" [--stage S] [--tag t]... [--owner me] [--body -]
+                                   --tag repeats or takes a comma list
+    croft subject list [--stage S] [--tag t] [--mine] [--all]
+                                   --mine: owned by your human; --all: archived too
+    croft subject show S-12 [--full]       a digest unless --full
+    croft subject edit S-12 [--title T] [--body -]
+    croft subject stage S-12 "<stage>" [--conclusion -|"<text>"]
+                                   done, rejected, rolled out (any completed or
+                                   dropped stage) need a --conclusion
+    croft subject note S-12 "<text>"|- [--kind finding|decision|attempt|note|handoff]
+    croft subject tag S-12 +x -y           add x, remove y
+    croft subject todo S-12 "<title>" [--body -] [--no-start]
+                                   files a todo (T-n) under it; agents claim it
+    croft stages                   the pipeline, in order, with each stage's category
+    croft tags                     the tags subjects can carry
+
+  todos (refs T-41) — the task verbs
+    croft next [--assignee me|<who>]       what to pick up, and why
+    croft list [--status S] [--type T] [--label L] [--mine] [--assignee me|<who>]
+                                   todos (project T unless --project K)
+    croft show T-41 [--full]       a digest unless --full
+    croft log T-41 [--kind K]      the work log
+    croft claim T-41               exits 9 if another agent holds it
+    croft beat T-41                keep a claim alive
+    croft checkpoint T-41 --summary "<where things stand>"
+    croft release T-41 [--force]   --force only to drop another session's claim
+    croft block T-41 --reason "<why>"   |   croft unblock T-41
+    croft note T-41 "<text>" [--kind note|finding|decision|attempt|handoff]
+    croft update T-41 [--title T] [--status S] [--type T] [--priority P] [--assignee <who>] [--body -]
+    croft comment T-41 "<text>"
+    croft done T-41 --resolution "<what was actually done>" [--kind fixed|verified|answered|…]
+    croft cancel T-41 --resolution "<why it is being dropped>" [--kind wont-fix]
+    croft done T-41 --duplicate-of T-31 --resolution "…"
+    croft commit T-41 <sha> [--repo PATH] [--branch NAME] [--message TEXT] [--url URL]
+    croft run T-41 "<command>" --status passed|failed|skipped [--exit-code N]
+                                   record what you already did; nothing is run
+    croft attach T-41 <file>  |  croft files T-41  |  croft history T-41
+    croft children T-41  |  croft deps T-41  |  croft blockedby T-41 T-40  |  croft unblockedby T-41 T-40
+    croft add "<title>" --project K [--type bug] [--priority high] [--body -] [--parent T-40]
+                                   a todo with no subject; prefer subject todo
     croft people                   who work can be assigned to
 
-  write
-    croft add "<title>" --project K [--type bug] [--priority high] [--body -] [--assignee <who>]
-                                   assigned to your human (this key's owner) unless --assignee
-                                   names another: email, name or id. The assignee owns the
-                                   work; the claim (held) is which agent is doing it right now
-    croft add ... --start          file it and claim it, when you are starting now
-                                   (the default for an agent runtime, unless it
-                                   already holds work here or similar open work
-                                   exists; --no-start to only file it)
-    croft update <ref> [--title T] [--status S] [--type T] [--priority P] [--assignee <who>] [--body -]
-    croft update <ref> --also-project HM,AT      work that spans several projects
-    croft update <ref> --project OTHER      moves it; the ref changes
-    croft note <ref> "<text>" [--kind note|finding|decision|attempt|handoff]
-    croft commit <ref> <sha> [--repo PATH] [--branch NAME] [--message TEXT] [--url URL]
-    croft push <ref> <sha> [--repo PATH] [--branch NAME] [--remote NAME] [--url URL]
-    croft run <ref> "<command>" --status passed|failed|skipped [--exit-code N]
-                                   these three RECORD what you already did;
-                                   none of them runs anything. Recording the
-                                   same commit twice is one line, not two.
-    croft comment <ref> "<text>"
-    croft done <ref> --resolution "<what was actually done>" [--kind fixed|verified|answered|…]
-    croft cancel <ref> --resolution "<why it is being dropped>" [--kind wont-fix]
-    croft done <ref> --duplicate-of CAI-31 --resolution "…"   points at the original
-    croft attach <ref> <file>      |   croft files <ref>
+  pairing with Cairn
+    croft push T-41 --to <CAIRN_KEY> [--type T]
+                                   files it in Cairn (cairn add … --label croft:T-41)
+                                   and links it; from then on Cairn owns its status.
+                                   Needs the cairn CLI (PATH, ~/.local/bin or CROFT_CAIRN_BIN)
+    croft push T-41 --link CAIRN-331       record a link made by hand
+    croft push T-41 <sha> [--repo PATH] [--branch NAME] [--remote NAME] [--url URL]
+                                   without --to: records a git push, as commit does
+    croft sync                     pull the status of every paired todo back from Cairn
 
-  sub-tasks
-    croft add "<title>" --project K --parent CAI-42   file it under an existing task
-    croft children <ref>                    the direct split
-    croft update <ref> --parent CAI-42 | --no-parent
+  briefing
+    croft context --brief [--cwd D]        the lab in five lines; silent when there is
+                                           nothing to say or nothing is configured
+    croft context [--scope project|all] [--project K]
+                                   what you hold, what is in flight, stale claims
 
-  history
-    croft history <ref>                     what changed, when, and who changed it
+  labels and projects
+    croft labels  |  croft labels rename <from> <to>  |  croft labels remove <label>
+    croft projects [--archived]
+    croft project create <KEY> "<title>" [--body -]   KEY is 1-10 uppercase, starting with a letter
+    croft project rename <KEY> "<title>"  |  croft project rekey <KEY> <NEW>
+    croft project rename <KEY> --key <NEW>
+    croft project archive|restore <KEY>  |  croft project delete <KEY> --confirm <KEY>
+    croft task delete <ref> --confirm <ref>       junk only; refuses a task with history
+    croft map [<KEY>|none]         which project this directory is
 
-  dependencies
-    croft deps <ref>                        what blocks this, and what it blocks
-    croft blockedby <ref> <other>           mark <ref> as blocked by <other>
-    croft unblockedby <ref> <other>         remove that link
-
-  labels
-    croft labels                            every label in use, busiest first
-    croft labels rename <from> <to>         renaming onto an existing label merges them
-    croft labels remove <label>
-
-  projects
-    croft map [<KEY>|none]                       which project this directory is
-    croft instance [list]                        which Croft instance a command uses, and all of them
-    croft instance policy ask | default <name>   in a directory with no route: ask, or use that one
+  instances
+    croft instance [list]                        which Croft instance a command uses
+    croft instance policy ask | default <name>   in a directory with no route
     croft instance add <name> --url <url> [--default] [--adopt]
-                                                 configure one more; --adopt moves this machine's
-                                                 existing env, map, ownership and queue into it
     croft <command> --instance <name>            use that instance (or CROFT_INSTANCE=<name>)
     croft route                                  which instance this directory uses, and why
     croft route add <instance> [--folder|--session] [--dir D] [--force]
-                                                 save the answer: this repository (or directory),
-                                                 everything under it, or this session only
-    croft route list | pending | remove [--folder] [--dir D]
+    croft route list | remove [--folder] [--dir D]
     croft --version                              this CLI, the server, and whether they match
-    croft projects [--archived]                  --archived includes retired ones;
-                                                 \`was\` lists keys a project used to have
-    croft project create <KEY> "<title>" [--body -]   KEY is 2-10 uppercase
-    croft project rename <KEY> "<title>"
-    croft project rekey <KEY> <NEW>              change the key; old refs keep resolving
-    croft project rename <KEY> --key <NEW>       the same, as entities spells it
-    croft project archive <KEY>                  hides it; the tasks stay searchable
-    croft project restore <KEY>
-    croft project delete <KEY> --confirm <KEY>   deletes every task in it
-    croft task delete <ref> --confirm <ref>       junk only; refuses a task with history
 
-  memory
-    croft context [--scope project|all] [--project K]
-                                   what you hold, what is in flight, your human's work
-                                   nobody is on, where the last session here stopped,
-                                   what is known;
-                                   project scope filters tasks and sessions (default: all)
-    croft learn "<title>" --body - record what we now know
-                                   --allow-dangling  keep a [[ref]] the store cannot resolve
-                                   --files a,b  files it is about, beyond those its body names
-                                   --project K  true of that project
-                                   --entity E   true of that grouping (croft entities)
-                                   --global     true everywhere — say so on purpose
-                                   none of them: inferred from this directory's
-                                   project, and it refuses if there is none
-    croft entities                 groupings a fact can be true of, and their projects
-    croft entities assign|unassign <key> --project A,B
-    croft entities rename <key> --key <new> --title "T"
-    croft recall <ref>             decisions and knowledge that bear on this task, and why
-    croft know [<slug>|<query>]    read it back, or list what applies here
-    croft know --gaps              where the memory has holes
-    croft know --orphans           entries nothing links to, that link to nothing
-    croft know --dangling          references pointing at entries nobody wrote
-    croft know <slug> --history    every version, who changed it and why  [--full]
-    croft know --unused [--days 30]  facts no search or read has returned lately
-    croft know <slug> --sweep      a scripted read, kept out of recall counts (or CROFT_SWEEP=1)
-    croft verify <slug>            it is still true — clears the stale mark
-    croft replay                   send writes put aside while the server was down
-    croft relearn <slug> --body -  correct it  [--reason "why"] [--allow-dangling]
-                                   --project K | --entity E | --global  re-scope it
-                                   (none clears one side: --entity E --project none moves it)
-                                   --files a,b  the files it is about (replaces those named before)
-    croft unlearn <slug> [--superseded-by <slug> [--reason "why"]]
-    croft session list             recent sessions
-    croft session checkpoint --id <id>  upsert ongoing session, do not checkpoint held tasks
-    croft session end --id <id>    write the episodic record, checkpoint what is held
-    croft reconcile                release your own claims that went quiet (2h)
+  maintenance
+    croft reconcile [--older N] [--dry-run]   release your own claims that went quiet (2h);
                                    as CROFT_AGENT=maintenance: every quiet claim
-    croft vitals [--hours 24] [--all]   is the memory still being written
-    croft vitals --notify <ref>         post findings as a note, silent if none
-    croft reconcile|vitals --all-instances   once per instance on a machine with several;
-                                        vitals --notify <instance>:<ref>[,…] says where each reports
-
-  coordinate
-    croft claim <ref>              exits 9 if another agent holds it
-    croft beat <ref>               keep a claim alive
-    croft checkpoint <ref> --summary "<where things stand>"
-    croft release <ref> [--force]   --force only to drop another session's claim
-    croft block <ref> --reason "<why>"   |   croft unblock <ref>
+    croft reconcile|sync --all-instances      once per instance on a machine with several
+    croft replay                   send writes put aside while the server was down
 
   connect a machine
-    croft setup --url <instance>   one command: pair keys in the browser, install
-                                   the CLI, skill, hooks and the agent-files job.
-                                   Safe to re-run — it is the upgrade path
-    croft setup --name <instance>  this machine has (or will have) more than
-                                   one instance; names the new one
+    croft setup --url <instance>   pair keys in the browser, install the CLI, skill,
+                                   hooks and the agent-files job. Safe to re-run
+    croft setup --name <instance>  names the new one on a machine with several
     croft setup --runtimes claude-code,codex,openclaw   default: detected
     croft setup --no-skill | --no-hooks | --no-jobs     skip one step
-    croft setup --maintenance      also install reconcile + vitals; their key
-                                   is paired on its own and needs an admin
+    croft setup --maintenance      also install reconcile; its key needs an admin
     croft setup --dry-run          print the plan, change nothing
 
   output
     --json | --pretty              default is TSV: count line, header, rows
-    --body -  /  --resolution -    read the value from stdin
-    bodies are markdown: ## headings, - lists, code in backticks (a wall of text is refused)
+    --body -  /  --resolution -  /  --conclusion -   read the value from stdin
+    bodies are markdown: ## headings, - lists, code in backticks
 
-  env: CROFT_BASE_URL, CROFT_API_KEY
+  exit codes: 1 error · 2 unknown or ignored flag · 9 already claimed · 10 which instance?
+  env: CROFT_BASE_URL, CROFT_API_KEY, CROFT_CAIRN_BIN
 `
 
 const need = (v, msg) => (v === undefined || v === true ? die(msg) : v)
@@ -2677,7 +2732,7 @@ const closeTask = async (status, defaultKind) => {
   }
 
   // Said once, at the close, and only when nothing at all showed the work
-  // being done: the same predicate as the vitals finding (migration 054), so
+  // being done: the same predicate the server uses (migration 054), so
   // a sweep item with a commit against it, or one moved to in-review, is not
   // nagged. A person is documented as never claiming, so only a runtime is.
   if (!AGENT) return
@@ -2695,19 +2750,6 @@ const closeTask = async (status, defaultKind) => {
         `Next time claim first (\`croft add\` now claims for agents).\n`,
     )
   }
-
-  // The close is when the agent knows most about what the work taught, and
-  // the last moment anyone will ask (CROFT-323). Not for a duplicate, and not
-  // when something was already learned on this task.
-  if (body.resolutionKind === 'duplicate') return
-  const closedRef = refOfTask(closed) ?? ref
-  const recall = await request('GET', `/api/v1/tasks/${closedRef}/recall?decisions=1&knowledge=30`, undefined, { soft: true })
-  const learnedHere = (recall?.knowledge ?? []).some((k) => k.why?.includes('learned on this task'))
-  if (learnedHere) return
-  process.stderr.write(
-    `Did ${closedRef} establish anything the next agent should know — a constraint, a trap, a decision and its reason? ` +
-      `croft learn "<title>" --project ${closedRef.split('-')[0]} --task ${closedRef} --body -\n`,
-  )
 }
 
 /** `from -> to`, or the raw keys, kept to one short cell. */
@@ -2867,58 +2909,6 @@ const openclawRunsGateway = () => {
   return Boolean(gateway.mode || gateway.port || config?.agents || config?.channels)
 }
 
-/**
- * Where OpenClaw keeps the transcripts the `openclaw-sessions` job sweeps.
- *
- * Nothing in openclaw.json says this directly: `config.agents` there is
- * channel and routing configuration, not a filesystem path. What actually
- * says it is what OpenClaw laid down on disk — each agent gets its own Codex
- * home under the gateway's own home, at `agents/<agent>/agent/codex-home`,
- * with sessions under that (confirmed against a live gateway:
- * `/root/.openclaw/agents/main/agent/codex-home/sessions`). Exactly one agent
- * with a sessions directory there is unambiguous, and `main` is the answer
- * for the common single-agent gateway even where others exist but have not
- * written a session yet. Several agents with sessions and no `main`, or none
- * at all, is a real "croft setup cannot know this" — inventing an answer
- * would point the sweep at the wrong agent's transcripts, or at nothing, and
- * say nothing about it, so this reports why instead and leaves it to whoever
- * runs setup to set CROFT_OPENCLAW_SESSIONS by hand.
- *
- * The directory this returns ends up in a cron line and a launchd plist
- * (scripts/install-cron.mjs), quoted for a shell there but never for cron's
- * own `%` handling on the plain-cron backend. An agent name is not typed by a
- * person — it is whatever a directory under `agents/` happens to be named —
- * so it is checked against a plain allowlist before it is allowed anywhere
- * near either backend, the same discipline CROFT_OPENCLAW_SESSIONS itself
- * gets when it comes from the environment instead (see `croft setup`, step 9).
- */
-const SAFE_AGENT_NAME = /^[A-Za-z0-9._-]+$/
-
-const openclawSessionsDir = () => {
-  const configPath = process.env.OPENCLAW_CONFIG_PATH?.trim() || join(HOME, '.openclaw', 'openclaw.json')
-  const agentsDir = join(dirname(configPath), 'agents')
-  if (!existsSync(agentsDir)) return { error: `no ${agentsDir} on this machine yet` }
-  let names
-  try {
-    names = readdirSync(agentsDir)
-  } catch (error) {
-    return { error: `could not read ${agentsDir} (${error.message})` }
-  }
-  const unsafe = names.filter((name) => !SAFE_AGENT_NAME.test(name))
-  const safe = names.filter((name) => SAFE_AGENT_NAME.test(name))
-  const withSessions = safe
-    .map((name) => join(agentsDir, name, 'agent', 'codex-home', 'sessions'))
-    .filter((dir) => existsSync(dir))
-  const ignoredNote = unsafe.length
-    ? ` (ignored ${unsafe.length} agent name(s) under ${agentsDir} that are not plain letters, digits, dots, dashes or underscores)`
-    : ''
-  if (withSessions.length === 1) return { dir: withSessions[0] }
-  if (withSessions.length === 0) return { error: `no agent under ${agentsDir} has a codex-home/sessions directory yet${ignoredNote}` }
-  const main = join(agentsDir, 'main', 'agent', 'codex-home', 'sessions')
-  if (withSessions.includes(main)) return { dir: main }
-  return { error: `${withSessions.length} agents under ${agentsDir} each have sessions — ambiguous${ignoredNote}` }
-}
-
 /** Rewrite or append `KEY=value` lines in an env file, leaving everything else untouched. */
 const setEnvKeys = (path, updates) => {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
@@ -3054,16 +3044,15 @@ const commands = {
     emit(data, {
       rows: (d) =>
         d.results.map((r) => ({
+          // Whatever kind the server sends is printed as it is: a subject
+          // carries its stage where a task carries its status.
           kind: r.kind ?? 'task',
-          ref: r.ref,
-          // A stale fact is still current knowledge; what it is not is
-          // confirmed. Said in the column already read for exactly that,
-          // rather than as a column everyone learns to ignore.
-          status: r.status === 'superseded' && !r.stale ? 'superseded' : factMark(r) || (r.status ?? ''),
-          type: r.type ?? '',
-          answered: r.resolved ? 'yes' : '',
-          tokens: `~${r.tokens}`,
-          title: truncate(r.title, 70),
+          ref: r.ref ?? r.slug ?? r.id ?? '',
+          status: cellOf(r.stage) || cellOf(r.status),
+          type: cellOf(r.type),
+          answered: r.resolved || r.conclusion ? 'yes' : '',
+          tokens: r.tokens == null ? '' : `~${r.tokens}`,
+          title: truncate(cellOf(r.title) || cellOf(r.snippet), 70),
         })),
       columns: ['kind', 'ref', 'status', 'type', 'answered', 'tokens', 'title'],
     })
@@ -3088,7 +3077,8 @@ const commands = {
   },
 
   async list() {
-    const project = need(flags.project ?? positional[0], 'usage: croft list --project <KEY>')
+    // Todos, unless told otherwise: every subject's todos live in project T.
+    const project = flags.project ?? positional[0] ?? TODO_KEY
     const params = new URLSearchParams()
     for (const k of ['status', 'type', 'label', 'limit', 'offset']) {
       if (flags[k]) params.set(k, flags[k])
@@ -3348,17 +3338,6 @@ const commands = {
     return emit(await request('POST', `/api/v1/tasks/${ref}/activity`, payload))
   },
 
-  async push() {
-    const ref = need(positional[0], 'usage: croft push <ref> <sha> [--repo PATH]')
-    const sha = need(positional[1], 'the pushed commit SHA is required')
-    const payload = { event: 'git_push', sha }
-    if (flags.repo) payload.repo = flags.repo
-    if (flags.branch) payload.branch = flags.branch
-    if (flags.remote) payload.remote = flags.remote
-    if (flags.url) payload.url = flags.url
-    return emit(await request('POST', `/api/v1/tasks/${ref}/activity`, payload))
-  },
-
   async run() {
     const ref = need(positional[0], 'usage: croft run <ref> "<command>" --status passed|failed|skipped')
     const command = await resolveValue(need(positional[1], 'the command is required'))
@@ -3590,8 +3569,8 @@ const commands = {
       const title = need(positional[2], 'usage: croft project create <KEY> "<title>"')
       // Checked here as well as on the server, so the error names the rule
       // rather than coming back as a validation failure from a POST.
-      if (!/^[A-Z][A-Z0-9]{1,9}$/.test(key)) {
-        die(`"${key}" is not a project key — 2 to 10 uppercase letters or digits, e.g. CROFT`)
+      if (!/^[A-Z][A-Z0-9]{0,9}$/.test(key)) {
+        die(`"${key}" is not a project key — 1 to 10 uppercase letters or digits, starting with a letter, e.g. LAB`)
       }
       const description = flags.body === undefined ? undefined : await resolveValue(flags.body)
       emit(
@@ -3611,8 +3590,8 @@ const commands = {
      * `rename --key` is the same thing in the spelling `entities rename` uses.
      */
     const rekey = async (newKey, title) => {
-      if (!/^[A-Z][A-Z0-9]{1,9}$/.test(newKey)) {
-        die(`"${newKey}" is not a project key — 2 to 10 uppercase letters or digits, e.g. CROFT`)
+      if (!/^[A-Z][A-Z0-9]{0,9}$/.test(newKey)) {
+        die(`"${newKey}" is not a project key — 1 to 10 uppercase letters or digits, starting with a letter, e.g. LAB`)
       }
       const data = await request('PATCH', `/api/v1/projects/${key}`, {
         key: newKey,
@@ -3674,23 +3653,6 @@ const commands = {
   async claim() {
     const ref = need(positional[0], 'usage: croft claim <ref>')
     emit(named(await request('POST', `/api/v1/tasks/${ref}/claim`, {})))
-
-    // What already bears on it, at the moment it is picked up (CROFT-268). A
-    // recall nobody remembers to run is one that does not happen, and the case
-    // it exists for — a closure elsewhere saying "do not read this as
-    // permission for <this task>" — is exactly the one the claimer does not
-    // know to look for. stderr, and soft: the claim has already succeeded.
-    if (FORMAT !== 'tsv') return
-    const r = await request('GET', `/api/v1/tasks/${ref}/recall?decisions=3&knowledge=3`, undefined, { soft: true })
-    const decisions = Array.isArray(r?.decisions) ? r.decisions : []
-    const facts = Array.isArray(r?.knowledge) ? r.knowledge : []
-    if (decisions.length === 0 && facts.length === 0) return
-    const lines = [`bears on this — croft recall ${ref}:`]
-    for (const d of decisions) {
-      lines.push(`  ${d.ref} ${d.kind} (${d.why.join(', ')}): ${truncate(d.text, 140)}`)
-    }
-    if (facts.length) lines.push(`  knowledge: ${facts.map((k) => k.slug + (factMark(k) ? ` [${factMark(k)}]` : '')).join(', ')}`)
-    process.stderr.write(`${lines.join('\n')}\n`)
   },
   async beat() {
     emit(named(await request('POST', `/api/v1/tasks/${need(positional[0], 'usage: croft beat <ref>')}/beat`, {})))
@@ -3719,410 +3681,6 @@ const commands = {
     emit(named(await request('POST', `/api/v1/tasks/${ref}/block`, { reason: null })))
   },
 
-  // --- knowledge ---------------------------------------------------------
-
-  async learn() {
-    const title = need(positional[0], 'usage: croft learn "<title>" --body -')
-    const body = await resolveValue(flags.body ?? '')
-    // A bare title reads in every list exactly like a fact with an
-    // explanation behind it. The server refuses it too (CROFT-289); saying so
-    // here saves the round trip and names the flag.
-    if (!String(body).trim()) {
-      die('a fact needs a body: what it means and how it was found.\n' +
-        '  croft learn "<title>" --body -   # markdown on stdin')
-    }
-    /**
-     * Scope is decided before the write, not regretted after it.
-     *
-     * This used to default to global whenever --project was absent, and warn
-     * afterwards. Measured over the store, the import scoped 8% of its facts
-     * global while everything written here since ran at 27% — three times
-     * worse, which is what a silent default to the widest scope predicts. A
-     * misfiled task is a nuisance in one place; a fact filed global is in
-     * front of every project, permanently.
-     *
-     * So: an explicit scope wins, a mapped directory supplies one when none
-     * is given, and global has to be asked for. `croft add` has always
-     * refused to file a task without a project; this is the same rule for the
-     * half that travels further.
-     */
-    const chosen = splitList(flags.project)
-    const entities = flags.entity ? splitList(flags.entity) : []
-
-    // Only when nothing was chosen, so the common path costs nothing extra.
-    // The local map answers most of the time; the git remote answers where it
-    // cannot — a second clone, a worktree, a directory nobody ran `croft map`
-    // in — and only the server can turn a remote into a project, so it is
-    // asked. This is the same resolution `croft context` performs, and the
-    // same principle as resolving a task's project from the repository rather
-    // than the path (CROFT-123).
-    let here = null
-    if (!chosen.length && !entities.length && !flags.global) {
-      const cwd = process.cwd()
-      here = projectForDir(cwd)
-      if (!here) {
-        const remote = gitRemote(cwd)
-        if (remote) {
-          const params = new URLSearchParams({ cwd, repo: remote })
-          const seen = await request('GET', `/api/v1/context?${params}`, undefined, { soft: true })
-          here = seen?.project ?? null
-        }
-      }
-    }
-
-    if (!chosen.length && !entities.length && !flags.global && !here) {
-      die(
-        'scope this fact before filing it:\n' +
-          '  --project <KEY>   true of one codebase\n' +
-          '  --entity <key>    true of a business or a stack (croft entities)\n' +
-          '  --global          true everywhere — say so on purpose\n' +
-          'This directory maps to no project, so there is nothing to infer from.',
-      )
-    }
-
-    const projects = chosen.length ? chosen : here ? [here] : []
-
-    const payload = {
-      title,
-      body,
-      labels: splitList(flags.label),
-      projects,
-    }
-    if (entities.length) payload.entities = entities
-    if (flags.slug) payload.slug = flags.slug
-    if (flags.task) payload.sourceTaskRef = flags.task
-    // Files it is about beyond the paths its body names (CROFT-269).
-    if (flags.files) payload.files = splitList(flags.files)
-    if (flags.verified) payload.verified = true
-    // The write refuses a [[reference]] whose fact the store already holds
-    // under another slug, and names it. That refusal is the point, so this
-    // exists for the case it gets wrong — a genuinely new fact whose name
-    // happens to resemble an existing one — and not as the easy way past it.
-    if (flags['allow-dangling']) payload.allowUnresolvedRefs = true
-
-    const result = await request('POST', '/api/v1/knowledge', payload)
-    emit(result)
-
-    // A reference that resolved to nothing close is accepted, because two
-    // entries citing each other cannot both be written first. Accepted is not
-    // the same as unremarkable, so it is said — on stderr, where a warning
-    // belongs, rather than in the row a caller parses.
-    for (const warning of result?.warnings ?? []) {
-      process.stderr.write(`croft: ${warning}\n`)
-    }
-
-    // Same-topic entries already in the store. A new fact that contradicts
-    // an old one leaves both reading as true unless somebody links them.
-    if (result?.similar?.length) {
-      process.stderr.write('croft: existing entries on the same subject:\n')
-      for (const k of result.similar) process.stderr.write(`  ${k.slug}  (${k.scope})  ${truncate(k.title, 70)}\n`)
-      process.stderr.write(
-        `  if one is now wrong: croft unlearn <slug> --superseded-by ${result.slug}` +
-          ' — or croft relearn it; if they agree, link them with [[slug]]\n',
-      )
-    }
-    if (FORMAT === 'tsv' && result?.source_task_id && !flags.task) {
-      process.stderr.write('linked to the task this session holds — --task <ref> to name another\n')
-    }
-
-    // Say what was inferred. Silent correctness is still a surprise the next
-    // time someone expects the old behaviour.
-    if (FORMAT === 'tsv' && here) {
-      process.stderr.write(`scoped to ${here} — this directory's project. --global if it is true everywhere\n`)
-    }
-  },
-
-  async know() {
-    const subject = positional[0]
-
-    /**
-     * Where the memory has holes.
-     *
-     * The map that found these is a web page, and everything that writes
-     * knowledge here is an agent. Without this the findings were visible only
-     * to whoever happened to open a browser -- observations rather than
-     * something anybody could act on.
-     */
-    if (flags.orphans || flags.dangling || flags.gaps) {
-      const gaps = await request('GET', '/api/v1/knowledge/gaps')
-      if (FORMAT === 'json') return emit(gaps)
-
-      const { stats } = gaps
-      if (flags.dangling) {
-        emit(
-          { count: gaps.missing.length, results: gaps.missing },
-          {
-            rows: (d) =>
-              d.results.map((m) => ({
-                slug: m.slug,
-                refs: String(m.from.length),
-                'referenced by': m.from.slice(0, 3).join(', ') + (m.from.length > 3 ? ' …' : ''),
-              })),
-            columns: ['slug', 'refs', 'referenced by'],
-          },
-        )
-        if (FORMAT === 'tsv' && gaps.missing.length > 0) {
-          process.stderr.write(
-            `${stats.dangling} reference${stats.dangling === 1 ? '' : 's'} point at ` +
-              `${gaps.missing.length} entr${gaps.missing.length === 1 ? 'y' : 'ies'} that ` +
-              `do not exist. Write one, or correct the entry that points at it.\n`,
-          )
-        }
-        return
-      }
-
-      if (flags.orphans) {
-        emit(
-          { count: gaps.orphans.length, results: gaps.orphans },
-          {
-            rows: (d) =>
-              d.results.map((o) => ({
-                slug: o.slug,
-                scope: o.project ?? 'global',
-                title: truncate(o.title, 70),
-              })),
-            columns: ['slug', 'scope', 'title'],
-          },
-        )
-        if (FORMAT === 'tsv' && gaps.orphans.length > 0) {
-          process.stderr.write(
-            `${stats.isolated} of ${stats.entries} entries reference nothing and are ` +
-              `referenced by nothing. A fact nothing points at is one nobody finds by ` +
-              `following a trail.\n`,
-          )
-        }
-        return
-      }
-
-      process.stdout.write(
-        `${stats.entries} entries, ${stats.resolved} resolving references\n` +
-          `${stats.islands} island${stats.islands === 1 ? '' : 's'}` +
-          (gaps.islands.length ? `, largest holds ${gaps.islands[0]}` : '') +
-          `\n${stats.isolated} joined to nothing  (croft know --orphans)\n` +
-          `${gaps.missing.length} referenced but never written  (croft know --dangling)\n`,
-      )
-      return
-    }
-
-    // A bare word that is a slug we hold is a fetch; anything else is a search.
-    // Agents should not have to know which, and the distinction is cheap to make.
-    //
-    // Underscores are accepted because the store is full of `[[a_b_c]]`
-    // references that mean `a-b-c` — they arrived with the claude-mem import.
-    // While this shape rejected them, following one's own reference fell
-    // through to full-text search, which on a real pair returned five loosely
-    // related entries and not the target, with nothing to say it had missed.
-    // The server normalises the spelling on lookup; this only has to stop
-    // ruling the reference out before asking.
-    /**
-     * Facts nobody was given in a month (CROFT-270): dead, or titled so that
-     * no search finds them. Either way worth a look — link it, retitle it,
-     * verify it, or unlearn it. The count leaves out the session briefing,
-     * which records nothing, and the output says so.
-     */
-    if (flags.unused) {
-      const days = flags.days ?? (flags.unused === true ? '30' : flags.unused)
-      const params = new URLSearchParams({ unused: String(days), limit: flags.limit ?? '50' })
-      const data = await request('GET', `/api/v1/knowledge?${params}`)
-      if (FORMAT === 'json') return emit(data)
-      emit(data, {
-        rows: (d) =>
-          d.results.map((u) => ({
-            slug: u.slug,
-            'last recalled': u.lastRecalled ? u.lastRecalled.slice(0, 10) : 'never',
-            written: u.createdAt.slice(0, 10),
-            title: truncate(u.title, 60),
-          })),
-        columns: ['slug', 'last recalled', 'written', 'title'],
-      })
-      if (FORMAT === 'tsv') {
-        process.stderr.write(`not recalled in ${data.days} days — ${data.counted}\n`)
-        // An empty list because the store is younger than the window is "not
-        // yet", and printing only the zero reads as "everything is used".
-        if (data.note) process.stderr.write(`croft: ${data.note}\n`)
-      }
-      return
-    }
-
-    /**
-     * What it used to say (CROFT-266). One row per version, newest first, each
-     * saying how it came to be: written, or which edit produced it, by whom and
-     * why. `--full` prints the bodies, which is the part worth comparing.
-     */
-    if (flags.history) {
-      const slug = need(subject, 'usage: croft know <slug> --history [--full]')
-      const h = await request('GET', `/api/v1/knowledge/${slug}/history`)
-      if (FORMAT === 'json') return emit(h)
-
-      const versions = [
-        {
-          version: `${h.version} (live)`,
-          change: h.revisions[0]?.change ?? 'learned',
-          by: h.revisions[0]?.edited_by ?? h.author ?? '',
-          at: (h.revisions[0]?.edited_at ?? h.createdAt ?? '').slice(0, 16).replace('T', ' '),
-          reason: h.revisions[0]?.reason ?? '',
-          title: h.title,
-        },
-        ...h.revisions.map((r, i) => {
-          const older = h.revisions[i + 1]
-          return {
-            version: String(r.revision),
-            change: older?.change ?? 'learned',
-            by: older?.edited_by ?? (r.revision === 1 ? h.author ?? '' : ''),
-            at: (older?.edited_at ?? (r.revision === 1 ? h.createdAt : '') ?? '').slice(0, 16).replace('T', ' '),
-            reason: older?.reason ?? '',
-            title: r.title,
-          }
-        }),
-      ]
-
-      if (flags.full) {
-        const bodies = [{ revision: h.version, body: null }, ...h.revisions]
-        for (const [i, v] of versions.entries()) {
-          process.stdout.write(`## v${v.version} · ${v.change} · ${v.by} · ${v.at}\n`)
-          if (v.reason) process.stdout.write(`reason: ${v.reason}\n`)
-          process.stdout.write(`# ${v.title}\n\n`)
-          if (i > 0) process.stdout.write(`${bodies[i].body}\n\n`)
-          else process.stdout.write('(the live body — croft know ' + h.slug + ')\n\n')
-        }
-        return
-      }
-
-      emit(
-        { count: versions.length, results: versions },
-        {
-          rows: (d) => d.results.map((v) => ({ ...v, reason: truncate(v.reason, 50), title: truncate(v.title, 60) })),
-          columns: ['version', 'change', 'by', 'at', 'reason', 'title'],
-        },
-      )
-      if (FORMAT === 'tsv' && h.revisions.length === 0) {
-        process.stderr.write('never revised: this is the version first written\n')
-      }
-      return
-    }
-
-    if (subject && /^[a-z0-9]+([_-][a-z0-9]+)*$/i.test(subject)) {
-      const hit = await request('GET', `/api/v1/knowledge/${subject}`, undefined, { soft: true })
-      if (hit) {
-        if (FORMAT === 'json') return emit(hit)
-        const k = hit
-        process.stdout.write(`# ${k.title}\n`)
-        if (k.labels?.length) process.stdout.write(`labels: ${k.labels.join(', ')}\n`)
-        // Both scopes, or this reports a fact scoped to an entity as true
-        // everywhere — which is the opposite of what it says.
-        const scope = k.projects?.length
-          ? k.projects.join(', ')
-          : k.entities?.length
-            ? k.entities.join(', ')
-            : 'global'
-        process.stdout.write(`scope: ${scope}\n\n`)
-        process.stdout.write(`${k.body}\n`)
-
-        /**
-         * Which of this entry's own references point at nothing.
-         *
-         * The browser marks these where they are rendered; here the body is
-         * printed verbatim, so an agent following `[[a-slug]]` could not tell
-         * a live reference from a dead one and would fall through to a search
-         * that quietly misses. Asked for only when the body actually contains
-         * a reference, so the ordinary read stays one request.
-         */
-        const referenced = [
-          ...new Set(
-            [...k.body.matchAll(/\[\[([A-Za-z0-9][A-Za-z0-9_-]{1,118}[A-Za-z0-9])\]\]/g)].map(
-              (m) => m[1].trim().toLowerCase().replace(/_/g, '-'),
-            ),
-          ),
-        ]
-        if (referenced.length > 0) {
-          const gaps = await request('GET', '/api/v1/knowledge/gaps', undefined, { soft: true })
-          const unwritten = new Set((gaps?.missing ?? []).map((m) => m.slug))
-          const dead = referenced.filter((r) => unwritten.has(r))
-          if (dead.length > 0) {
-            process.stderr.write(
-              `\nreferences nothing has written: ${dead.join(', ')}\n` +
-                `Write one, or correct this entry — a reference that resolves to nothing ` +
-                `reads as a trail and ends in a search.\n`,
-            )
-          }
-        }
-        return
-      }
-    }
-
-    const params = new URLSearchParams()
-    // Set before the search branch returns, not after it. Living below that
-    // early return, --project was accepted and silently dropped on every
-    // `croft know "<query>" --project K` — the CROFT-145 failure exactly,
-    // relocated from the SQL into the CLI, on the verb agents use most. The
-    // server honours the parameter; only this dropped it.
-    if (flags.project) params.set('project', flags.project)
-    if (flags.label) params.set('label', flags.label)
-    if (flags.limit) params.set('limit', flags.limit)
-    if (flags.superseded) params.set('superseded', '1')
-
-    if (subject) {
-      params.set('q', subject)
-      params.set('kinds', 'knowledge')
-      const data = await request('GET', `/api/v1/search?${params}`)
-      return emit(data, {
-        rows: (d) => d.results.map((r) => ({
-          slug: r.ref,
-          scope: r.project ?? 'global',
-          tokens: `~${r.tokens}`,
-          title: truncate(r.title, 70),
-        })),
-        columns: ['slug', 'scope', 'tokens', 'title'],
-      })
-    }
-
-    const data = await request('GET', `/api/v1/knowledge?${params}`)
-    emit(data, {
-      rows: (d) => d.results.map((r) => ({
-        slug: r.slug,
-        // Where it applies, narrowest first: this project, else the groupings
-        // it belongs to, else everywhere.
-        scope: r.projects?.length
-          ? r.projects.join(',')
-          : r.entities?.length
-            ? r.entities.join(',')
-            : 'global',
-        verified: r.verified ? 'yes' : '',
-        // Searches that returned it and direct reads, last 30 days (CROFT-270).
-        recalled: String(r.recalled ?? ''),
-        tokens: `~${r.tokens}`,
-        title: truncate(r.title, 70),
-      })),
-      // `recalled` last: a column appended at the end is one no reader of this
-      // table sees move.
-      columns: ['slug', 'scope', 'verified', 'tokens', 'title', 'recalled'],
-    })
-  },
-
-  async unlearn() {
-    const slug = need(positional[0], 'usage: croft unlearn <slug> [--superseded-by <slug>]')
-    if (flags['superseded-by']) {
-      return emit(await request('PATCH', `/api/v1/knowledge/${slug}`, {
-        supersededBy: flags['superseded-by'],
-        ...(typeof flags.reason === 'string' ? { reason: flags.reason } : {}),
-      }))
-    }
-    emit(await request('DELETE', `/api/v1/knowledge/${slug}`))
-  },
-
-  /**
-   * Confirm a fact is still true, without rewriting it.
-   *
-   * The correction path already existed (`relearn`); the confirmation path did
-   * not, so the only way to clear a stale mark was to restate the whole body.
-   * Marking something stale and offering no cheap way to answer is how a
-   * confidence signal becomes noise everyone learns to scroll past.
-   */
-  async verify() {
-    const slug = need(positional[0], 'usage: croft verify <slug>')
-    emit(await request('PATCH', `/api/v1/knowledge/${slug}`, { verified: true }))
-  },
-
   /**
    * Send whatever was put aside while the server was unreachable.
    *
@@ -4139,116 +3697,6 @@ const commands = {
               `sent ${d.sent}, rejected ${d.rejected}, still queued ${d.left}` +
                 (d.waiting ? ` (${d.waiting} for another runtime or instance)` : ''),
             ],
-    })
-  },
-
-  async relearn() {
-    const slug = need(positional[0], 'usage: croft relearn <slug> [--body -] [--title T]')
-    const patch = {}
-    if (flags.body !== undefined) patch.body = await resolveValue(flags.body)
-    if (flags.title) patch.title = flags.title
-    if (flags.label) patch.labels = splitList(flags.label)
-    // A PATCH only touches the side it is given, so `--entity X` adds an entity
-    // and leaves the project in place — and moving a fact from a project to an
-    // entity needed a way to clear one side. `none` is that way, as for `croft
-    // map none`. An empty value used to be read as "not given" and silently
-    // dropped, the CROFT-262 failure again; it is refused instead (CROFT-295).
-    const scopeList = (name) => {
-      const raw = flags[name]
-      if (raw === undefined) return undefined
-      if (raw === true || splitList(raw).length === 0) {
-        die(`--${name} needs a value: a key, a comma list, or none to clear it`)
-      }
-      const list = splitList(raw)
-      return list.length === 1 && list[0].toLowerCase() === 'none' ? [] : list
-    }
-    const projects = scopeList('project')
-    const entities = scopeList('entity')
-    if (projects) patch.projects = projects
-    if (entities) patch.entities = entities
-    // `--global` on a PATCH has to CLEAR, where on `learn` it only means "do
-    // not infer from this directory". Both scopes go: a fact true everywhere
-    // is one with no project and no entity, and clearing only projects would
-    // leave `relearn --global` producing a state `learn --global` cannot.
-    //
-    // It was missing entirely and, because KNOWN_FLAGS is one list for every
-    // verb, `croft relearn <slug> --global` parsed, printed the entry with its
-    // old scope still on it, and exited 0 (CROFT-262).
-    if (flags.global) {
-      if (projects !== undefined || entities !== undefined) {
-        die('--global means no project and no entity; do not pass it with --project or --entity')
-      }
-      patch.projects = []
-      patch.entities = []
-    }
-    if (flags.verified) patch.verified = true
-    // PATCH runs the same [[reference]] check as the write, so relearn needs
-    // the same way past it. Without this the flag parses — it is in the global
-    // KNOWN_FLAGS — and is silently dropped, which is the exact thing that set
-    // refuses to do: an answer that looks like it took your argument and did
-    // not.
-    if (flags['allow-dangling']) patch.allowUnresolvedRefs = true
-    // Why it changed, kept on the version this replaces (CROFT-266).
-    if (typeof flags.reason === 'string') patch.reason = flags.reason
-    // Replaces the explicitly named files; `--files ''` clears them (CROFT-269).
-    if (flags.files !== undefined) patch.files = flags.files === true ? [] : splitList(flags.files)
-
-    const result = await request('PATCH', `/api/v1/knowledge/${slug}`, patch)
-    emit(result)
-    for (const warning of result?.warnings ?? []) {
-      process.stderr.write(`croft: ${warning}\n`)
-    }
-  },
-
-  async entities() {
-    const verb = positional.shift()
-
-    if (verb === 'add') {
-      const key = need(positional[0], 'usage: croft entities add <key> "<title>" [--project A,B]')
-      return emit(
-        await request('POST', '/api/v1/entities', {
-          key,
-          title: positional[1] ?? key,
-          description: flags.description ?? '',
-          projects: splitList(flags.project),
-        }),
-      )
-    }
-
-    if (verb === 'rename') {
-      const key = need(positional[0], 'usage: croft entities rename <key> [--key <new>] [--title "T"]')
-      const patch = { key }
-      if (flags.key) patch.newKey = flags.key
-      if (flags.title) patch.title = flags.title
-      if (flags.description) patch.description = flags.description
-      return emit(await request('PATCH', '/api/v1/entities', patch))
-    }
-
-    if (verb === 'assign' || verb === 'unassign') {
-      const key = need(positional[0], `usage: croft entities ${verb} <key> --project A,B`)
-      const projects = splitList(flags.project ?? positional[1])
-      if (projects.length === 0) die('--project is required')
-      return emit(
-        await request('PATCH', '/api/v1/entities', {
-          key,
-          addProjects: verb === 'assign' ? projects : [],
-          removeProjects: verb === 'unassign' ? projects : [],
-        }),
-      )
-    }
-
-    if (verb) die(`unknown entities verb "${verb}" — try: add, rename, assign, unassign`)
-
-    const data = await request('GET', '/api/v1/entities')
-    emit(data, {
-      rows: (d) =>
-        d.results.map((e) => ({
-          entity: e.key,
-          projects: e.projects.length,
-          keys: truncate(e.projects.join(' '), 58),
-          title: e.title,
-        })),
-      columns: ['entity', 'projects', 'keys', 'title'],
     })
   },
 
@@ -4290,43 +3738,293 @@ const commands = {
 
   // --- the briefing ------------------------------------------------------
 
-  /**
-   * What already bears on one task (CROFT-268): decisions on the tasks around
-   * it and the knowledge that applies, each line saying why it was picked. Run
-   * it when picking a task up — it is the question `check` answers from a
-   * phrase, asked from the task instead.
-   */
-  async recall() {
-    const ref = need(positional[0], 'usage: croft recall <ref> [--limit N]')
-    const params = new URLSearchParams()
-    if (flags.limit) {
-      params.set('decisions', flags.limit)
-      params.set('knowledge', flags.limit)
-    }
-    const r = await request('GET', `/api/v1/tasks/${ref}/recall${String(params) ? `?${params}` : ''}`)
-    if (FORMAT !== 'tsv') return emit(r)
+  // --- the lab -----------------------------------------------------------
 
-    const out = [`# ${r.ref} — ${r.title}`, '']
-    out.push(r.decisions.length ? 'decisions' : 'decisions: none recorded on related tasks')
-    for (const d of r.decisions) {
-      out.push(`  ${d.ref}  ${d.kind} · ${d.why.join(', ')} · ${d.by ?? '?'} · ${d.at.slice(0, 10)}  [${d.status}]`)
-      out.push(`    ${d.text}`)
+  /**
+   * Subjects: the lab's unit of work — something to explore, prove or build
+   * before it becomes real work. `croft subject <verb> S-12 …`.
+   */
+  async subject() {
+    const verb = positional[0]
+    const usage = 'usage: croft subject add|list|show|edit|stage|note|tag|todo …  (croft help)'
+
+    if (verb === 'add') {
+      const title = need(positional[1], 'usage: croft subject add "<title>" [--stage S] [--tag t] [--owner me] [--body -]')
+      const body = { title }
+      if (flags.body !== undefined) body.body = await resolveValue(need(flags.body, '--body needs text, or - for stdin'))
+      if (flags.stage !== undefined) body.stage = need(flags.stage, '--stage needs a stage name (croft stages)')
+      const tags = splitList(flags.tag)
+      if (tags.length) body.tags = tags
+      if (flags.owner !== undefined) body.owner = need(flags.owner, '--owner needs me or a user id')
+      const created = await request('POST', '/api/v1/subjects', body)
+      if (FORMAT !== 'tsv') return emit(created)
+      emitSubjects([created])
+      process.stderr.write(`filed ${created.ref} — log as you go: croft subject note ${created.ref} - --kind finding\n`)
+      return
     }
-    out.push('')
-    out.push(r.knowledge.length ? 'knowledge' : 'knowledge: nothing linked or matching')
-    for (const k of r.knowledge) {
-      const marks = [factMark(k), k.verified ? 'verified' : ''].filter(Boolean).join(', ')
-      out.push(`  ${k.slug}${marks ? `  [${marks}]` : ''}`)
-      out.push(`    ${k.title} — ${k.why.join('; ')}`)
+
+    if (verb === 'list') {
+      const params = new URLSearchParams()
+      if (flags.stage) params.set('stage', flags.stage)
+      const tags = splitList(flags.tag)
+      if (tags.length) params.set('tag', tags.join(','))
+      if (flags.mine) params.set('owner', 'me')
+      if (flags.all) params.set('archived', '1')
+      const list = await request('GET', `/api/v1/subjects${String(params) ? `?${params}` : ''}`)
+      return emitSubjects(list)
     }
-    const more = []
-    if (r.omitted.decisions) more.push(`${r.omitted.decisions} more decision(s)`)
-    if (r.omitted.knowledge) more.push(`${r.omitted.knowledge} more fact(s)`)
-    if (more.length) out.push('', `${more.join(', ')} — croft recall ${ref} --limit 30`)
-    process.stdout.write(`${out.join('\n')}\n`)
+
+    if (verb === 'show') {
+      const ref = subjectArg(positional[1], 'usage: croft subject show S-12 [--full]')
+      const full = Boolean(flags.full)
+      const [subject, notes, todos] = await Promise.all([
+        request('GET', `/api/v1/subjects/${ref}`),
+        request('GET', `/api/v1/subjects/${ref}/notes`, undefined, { soft: true }),
+        request('GET', `/api/v1/subjects/${ref}/todos`, undefined, { soft: true }),
+      ])
+      if (FORMAT !== 'tsv') return emit({ ...subject, notes: asList(notes, 'notes'), todos: asList(todos, 'todos') })
+      const { text, withheld } = renderSubject({ ...subject, ref: subject.ref ?? ref }, asList(notes, 'notes'), asList(todos, 'todos'), { full })
+      process.stdout.write(text)
+      if (withheld) {
+        process.stderr.write(
+          `withheld: ${withheld.body}B of write-up, ${withheld.notes} note(s)` +
+            ` — croft subject show ${subject.ref ?? ref} --full is ~${withheld.tokens} tokens\n`,
+        )
+      }
+      return
+    }
+
+    if (verb === 'edit') {
+      const ref = subjectArg(positional[1], 'usage: croft subject edit S-12 [--title T] [--body -]')
+      const patch = {}
+      if (flags.title !== undefined) patch.title = need(flags.title, '--title needs text')
+      if (flags.body !== undefined) patch.body = await resolveValue(need(flags.body, '--body needs text, or - for stdin'))
+      if (!Object.keys(patch).length) die('nothing to change — pass --title and/or --body')
+      const updated = await request('PATCH', `/api/v1/subjects/${ref}`, patch)
+      return FORMAT === 'tsv' ? emitSubjects([updated]) : emit(updated)
+    }
+
+    if (verb === 'stage') {
+      const ref = subjectArg(positional[1], 'usage: croft subject stage S-12 "<stage>" [--conclusion -]')
+      const stage = need(positional[2], `usage: croft subject stage ${ref} "<stage>" [--conclusion -]   (croft stages lists them)`)
+      const patch = { stage }
+      if (flags.conclusion !== undefined) {
+        patch.conclusion = await resolveValue(need(flags.conclusion, '--conclusion needs text, or - for stdin'))
+      }
+      const updated = await request('PATCH', `/api/v1/subjects/${ref}`, patch, { onError: conclusionRefusal(ref, stage) })
+      return FORMAT === 'tsv' ? emitSubjects([updated]) : emit(updated)
+    }
+
+    if (verb === 'note') {
+      const ref = subjectArg(positional[1], 'usage: croft subject note S-12 "<text>"|- [--kind finding|decision|attempt|note|handoff]')
+      const note = await resolveValue(need(positional[2], 'a note body is required ("<text>", or - for stdin)'))
+      const kind = flags.kind ?? 'note'
+      if (!SUBJECT_NOTE_KINDS.includes(kind)) die(`--kind must be one of ${SUBJECT_NOTE_KINDS.join(', ')}`)
+      emit(await request('POST', `/api/v1/subjects/${ref}/notes`, { note, kind }))
+      if (!flags.kind && FORMAT === 'tsv' && DEAD_END.test(note)) {
+        process.stderr.write(
+          `reads like a dead end — \`croft subject note ${ref} - --kind attempt\` marks it so the next agent does not retry it\n`,
+        )
+      }
+      return
+    }
+
+    if (verb === 'tag') {
+      const ref = subjectArg(positional[1], 'usage: croft subject tag S-12 +x -y')
+      const { add, remove } = tagChanges(positional.slice(2))
+      if (!add.length && !remove.length) die(`usage: croft subject tag ${ref} +x -y   (croft tags lists them)`)
+      const current = await request('GET', `/api/v1/subjects/${ref}`)
+      const names = new Set((current.tags ?? []).map((t) => cellOf(t).toLowerCase()))
+      for (const t of add) names.add(t)
+      for (const t of remove) names.delete(t)
+      const updated = await request('PATCH', `/api/v1/subjects/${ref}`, { tags: [...names] })
+      return FORMAT === 'tsv' ? emitSubjects([updated]) : emit(updated)
+    }
+
+    if (verb === 'todo') {
+      const ref = subjectArg(positional[1], 'usage: croft subject todo S-12 "<title>" [--body -]')
+      const title = need(positional[2], `usage: croft subject todo ${ref} "<title>" [--body -]`)
+      const body = { title }
+      if (flags.body !== undefined) body.description = await resolveValue(need(flags.body, '--body needs text, or - for stdin'))
+      for (const k of ['type', 'priority']) if (flags[k]) body[k] = flags[k]
+      const todo = await request('POST', `/api/v1/subjects/${ref}/todos`, body)
+      const todoRef = todo.ref ?? refOfTask(todo)
+      // As `add` does for a runtime: the agent filing a todo is about to do it.
+      const start = Boolean(flags.start) || (!flags['no-start'] && Boolean(AGENT))
+      let shown = todo
+      if (start && todoRef) {
+        const held = await request('POST', `/api/v1/tasks/${todoRef}/claim`, {}, { soft: !flags.start })
+        if (held) {
+          shown = { ...todo, status: held.status ?? todo.status, claimed_by: held.claimed_by ?? todo.claimed_by }
+          if (!flags.start) process.stderr.write(`claimed ${todoRef} (agents' todos start the work; --no-start to only file it)\n`)
+        } else {
+          process.stderr.write(`filed ${todoRef} but could not claim it — \`croft claim ${todoRef}\`\n`)
+        }
+      }
+      if (FORMAT !== 'tsv') return emit(shown)
+      return emit([shown], { rows: (d) => d.map(todoRow), columns: ['ref', 'status', 'held', 'cairn', 'title'] })
+    }
+
+    die(verb ? `unknown subject verb "${verb}"\n${usage}` : usage)
+  },
+
+  async stages() {
+    const stages = await request('GET', '/api/v1/stages')
+    emit(stages, {
+      rows: (d) =>
+        [...asList(d, 'stages')]
+          .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+          .map((s) => ({ stage: s.name, category: s.category, conclusion: CONCLUDING.has(s.category) ? 'required' : '' })),
+      columns: ['stage', 'category', 'conclusion'],
+    })
+  },
+
+  async tags() {
+    const tags = await request('GET', '/api/v1/tags')
+    emit(tags, {
+      rows: (d) => [...asList(d, 'tags')].sort((a, b) => (a.position ?? 0) - (b.position ?? 0)).map((t) => ({ tag: t.name, color: t.color ?? '' })),
+      columns: ['tag', 'color'],
+    })
+  },
+
+  /**
+   * Two verbs under one name, told apart by --to.
+   *
+   * `push T-41 --to CAIRN` is the hand-over: the lab has proved the idea and
+   * a repo is about to change for real, which is Cairn's work. It files the
+   * todo in Cairn through Cairn's own CLI (so Cairn's routing, keys and
+   * checks apply) and records the link; from then on Cairn owns the status
+   * and `croft sync` reads it back.
+   *
+   * `push <ref> <sha>` records a git push, as it always has.
+   */
+  async push() {
+    const ref = need(positional[0], 'usage: croft push T-41 --to <CAIRN_KEY>   |   croft push <ref> <sha>')
+
+    if (flags.link !== undefined) {
+      const cairnRef = String(need(flags.link, '--link needs the Cairn ref, e.g. --link CAIRN-331')).toUpperCase()
+      if (!/^[A-Z][A-Z0-9]{0,9}-\d+$/.test(cairnRef)) die(`"${cairnRef}" is not a Cairn task ref`)
+      return emit(await request('POST', `/api/v1/tasks/${ref}/cairn-link`, { cairnRef }))
+    }
+
+    if (flags.to === undefined) {
+      const sha = need(positional[1], 'the pushed commit SHA is required (or --to <CAIRN_KEY> to hand the todo to Cairn)')
+      const payload = { event: 'git_push', sha }
+      if (flags.repo) payload.repo = flags.repo
+      if (flags.branch) payload.branch = flags.branch
+      if (flags.remote) payload.remote = flags.remote
+      if (flags.url) payload.url = flags.url
+      return emit(await request('POST', `/api/v1/tasks/${ref}/activity`, payload))
+    }
+
+    const key = String(need(flags.to, '--to needs the Cairn project key, e.g. --to CAIRN')).toUpperCase()
+    if (!/^[A-Z][A-Z0-9]{0,9}$/.test(key)) die(`"${key}" is not a Cairn project key`)
+    const bin = resolveCairn()
+    if (!bin) die(NO_CAIRN)
+
+    const todo = await request('GET', `/api/v1/tasks/${ref}`)
+    const todoRef = refOfTask(todo) ?? ref
+    if (todo.cairn_ref && !flags.force) {
+      die(`${todoRef} is already paired with ${todo.cairn_ref} — \`croft sync\` pulls its status; --force files another`)
+    }
+    const subjectRef =
+      todo.subject?.ref ?? todo.subject_ref ?? (todo.subject_number ? `S-${todo.subject_number}` : null)
+    const type = flags.type ?? CAIRN_TYPES[todo.type] ?? 'feature'
+    const description = String(todo.description ?? '').trim()
+    const body = [description, `From Croft ${todoRef}${subjectRef ? ` (subject ${subjectRef})` : ''}`]
+      .filter(Boolean)
+      .join('\n\n')
+    const args = ['add', todo.title, '--project', key, '--type', type, '--label', `croft:${todoRef}`, '--body', '-', '--no-start']
+    // Cairn refuses a bug or spike with no real body; the line saying where it
+    // came from is not one, and the description is what there is.
+    if (!description && ['bug', 'spike'].includes(type)) args.push('--force-empty')
+
+    const run = runCairn(bin, args, body)
+    if (run.error) die(`could not run ${bin}: ${run.error.message}`)
+    if (run.stderr) process.stderr.write(run.stderr.replace(/^/gm, 'cairn: '))
+    if (run.status !== 0) die(`cairn add failed (exit ${run.status}); nothing was linked`, run.status === UNDECIDED_EXIT ? UNDECIDED_EXIT : 1)
+    const cairnRef = parseCairnRef(run.stdout)
+    if (!cairnRef) {
+      die(
+        `cairn add exited 0 but named no task ref:\n${String(run.stdout).slice(0, 400)}\n` +
+          `find it in Cairn (label croft:${todoRef}) and record it: croft push ${todoRef} --link <CAIRN-REF>`,
+      )
+    }
+    // Said before the link is recorded, so a failure below still leaves the
+    // ref on screen rather than a Cairn task nobody knows was filed.
+    process.stderr.write(`filed ${cairnRef} in Cairn\n`)
+    const linked = await request('POST', `/api/v1/tasks/${todoRef}/cairn-link`, { cairnRef }, {
+      onError: (payload) =>
+        die(`${cairnRef} was filed, but Croft refused the link: ${payload.error}\nrecord it once that is fixed: croft push ${todoRef} --link ${cairnRef}`),
+    })
+    if (FORMAT !== 'tsv') return emit({ ref: todoRef, cairnRef, ...(linked && typeof linked === 'object' ? linked : {}) })
+    emit([{ ref: todoRef, cairn: cairnRef, subject: subjectRef ?? '', title: truncate(todo.title, 70) }], {
+      columns: ['ref', 'cairn', 'subject', 'title'],
+    })
+    process.stderr.write(
+      `${todoRef} -> ${cairnRef}: Cairn owns its status from here (\`cairn claim ${cairnRef}\` when you start it); ` +
+        '`croft sync` pulls it back\n',
+    )
+  },
+
+  /**
+   * Pull the status of every paired todo back from Cairn. The server does it
+   * when an admin has connected Cairn; otherwise this machine does, through
+   * the cairn CLI and its own keys.
+   */
+  async sync() {
+    let refusal = null
+    let status = 0
+    const data = await request('POST', '/api/v1/integrations/cairn/sync', {}, {
+      soft: true,
+      onError: (payload, code) => {
+        refusal = payload
+        status = code
+      },
+    })
+    if (data) {
+      if (FORMAT !== 'tsv' || !Array.isArray(data.results)) return emit(data)
+      return emit(data.results, {
+        rows: (d) => d.map((r) => ({ ref: r.ref ?? '', cairn: r.cairnRef ?? r.cairn_ref ?? '', status: r.cairnStatus ?? r.cairn_status ?? '', result: r.result ?? '' })),
+        columns: ['ref', 'cairn', 'status', 'result'],
+      })
+    }
+    const notConfigured =
+      status === 404 || CAIRN_NOT_CONFIGURED.has(refusal?.code) || /not configured|no cairn connection/i.test(refusal?.error ?? '')
+    if (!notConfigured) die(`croft sync: ${refusal?.error ?? 'the server did not answer'}`)
+
+    const bin = resolveCairn()
+    if (!bin) {
+      die('the server has no Cairn connection (an admin can add one in Settings), and this machine has no cairn CLI to sync through')
+    }
+    process.stderr.write('the server has no Cairn connection; syncing through this machine\'s cairn CLI\n')
+    const rows = []
+    for (const todo of await linkedTodos()) {
+      const run = runCairn(bin, ['show', todo.cairn_ref, '--json'])
+      let cairnTask = null
+      try {
+        cairnTask = run.status === 0 ? JSON.parse(run.stdout) : null
+      } catch {
+        cairnTask = null
+      }
+      const cairnStatus = cairnTask?.status
+      if (!cairnStatus) {
+        const why = String(run.stderr || run.error?.message || `exit ${run.status}`).trim().split('\n')[0]
+        rows.push({ ref: todo.ref, cairn: todo.cairn_ref, status: todo.cairn_status ?? '', result: `unread: ${truncate(why, 60)}` })
+        continue
+      }
+      if (cairnStatus === todo.cairn_status) {
+        rows.push({ ref: todo.ref, cairn: todo.cairn_ref, status: cairnStatus, result: 'unchanged' })
+        continue
+      }
+      await request('POST', `/api/v1/tasks/${todo.ref}/cairn-link`, { cairnRef: todo.cairn_ref, cairnStatus })
+      rows.push({ ref: todo.ref, cairn: todo.cairn_ref, status: cairnStatus, result: `was ${todo.cairn_status ?? 'unknown'}` })
+    }
+    emit(rows, { columns: ['ref', 'cairn', 'status', 'result'] })
   },
 
   async context() {
+    if (flags.brief) return brief()
     const cwd = flags.cwd ?? process.cwd()
     const params = new URLSearchParams()
     params.set('cwd', cwd)
@@ -4349,9 +4047,6 @@ const commands = {
   /**
    * Which instance a directory belongs to, and saving the answer. Local only,
    * like `instance`: the point is to be usable exactly when nothing is routed.
-   *
-   * Saving an answer also sends the sessions the session-end hook parked while
-   * nobody had said where they go — the reason parking loses nothing.
    */
   async route() {
     const sub = positional[0] ?? 'show'
@@ -4363,16 +4058,10 @@ const commands = {
     if (sub === 'show') {
       return emit(INSTANCE.name
         ? { path: tilde(key), instance: INSTANCE.name, why: INSTANCE.why }
-        : { path: tilde(key), instance: null, why: INSTANCE.error ?? 'nothing routes it', waiting: parkedSessions().filter((p) => p.cwd && routeKey(p.cwd).key === key).length })
+        : { path: tilde(key), instance: null, why: INSTANCE.error ?? 'nothing routes it' })
     }
     if (sub === 'list') {
       return emit(INSTANCES.routes.map((r) => ({ path: tilde(r.path), match: r.match, instance: r.instance })))
-    }
-    if (sub === 'pending') {
-      return emit(await Promise.all(parkedSessions().map(async (p) => ({
-        session: p.sessionId, t: p.t, cwd: p.cwd ? tilde(p.cwd) : undefined, agent: p.agent ?? undefined,
-        routes_to: p.cwd ? (await resolveRoute({ config: INSTANCES, dir: p.cwd, session: p.sessionId })).name ?? undefined : undefined,
-      }))))
     }
     if (sub === 'remove') {
       const match = flags.folder ? 'folder' : 'exact'
@@ -4381,7 +4070,7 @@ const commands = {
       writeInstancesConfig({ ...INSTANCES.raw, version: 1, routes })
       return emit({ removed: tilde(key), match })
     }
-    if (sub !== 'add') die('usage: croft route [show|list|pending|add <instance> [--folder|--session] [--dir D] [--force]|remove [--folder] [--dir D]]')
+    if (sub !== 'add') die('usage: croft route [show|list|add <instance> [--folder|--session] [--dir D] [--force]|remove [--folder] [--dir D]]')
 
     const instance = need(positional[1], 'usage: croft route add <instance> [--folder | --session] [--dir <path>] [--force]')
     if (flags.folder && flags.session) die('--folder and --session are different answers; give one')
@@ -4396,41 +4085,8 @@ const commands = {
     })
     if (problem) die(`croft: ${problem}`, 2)
 
-    // Replayed through this same CLI, one process per session, so each goes
-    // through the routing just saved exactly as a live command would. Never
-    // checkpointing: a parked session may be days old, and its held tasks
-    // have moved on since.
-    const after = readInstances()
-    const sent = []
-    const failed = []
-    for (const parked of parkedSessions()) {
-      const target = parked.cwd && (await resolveRoute({ config: after, dir: parked.cwd, session: parked.sessionId })).name
-      if (!target || !Array.isArray(parked.args)) continue
-      const args = parked.args.includes('--no-checkpoint') ? parked.args : [...parked.args, '--no-checkpoint']
-      // The instance decides the server and the key; a CROFT_API_KEY left in
-      // this shell would only get every replay refused.
-      const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !['CROFT_API_KEY', 'CROFT_BASE_URL', 'CROFT_INSTANCE'].includes(k)))
-      const result = spawnSync(process.execPath, [process.argv[1], ...args, '--instance', target], {
-        env: { ...env, CROFT_AGENT: parked.agent ?? '', CROFT_PLATFORM: parked.platform ?? '' },
-        stdio: ['ignore', 'ignore', 'pipe'],
-        encoding: 'utf8',
-        timeout: 30_000,
-      })
-      if (result.status === 0) {
-        rmSync(parked.file, { force: true })
-        sent.push(parked.sessionId)
-      } else failed.push({ session: parked.sessionId, why: (result.stderr || result.error?.message || `exit ${result.status}`).trim().split('\n')[0] })
-    }
     const scope = flags.session ? 'this session' : flags.folder ? `${tilde(key)} and everything under it` : `${repo ? 'repository' : 'directory'} ${tilde(key)}`
-    return emit({ instance, scope, sent: sent.length, failed }, {
-      lines: (d) => [
-        `${d.scope} -> ${d.instance}`,
-        ...(d.sent ? [`  sent ${d.sent} session(s) that were waiting for this`] : []),
-        ...(d.failed.length
-          ? [`  ${d.failed.length} waiting session(s) could not be sent yet (\`croft route pending\` lists them); first: ${d.failed[0].why}`]
-          : []),
-      ],
-    })
+    return emit({ instance, scope }, { lines: (d) => [`${d.scope} -> ${d.instance}`] })
   },
 
   /**
@@ -4793,33 +4449,11 @@ const commands = {
       if (flags['no-jobs']) {
         line('– jobs      skipped (--no-jobs)')
       } else {
-        const jobs = ['agent-files', ...(flags.maintenance ? ['reconcile', 'vitals'] : [])]
-        // OpenClaw has no session-end event (docs/openclaw.md): the sweep is
-        // the only thing that ever records its transcripts, so setting it up
-        // is not optional the way the rest of scheduled maintenance is.
-        // CROFT_OPENCLAW_SESSIONS already in the environment wins outright —
-        // it says the operator already knows better than a directory guess.
-        let jobEnv
-        if (runtimes.includes('openclaw')) {
-          const already = process.env.CROFT_OPENCLAW_SESSIONS?.trim()
-          const resolved = already ? { dir: already } : openclawSessionsDir()
-          if (resolved.dir) {
-            jobs.push('openclaw-sessions')
-            jobEnv = { ...process.env, CROFT_OPENCLAW_SESSIONS: resolved.dir }
-            // Said here, not left to the installer's own output: on a first run
-            // the cron backend skips jobs whose scripts the hooks step has not
-            // put in place yet, so its plan alone would never name the directory.
-            line(`${dry ? '!' : '✓'} jobs      openclaw-sessions will sweep ${resolved.dir}`)
-          } else {
-            line(`! jobs      openclaw-sessions skipped — ${resolved.error}`)
-            line('            set CROFT_OPENCLAW_SESSIONS=<dir> and re-run, e.g.:')
-            line(`            CROFT_OPENCLAW_SESSIONS=/root/.openclaw/agents/main/agent/codex-home/sessions croft setup --url ${url}`)
-          }
-        }
+        const jobs = ['agent-files', ...(flags.maintenance ? ['reconcile'] : [])]
         const result = spawnSync(
           process.execPath,
           [join(releaseDir, 'scripts', 'install-cron.mjs'), ...(dry ? [] : ['--install']), '--only', jobs.join(',')],
-          { encoding: 'utf8', ...(jobEnv ? { env: jobEnv } : {}) },
+          { encoding: 'utf8' },
         )
         line(`${dry ? '!' : '✓'} jobs      ${jobs.join(', ')}${dry ? ' (plan):' : ':'}`)
         for (const l of `${result.stdout ?? ''}${result.stderr ?? ''}`.split('\n')) if (l.trim()) line(`   ${l}`)
@@ -4916,132 +4550,6 @@ const commands = {
     emit({ path: dir, project: map[dir] ?? null, repo, ...(claimed ?? {}) })
   },
 
-  /**
-   * Is the memory still being written?
-   *
-   * Prints the findings and nothing else when there are any, because a report
-   * nobody reads is the same as no report. `--all` shows the counts behind
-   * them. `--notify <ref>` posts the findings as a note and says nothing when
-   * there are none, which is what makes it safe to run on a schedule.
-   */
-  async vitals() {
-    /**
-     * Whether agents use the memory was measured but only ever displayed in a
-     * browser, which is the one place the population it measures cannot look.
-     * `null` when the aggregate is unreadable — the monitor still answers.
-     */
-    const memoryLines = (m) => {
-      if (!m) return []
-      const out = [
-        `memory ${m.searches} searches (${m.widened} widened, ${m.zeroResults} empty), ` +
-          `${m.tasksFiledWithoutChecking} of ${m.tasksFiled} tasks filed without checking first`,
-      ]
-      for (const miss of m.recentMisses ?? []) out.push(`  asked for, not held: ${miss}`)
-
-      // Looking a fact up by name is the other half of consulting the memory,
-      // and migration 053 is the first release to record it. Conditional, and
-      // not because the number is uninteresting: a server on 052 sends neither
-      // key, so an unconditional line would print `0 direct reads` for a
-      // server that simply cannot count them. `?? 0` would turn that into a
-      // confident wrong answer; absent has to stay absent. Zero-on-053 is
-      // silent for the reason the block above it is skimmed at all — nothing
-      // happened, and a line saying so is a line to learn to skip.
-      const reads = m.directReads
-      const missed = m.directReadMisses
-      if ((reads ?? 0) > 0 || (missed ?? 0) > 0) {
-        out.push(`direct reads ${reads ?? 0} by name (${missed ?? 0} for a slug we do not hold)`)
-      }
-      // One line each, like recentMisses, and said differently: a miss here is
-      // not a subject the index phrased badly, it is a named fact an agent
-      // believed existed. That is a dangling reference being followed live.
-      for (const slug of m.recentSlugMisses ?? []) out.push(`  looked up by name, no such entry: ${slug}`)
-      return out
-    }
-
-    /**
-     * What migration 065 can see and croft_vitals cannot: claims nobody is on,
-     * the reaper, sessions and the summariser per runtime and host, knowledge
-     * verification. Absent on an older server, and then nothing is printed —
-     * `0 quiet` from a server that cannot count them would be a wrong answer.
-     */
-    const signalLines = (s) => {
-      if (!s) return []
-      const quiet = (m) => (m === null ? 'never active' : m >= 120 ? `${Math.round(m / 60)}h` : `${m}m`)
-      const out = [
-        `claims ${s.claims.quiet2h} of ${s.claims.held} quiet >2h, ${s.claims.quiet24h} >24h; ` +
-          `auto-released ${s.reaper.released7d} in 7d (last ${s.reaper.lastReleaseAt?.slice(0, 16) ?? 'never'})`,
-      ]
-      for (const c of s.claims.quietest.slice(0, 5)) {
-        out.push(`  quiet ${quiet(c.quietMinutes)}: ${c.ref} ${truncate(c.title, 50)} (${c.claimedBy})`)
-      }
-      for (const r of s.runtimes) {
-        out.push(
-          `  ${r.runtime}@${r.host}: ${r.recent} sessions, ${r.recentSummarised} summarised ` +
-            `(week before ${r.baseline}, ${r.baselineSummarised})`,
-        )
-      }
-      if (s.sessions.summariserRecent > 0) {
-        out.push(`  summariser runs not counted as sessions: ${s.sessions.summariserRecent}`)
-      }
-      out.push(
-        `knowledge ${s.knowledge.neverVerified} of ${s.knowledge.current} never verified, ` +
-          `${s.knowledge.unverified30d} not in 30 days`,
-      )
-      return out
-    }
-
-    const hours = Number(flags.hours ?? 24)
-    const data = await request('GET', `/api/v1/vitals?hours=${hours}`)
-    const findings = data.findings ?? []
-
-    if (flags.notify) {
-      if (findings.length === 0) {
-        emit({ findings: 0, notified: false }, { lines: () => ['nothing to report'] })
-        return
-      }
-      const note =
-        `Croft vitals, last ${data.windowHours}h:\n` +
-        findings.map((f) => `  [${f.severity}] ${f.message}`).join('\n') +
-        `\n\nSessions ${data.sessions.recent} (${data.sessions.recentWithFiles} naming files, ` +
-        `${data.sessions.recentSummarised ?? '?'} summarised), ` +
-        `tasks ${data.tasks.opened} opened / ${data.tasks.closed} closed, ` +
-        `${data.tasks.stalled} stalled, ${data.autoReleased} claims auto-released.` +
-        (signalLines(data.signals).length ? `\n${signalLines(data.signals).join('\n')}` : '') +
-        (memoryLines(data.memory).length ? `\n${memoryLines(data.memory).join('\n')}` : '')
-      await request('POST', `/api/v1/tasks/${encodeURIComponent(flags.notify)}/notes`, {
-        note,
-        kind: 'finding',
-      })
-      emit({ findings: findings.length, notified: true })
-      return
-    }
-
-    emit(data, {
-      lines: (d) => {
-        const out = []
-        if (d.findings.length === 0) out.push(`nothing wrong in the last ${d.windowHours}h`)
-        for (const f of d.findings) out.push(`[${f.severity}] ${f.message}`)
-        if (flags.all || d.findings.length === 0) {
-          out.push('')
-          out.push(
-            `sessions ${d.sessions.recent} (${d.sessions.recentWithFiles} with files` +
-              (d.sessions.recentSummarised !== undefined ? `, ${d.sessions.recentSummarised} summarised` : '') +
-              `), week before ${d.sessions.baseline} (${d.sessions.baselineWithFiles})`,
-          )
-          out.push(
-            `tasks ${d.tasks.opened} opened, ${d.tasks.closed} closed, ` +
-              `${d.tasks.stalled} stalled, ${d.tasks.held} held`,
-          )
-          out.push(`claims auto-released ${d.autoReleased}, knowledge written ${d.knowledgeWritten}`)
-          out.push(...signalLines(d.signals))
-          out.push(...memoryLines(d.memory))
-          for (const a of d.agents) out.push(`  ${a.agent}: ${a.recent} writes (week before ${a.baseline})`)
-        }
-        return out
-      },
-    })
-  },
-
   async reconcile() {
     const body = { dryRun: Boolean(flags['dry-run']) }
     if (flags.older) body.olderThanMinutes = Number(flags.older)
@@ -5060,73 +4568,9 @@ const commands = {
       },
     )
   },
-
-  // --- the episodic record -----------------------------------------------
-
-  async session() {
-    const verb = positional.shift() ?? 'list'
-
-    if (verb === 'end' || verb === 'checkpoint') {
-      const payload = {
-        externalId: need(flags.id, `usage: croft session ${verb} --id <session-id>`),
-        platformSource: flags.platform ?? defaultPlatform(),
-        cwd: flags.cwd ?? process.cwd(),
-        files: splitList(flags.files),
-        taskRefs: splitList(flags.tasks),
-      }
-      for (const [flag, field] of [
-        ['project', 'project'], ['agent', 'agentId'], ['request', 'request'],
-        ['learned', 'learned'], ['completed', 'completed'], ['next', 'nextSteps'],
-        ['started', 'startedAt'],
-      ]) {
-        if (flags[flag] !== undefined) payload[field] = await resolveValue(flags[flag])
-      }
-      // The same order as `croft context`: the map, then the remote (which the
-      // server matches against project_repos), then the cwd on the server's
-      // side. Nothing here used to look, and nothing else sent a project, so
-      // every live session landed unattributed (CROFT-286).
-      if (payload.project === undefined) {
-        const mapped = projectForDir(payload.cwd)
-        if (mapped) payload.project = mapped
-      }
-      const repo = gitRemote(payload.cwd)
-      if (repo) payload.repo = repo
-      if (flags['tool-calls']) payload.toolCalls = Number(flags['tool-calls'])
-      if (flags['no-checkpoint']) payload.checkpointHeld = false
-      if (flags.scheduled) payload.scheduled = true
-      if (verb === 'checkpoint') {
-        payload.ongoing = true
-        payload.checkpointHeld = false
-      }
-      return emit(await request('POST', '/api/v1/sessions', payload))
-    }
-
-    if (verb === 'list') {
-      const params = new URLSearchParams()
-      if (flags.project) params.set('project', flags.project)
-      if (flags.cwd) params.set('cwd', flags.cwd)
-      if (flags.limit) params.set('limit', flags.limit)
-      const data = await request('GET', `/api/v1/sessions?${params}`)
-      return emit(data, {
-        // What came of it, not only what was asked. A list of requests is a
-        // list of intentions; the reason to keep a session is the answer.
-        rows: (d) => d.results.map((r) => ({
-          ended: (r.endedAt ?? '').slice(0, 16).replace('T', ' '),
-          agent: r.agent ?? r.platform,
-          files: r.files,
-          tasks: (r.taskRefs ?? []).join(','),
-          request: truncate(r.request ?? (r.scheduled ? 'scheduled run' : ''), 44),
-          outcome: truncate(r.completed ?? r.learned ?? '', 52),
-        })),
-        columns: ['ended', 'agent', 'files', 'tasks', 'request', 'outcome'],
-      })
-    }
-
-    die(`unknown session verb "${verb}" — try: checkpoint, end, list`)
-  },
 }
 
-const command = positional.shift()
+let command = positional.shift()
 
 if (flags.version || command === 'version') {
   // Asks the server too, and says when they disagree. A stale copy is
@@ -5164,34 +4608,33 @@ if (!commands[command]) {
 }
 
 /**
- * `reconcile` and `vitals` are about an instance, not a directory, and they
+ * S-12 is a subject, and a subject is not a task: its routes are /subjects.
+ * `show` and `note` mean the same thing for both, so they go where the ref
+ * says; any other task verb is told which verbs a subject takes.
+ */
+const TASK_VERBS = new Set([
+  'claim', 'beat', 'release', 'checkpoint', 'block', 'unblock', 'log', 'comment', 'done',
+  'cancel', 'update', 'commit', 'push', 'run', 'attach', 'files', 'children', 'history', 'deps',
+  'blockedby', 'unblockedby',
+])
+if (/^[Ss]-\d+$/.test(positional[0] ?? '')) {
+  if (command === 'show' || command === 'note') {
+    positional.unshift(command)
+    command = 'subject'
+  } else if (TASK_VERBS.has(command)) {
+    const ref = positional[0].toUpperCase()
+    die(`${ref} is a subject, not a todo — subjects take: croft subject show|edit|stage|note|tag|todo ${ref}`)
+  }
+}
+
+/**
+ * `reconcile` and `sync` are about an instance, not a directory, and they
  * run from a scheduler whose directory is `/`. On a machine with several
  * instances, routing would send them to the default or nowhere, so a
  * scheduled job says --all-instances and gets one run per instance, each
- * under that instance's own maintenance key. With one instance it changes
- * nothing, which is why install-cron can always pass it.
+ * under that instance's own key. With one instance it changes nothing.
  */
-const FANS_OUT = new Set(['reconcile', 'vitals'])
-/**
- * The task one instance reports to, out of `--notify personal:CROFT-107,work:OPS-3`.
- * Only vitals reports, so only vitals looks: reading the flag for reconcile
- * would mark it used and silence the warning that it does nothing there.
- */
-const notifyFor = (name, several, required) => {
-  if (command !== 'vitals' || !('notify' in typedFlags)) return undefined
-  if (typedFlags.notify === true) die('--notify needs the task to report to (<instance>:<ref> on a machine with several)')
-  const entries = String(flags.notify).split(',').map((e) => e.trim()).filter(Boolean)
-  const mine = entries.find((e) => e.startsWith(`${name}:`))
-  if (mine) return mine.slice(name.length + 1)
-  const plain = entries.filter((e) => !e.includes(':'))
-  if (plain.length && several) {
-    die(`--notify ${plain[0]}: with several instances, say which one the task is on (--notify <instance>:${plain[0]})`)
-  }
-  // In a fan-out an instance with no entry simply does not report; a single
-  // run given a list that leaves it out is a mistake worth saying.
-  if (!plain.length && required) die(`--notify ${flags.notify} has no entry for instance ${name || '(none chosen)'}`)
-  return plain[0]
-}
+const FANS_OUT = new Set(['reconcile', 'sync'])
 
 if (flags['all-instances']) {
   if (!FANS_OUT.has(command)) {
@@ -5201,12 +4644,11 @@ if (flags['all-instances']) {
   if (INSTANCES && !INSTANCES.error) {
     const names = Object.keys(INSTANCES.instances)
     const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !['CROFT_API_KEY', 'CROFT_BASE_URL', 'CROFT_INSTANCE'].includes(k)))
-    const plan = names.map((name) => ({ name, notify: notifyFor(name, names.length > 1, false) }))
-    const passthrough = []
+        const passthrough = []
     const argv = process.argv.slice(2)
     for (let i = 0; i < argv.length; i += 1) {
       const [flag] = argv[i].split('=')
-      if (['--all-instances', '--instance', '--notify'].includes(flag)) {
+      if (['--all-instances', '--instance'].includes(flag)) {
         if (flag !== '--all-instances' && !argv[i].includes('=') && argv[i + 1] && !argv[i + 1].startsWith('--')) i += 1
         continue
       }
@@ -5217,11 +4659,11 @@ if (flags['all-instances']) {
     const structured = FORMAT !== 'tsv'
     const results = {}
     let failed = 0
-    for (const { name, notify } of plan) {
+    for (const name of names) {
       if (!structured) process.stdout.write(`== instance ${name} ==\n`)
       const result = spawnSync(
         process.execPath,
-        [process.argv[1], ...passthrough, '--instance', name, ...(notify ? ['--notify', notify] : [])],
+        [process.argv[1], ...passthrough, '--instance', name],
         { env, stdio: ['ignore', structured ? 'pipe' : 'inherit', 'inherit'], encoding: 'utf8', timeout: 5 * 60_000 },
       )
       if (structured) {
@@ -5235,11 +4677,6 @@ if (flags['all-instances']) {
     if (structured) console.log(JSON.stringify({ instances: results }, null, 2))
     process.exit(failed ? 1 : 0)
   }
-}
-if (INSTANCES && !INSTANCES.error && command === 'vitals' && 'notify' in typedFlags) {
-  // Run for one instance, --notify may still be written instance:REF.
-  const chosen = notifyFor(INSTANCE.name ?? '', false, true)
-  if (chosen !== undefined) typedFlags.notify = chosen
 }
 await commands[command]()
 

@@ -67,9 +67,11 @@ describe('ChangeKeyDialog', () => {
 
   it('stays disarmed until the key is valid', async () => {
     expect(submit().disabled).toBe(true)
-    await type('h')
+    // One letter is a valid key now (the todos project is `T`); a leading
+    // digit still is not.
+    await type('9')
     expect(submit().disabled).toBe(true)
-    expect(hint()).toBe('Two to ten letters or digits, starting with a letter.')
+    expect(hint()).toBe('One to ten letters or digits, starting with a letter.')
     await type('hwy')
     expect(submit().disabled).toBe(false)
     expect(submit().textContent).toBe('Change to HWY')

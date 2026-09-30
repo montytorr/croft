@@ -6,12 +6,10 @@ import { Select } from '@/components/ui/control'
 import { Spinner } from '@/components/spinner'
 
 const KINDS = [
-  { value: 'task', label: 'Tasks filed' },
+  { value: 'task', label: 'Todos filed' },
   { value: 'event', label: 'Changes' },
   { value: 'note', label: 'Notes' },
   { value: 'comment', label: 'Comments' },
-  { value: 'session', label: 'Sessions' },
-  { value: 'knowledge', label: 'Knowledge' },
 ]
 
 export const ActivityControls = ({

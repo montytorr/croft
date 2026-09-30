@@ -15,15 +15,16 @@ import { useMutate } from '@/lib/api/use-mutate'
 import { COMPOSER, COUNT, LABEL } from './styles'
 
 /**
- * Each kind's colour, as a token so the label and its stone share it. Dead
- * ends recede; what was found and what was decided carry the light.
+ * Each kind's colour, as a token so the label and its dot share it. Dead
+ * ends recede; what was found and what was decided carry the colour. The
+ * same --log-* tokens as a subject's log, and none of them the accent.
  */
 const KIND_TONE: Record<string, string> = {
-  finding: 'var(--status-in-review)',
-  decision: 'var(--accent)',
-  attempt: 'var(--fg-subtle)',
-  handoff: 'var(--status-doing)',
-  note: 'var(--fg-muted)',
+  finding: 'var(--log-finding)',
+  decision: 'var(--log-decision)',
+  attempt: 'var(--log-attempt)',
+  handoff: 'var(--log-handoff)',
+  note: 'var(--log-note)',
 }
 
 const toneOf = (kind: string) => KIND_TONE[kind] ?? 'var(--fg-subtle)'
@@ -223,7 +224,7 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
                       {note.kind}
                     </span>
                     <span
-                      className={note.actor_type === 'agent' ? 'text-accent' : 'text-fg-subtle'}
+                      className={note.actor_type === 'agent' ? 'text-fg-muted font-mono text-[0.65625rem]' : 'text-fg-subtle'}
                     >
                       {note.actor_id}
                     </span>

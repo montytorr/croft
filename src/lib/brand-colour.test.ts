@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HEX, contrast, paletteCss, paletteFor } from './brand-colour'
+import { DARK_GROUND, DARK_TEXT, HEX, LIGHT_GROUND, contrast, paletteCss, paletteFor } from './brand-colour'
 
 describe('an accent, per theme', () => {
   it('measures contrast the way WCAG does', () => {
@@ -8,25 +8,25 @@ describe('an accent, per theme', () => {
   })
 
   it('keeps a colour that already reads on white, and lifts it for the dark ground', () => {
-    // Dispofi's navy: fine on white, nearly invisible on #08090a.
+    // Dispofi's navy: fine on paper, nearly invisible on peat.
     const p = paletteFor('#01519b')
     expect(p.light.accent).toBe('#01519b')
-    expect(contrast(p.dark.accent, '#08090a')).toBeGreaterThanOrEqual(5.5)
-    expect(contrast('#01519b', '#08090a')).toBeLessThan(5.5)
+    expect(contrast(p.dark.accent, DARK_GROUND)).toBeGreaterThanOrEqual(5.5)
+    expect(contrast('#01519b', DARK_GROUND)).toBeLessThan(5.5)
   })
 
   it('darkens a colour that only reads on black, and keeps it for the dark ground', () => {
     const p = paletteFor('#f2c94c')
-    expect(contrast(p.light.accent, '#ffffff')).toBeGreaterThanOrEqual(4.5)
+    expect(contrast(p.light.accent, LIGHT_GROUND)).toBeGreaterThanOrEqual(4.5)
     expect(p.dark.accent).toBe('#f2c94c')
     // White on a yellow button is unreadable; the fill gets dark text.
-    expect(p.dark.accentFg).toBe('#0d0e10')
+    expect(p.dark.accentFg).toBe(DARK_TEXT)
   })
 
   it('moves as little as it has to', () => {
     // Each needs lifting for the dark ground; each should land just past the line.
     for (const hex of ['#1d6fd0', '#01519b', '#15803d', '#be123c']) {
-      const ratio = contrast(paletteFor(hex).dark.accent, '#08090a')
+      const ratio = contrast(paletteFor(hex).dark.accent, DARK_GROUND)
       expect(ratio).toBeGreaterThanOrEqual(5.5)
       expect(ratio).toBeLessThan(6.2)
     }

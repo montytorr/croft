@@ -6,13 +6,12 @@
  * shell-capable agent would run, so there is exactly one implementation of
  * every behaviour. Anything that ends up here and not in the CLI is a bug.
  *
- * The reverse is not a bug but it is a cost, and it was never policed: this
- * exposed no knowledge tools at all for as long as knowledge has existed, so
- * an MCP-only agent could not read or write the memory half of the product
- * and was not told it existed. Worse, `croft_check` returns knowledge rows
- * and described itself as an index of tasks, sending agents to `croft_show`
- * with a slug it cannot open. When a verb is deliberately left out, say so
- * here rather than leaving its absence to be discovered.
+ * Croft is a lab board: SUBJECTS (S-12) move through stages and end with a
+ * conclusion; their TODOS are tasks (T-41) worked with the task tools below.
+ * Deliberately left out: subject edit/tag (do them in the web app or the
+ * CLI), push/sync to Cairn (they spawn the `cairn` binary — run them from a
+ * shell), stages/tags admin, and every memory verb (Croft has no memory —
+ * Cairn does).
  *
  * Why bother, given the CLI exists: Codex's [mcp_servers.*] gives per-tool
  * timeouts and approval modes, Claude Code enforces the tool schemas so the
@@ -63,16 +62,14 @@ const TOOLS = [
   {
     name: 'croft_check',
     description:
-      'ALWAYS CALL THIS FIRST, before starting work on any subject. Returns an index ' +
-      'of prior TASKS, work-log NOTES, KNOWLEDGE and SESSIONS — showing whether each ' +
-      'carries a recorded answer and roughly what it costs to open. Do not re-debug ' +
-      'something already answered. Open a task row with croft_show; open a knowledge ' +
-      'row with croft_know, whose ref is a slug rather than a KEY-123.',
+      'ALWAYS CALL THIS FIRST, before evaluating or prototyping anything. Returns an ' +
+      'index of lab SUBJECTS (S-12), TODOS (T-41) and work-log NOTES — showing what the ' +
+      'lab already tried or concluded and roughly what each costs to open. Open a ' +
+      'subject row with croft_subject_show and a todo row with croft_show.',
     inputSchema: {
       type: 'object',
       properties: {
         subject: { type: 'string', description: 'What you are about to work on.' },
-        project: { type: 'string', description: 'Optional project key, e.g. CAI.' },
         assignee: {
           type: 'string',
           description: 'Only tasks assigned to this person: "me", an email, a name or a user id.',
@@ -82,249 +79,149 @@ const TOOLS = [
     },
     run: (a) => [
       'check', a.subject,
-      ...(a.project ? ['--project', a.project] : []),
       ...(a.assignee ? ['--assignee', a.assignee] : []),
     ],
   },
   {
     name: 'croft_show',
     description:
-      'Full detail of one task, including its resolution if it has one. Takes a task ' +
-      'ref like CAI-42 — for a knowledge slug from croft_check, use croft_know.',
+      'Full detail of one todo, including its resolution if it has one. Takes a todo ' +
+      'ref like T-41 — for a subject (S-12) use croft_subject_show.',
     inputSchema: {
       type: 'object',
-      properties: { ref: { type: 'string', description: 'e.g. CAI-42' } },
+      properties: { ref: { type: 'string', description: 'e.g. T-41' } },
       required: ['ref'],
     },
     run: (a) => ['show', a.ref],
   },
   {
-    name: 'croft_recall',
+    name: 'croft_subject_list',
     description:
-      'What already bears on one task: resolutions, decision and finding notes on the tasks ' +
-      'around it (ones that name it, ones it names, parent, sub-tasks, blockers, similar ' +
-      'titles) and the knowledge that applies (linked to files it touched, learned on it or ' +
-      'a related task, or matching its terms). Every line says why it was picked. Use it when ' +
-      'picking a task up, before starting the work.',
+      'The lab board: subjects with their stage, open/done todo counts and tags. ' +
+      'Archived subjects are left out unless all is true.',
     inputSchema: {
       type: 'object',
       properties: {
-        ref: { type: 'string', description: 'e.g. CAI-42' },
-        limit: { type: 'number', description: 'Lines per section, default 8, at most 30.' },
+        stage: { type: 'string', description: 'Only this stage, by name, e.g. "exploring".' },
+        tag: { type: 'string', description: 'Only subjects carrying this tag.' },
+        mine: { type: 'boolean', description: 'Only subjects owned by the human behind this key.' },
+        all: { type: 'boolean', description: 'Include archived subjects.' },
+      },
+    },
+    run: (a) => [
+      'subject', 'list',
+      ...(a.stage ? ['--stage', a.stage] : []),
+      ...(a.tag ? ['--tag', a.tag] : []),
+      ...(a.mine ? ['--mine'] : []),
+      ...(a.all ? ['--all'] : []),
+    ],
+  },
+  {
+    name: 'croft_subject_show',
+    description:
+      'One subject: its write-up, stage, conclusion, tags, todos and work log. A digest ' +
+      'unless full is true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ref: { type: 'string', description: 'e.g. S-12' },
+        full: { type: 'boolean', description: 'Everything, not a digest.' },
       },
       required: ['ref'],
     },
-    run: (a) => ['recall', a.ref, ...(a.limit !== undefined ? ['--limit', String(a.limit)] : [])],
+    run: (a) => ['subject', 'show', a.ref, ...(a.full ? ['--full'] : [])],
   },
   {
-    name: 'croft_know',
+    name: 'croft_subject_add',
     description:
-      'Read what is known. With a slug, returns that entry; with a phrase, searches ' +
-      'knowledge; with nothing, lists what applies to this project. Knowledge is what ' +
-      'outlives the task it was learned on, so this answers "what do we already know ' +
-      'about this" where croft_check answers "has this been worked on".',
+      'File a new subject on the lab board: a technology to evaluate, a POC, an idea to ' +
+      'prove before it becomes real work. Call croft_check first — the lab may already ' +
+      'have concluded on it.',
     inputSchema: {
       type: 'object',
       properties: {
-        subject: {
+        title: { type: 'string' },
+        body: {
           type: 'string',
-          description: 'A slug to read, or a phrase to search. Omit to list what applies here.',
+          description: 'Markdown write-up: the question, why it matters, what would settle it.',
         },
-        project: { type: 'string', description: 'Optional project key, e.g. CAI.' },
-        history: {
-          type: 'boolean',
-          description:
-            'With a slug: every version of the entry, who changed it and why, instead of ' +
-            'the current text.',
-        },
-        unusedDays: {
-          type: 'number',
-          description:
-            'Instead: current entries no search or direct read returned in this many days — ' +
-            'dead, or titled so nothing finds them. The session briefing is not counted.',
-        },
+        stage: { type: 'string', description: 'Stage name; defaults to the first planned stage.' },
+        tags: { type: 'string', description: 'Comma-separated tag names (croft tags lists them).' },
+        owner: { type: 'string', description: '"me" to own it yourself.' },
       },
-    },
-    run: (a) =>
-      a.unusedDays !== undefined
-        ? ['know', '--unused', '--days', String(a.unusedDays)]
-        : [
-            'know',
-            ...(a.subject ? [a.subject] : []),
-            ...(a.project ? ['--project', a.project] : []),
-            ...(a.history ? ['--history'] : []),
-          ],
-  },
-  {
-    name: 'croft_gaps',
-    description:
-      'Where the memory has holes: entries joined to nothing, references pointing at ' +
-      'entries nobody ever wrote, and how many separate islands the corpus has fallen ' +
-      'into. None of it shows in a list of knowledge, because a list shows what is there. ' +
-      'Use it before writing a reference, and when deciding what is worth connecting.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        show: {
-          type: 'string',
-          enum: ['summary', 'orphans', 'dangling'],
-          description:
-            'summary counts everything; orphans lists entries nothing links to; dangling ' +
-            'lists references pointing at entries that do not exist, and who points at them.',
-        },
-      },
+      required: ['title'],
     },
     run: (a) => [
-      'know',
-      a.show === 'orphans' ? '--orphans' : a.show === 'dangling' ? '--dangling' : '--gaps',
-    ],
-  },
-  {
-    name: 'croft_learn',
-    description:
-      'Record something that will still be true next month — infra, a convention, a ' +
-      'gotcha. Scope it: project for one codebase, entity for a business or a stack, ' +
-      'global for true everywhere. Given none of those it takes the current ' +
-      'directory\'s project and refuses if there is none, because a fact filed global ' +
-      'sits in front of every project permanently.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        title: { type: 'string', description: 'The claim itself, as a sentence.' },
-        body: { type: 'string', description: 'Markdown: what it means and how it was found.' },
-        project: { type: 'string', description: 'True of this project only.' },
-        entity: { type: 'string', description: 'True of this grouping — see croft_entities.' },
-        global: { type: 'boolean', description: 'True everywhere. Say so on purpose.' },
-        label: { type: 'string', description: 'Comma-separated labels.' },
-        task: { type: 'string', description: 'The task it was learned on, e.g. CAI-42.' },
-        files: {
-          type: 'string',
-          description:
-            'Comma-separated paths it is about, beyond the backticked ones its body names. ' +
-            'Linked so a later lookup by file finds it, and so it ages when they change.',
-        },
-        allowDangling: {
-          type: 'boolean',
-          description:
-            'Keep a [[reference]] the store cannot resolve. The write is refused when a ' +
-            'near-named entry already exists, and the refusal names it — retry with that ' +
-            'slug instead. This is for the case it gets wrong: a genuinely new fact whose ' +
-            'name resembles an existing one.',
-        },
-      },
-      required: ['title', 'body'],
-    },
-    run: (a) => [
-      'learn', a.title, '--body', a.body,
-      ...(a.project ? ['--project', a.project] : []),
-      ...(a.entity ? ['--entity', a.entity] : []),
-      ...(a.global ? ['--global'] : []),
-      ...(a.label ? ['--label', a.label] : []),
-      ...(a.task ? ['--task', a.task] : []),
-      ...(a.files ? ['--files', a.files] : []),
-      ...(a.allowDangling ? ['--allow-dangling'] : []),
-    ],
-  },
-  {
-    name: 'croft_relearn',
-    description:
-      'Correct a fact that has changed, in place. Prefer this to filing a second ' +
-      'entry: the failure mode of every memory store is accumulation without ' +
-      'correction, and two entries disagreeing is worse than one that is wrong.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        slug: { type: 'string' },
-        body: { type: 'string', description: 'The corrected body.' },
-        title: { type: 'string', description: 'A corrected title, if the claim itself changed.' },
-        project: { type: 'string', description: 'Re-scope it to this project only.' },
-        entity: { type: 'string', description: 'Re-scope it to this grouping — see croft_entities.' },
-        global: {
-          type: 'boolean',
-          description:
-            'Re-scope it to true everywhere, clearing both project and entity. Not combinable ' +
-            'with project or entity.',
-        },
-        allowDangling: {
-          type: 'boolean',
-          description:
-            'Keep a [[reference]] the store cannot resolve. An edit runs the same check as ' +
-            'a write, so a correction can be refused the same way.',
-        },
-        reason: {
-          type: 'string',
-          description: 'Why it changed. Kept with the version this replaces.',
-        },
-        files: {
-          type: 'string',
-          description:
-            'Comma-separated paths it is about. Replaces those named explicitly before; ' +
-            'paths in the body are linked on their own.',
-        },
-      },
-      required: ['slug'],
-    },
-    run: (a) => [
-      'relearn', a.slug,
+      'subject', 'add', a.title,
       ...(a.body ? ['--body', a.body] : []),
-      ...(a.title ? ['--title', a.title] : []),
-      ...(a.project ? ['--project', a.project] : []),
-      ...(a.entity ? ['--entity', a.entity] : []),
-      ...(a.global ? ['--global'] : []),
-      ...(a.allowDangling ? ['--allow-dangling'] : []),
-      ...(a.reason ? ['--reason', a.reason] : []),
-      ...(a.files ? ['--files', a.files] : []),
+      ...(a.stage ? ['--stage', a.stage] : []),
+      ...(a.tags ? ['--tag', a.tags] : []),
+      ...(a.owner ? ['--owner', a.owner] : []),
     ],
   },
   {
-    name: 'croft_unlearn',
+    name: 'croft_subject_stage',
     description:
-      'Mark a fact as superseded — it was wrong, or something replaced it. It stays ' +
-      'findable and marked, and ranks below its replacement, so a correction beats ' +
-      'the claim it corrects wherever both match.',
+      'Move a subject to another stage. Entering a concluding stage (done, rejected, ' +
+      'rolled out) REQUIRES a conclusion unless the subject already has one: if the ' +
+      'answer says conclusion_required, call again with conclusion set to what the lab ' +
+      'found and why.',
     inputSchema: {
       type: 'object',
       properties: {
-        slug: { type: 'string' },
-        supersededBy: { type: 'string', description: 'Slug of the entry that replaces it.' },
-        reason: { type: 'string', description: 'Why it was superseded. Needs supersededBy.' },
+        ref: { type: 'string', description: 'e.g. S-12' },
+        stage: { type: 'string', description: 'Stage name, e.g. "implementing".' },
+        conclusion: {
+          type: 'string',
+          description: 'What was concluded, and why — the answer the next person reads.',
+        },
       },
-      required: ['slug'],
+      required: ['ref', 'stage'],
     },
     run: (a) => [
-      'unlearn', a.slug,
-      ...(a.supersededBy ? ['--superseded-by', a.supersededBy] : []),
-      ...(a.supersededBy && a.reason ? ['--reason', a.reason] : []),
+      'subject', 'stage', a.ref, a.stage,
+      ...(a.conclusion ? ['--conclusion', a.conclusion] : []),
     ],
   },
   {
-    name: 'croft_verify',
+    name: 'croft_subject_note',
     description:
-      'Confirm a fact is still true, having actually checked. Clears the stale mark ' +
-      'a fact gets when the files it names have been reworked since it was last ' +
-      'confirmed, without making you restate it.',
+      'Append to a subject\'s work log. Record findings, dead ends (kind attempt) and ' +
+      'decisions as you go — they are what the conclusion is built from.',
     inputSchema: {
       type: 'object',
-      properties: { slug: { type: 'string' } },
-      required: ['slug'],
+      properties: {
+        ref: { type: 'string', description: 'e.g. S-12' },
+        note: { type: 'string', description: 'Markdown.' },
+        kind: { type: 'string', enum: ['note', 'finding', 'decision', 'attempt', 'handoff'] },
+      },
+      required: ['ref', 'note'],
     },
-    run: (a) => ['verify', a.slug],
+    run: (a) => ['subject', 'note', a.ref, a.note, ...(a.kind ? ['--kind', a.kind] : [])],
   },
   {
-    name: 'croft_entities',
+    name: 'croft_subject_todo',
     description:
-      'The groupings a fact can be true of — a business, a stack, a subsystem — and ' +
-      'the projects in each. Use before croft_learn --entity, to find the right key.',
-    inputSchema: { type: 'object', properties: {} },
-    run: () => ['entities'],
+      'Add a todo (a T-n task) under a subject. For an agent it is claimed at once, like ' +
+      'croft_add; work it with the task tools and close it with croft_done.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ref: { type: 'string', description: 'The subject, e.g. S-12.' },
+        title: { type: 'string' },
+        body: { type: 'string', description: 'Markdown description.' },
+      },
+      required: ['ref', 'title'],
+    },
+    run: (a) => ['subject', 'todo', a.ref, a.title, ...(a.body ? ['--body', a.body] : [])],
   },
   {
     name: 'croft_list',
-    description: 'List tasks in a project, optionally filtered.',
+    description: 'List todos (project T), optionally filtered. For the board, use croft_subject_list.',
     inputSchema: {
       type: 'object',
       properties: {
-        project: { type: 'string' },
+        project: { type: 'string', description: 'Todos live in project T.' },
         status: { type: 'string', enum: ['backlog', 'todo', 'doing', 'in-review', 'done', 'cancelled'] },
         type: { type: 'string', enum: ['feature', 'bug', 'improvement', 'chore', 'spike', 'docs'] },
         assignee: {
@@ -344,13 +241,13 @@ const TOOLS = [
   {
     name: 'croft_add',
     description:
-      'File a new task. Warns if similar work already exists — read that warning ' +
-      'before continuing rather than filing a duplicate.',
+      'File a todo with no subject. Prefer croft_subject_todo, which ties it to a subject. ' +
+      'Warns if similar work already exists — read that warning before filing a duplicate.',
     inputSchema: {
       type: 'object',
       properties: {
         title: { type: 'string' },
-        project: { type: 'string' },
+        project: { type: 'string', description: 'Todos live in project T.' },
         type: { type: 'string', enum: ['feature', 'bug', 'improvement', 'chore', 'spike', 'docs'] },
         priority: { type: 'string', enum: ['urgent', 'high', 'medium', 'low'] },
         body: {
@@ -473,7 +370,7 @@ const TOOLS = [
     name: 'croft_link',
     description:
       'Record that one task must finish before another. Prefer this over writing ' +
-      '"waiting on CAI-40" in a note: a link is visible from both tasks.',
+      '"waiting on T-40" in a note: a link is visible from both tasks.',
     inputSchema: {
       type: 'object',
       properties: {

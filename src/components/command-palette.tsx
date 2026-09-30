@@ -3,22 +3,30 @@
 import { Command } from 'cmdk'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Settings, FileJson, KeyRound, Search as SearchIcon, Moon, Plus } from 'lucide-react'
+import { Settings, FileJson, FlaskConical, KeyRound, ListTodo, Search as SearchIcon, Moon, Plus } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { ProjectIcon, StatusIcon } from '@/components/icons'
 import type { TaskStatus, TaskType } from '@/schemas/task'
 import { useCreateTask } from '@/components/task-creation'
+import { useCreateSubject } from '@/components/subject-creation'
 import { EmptyState } from '@/components/empty-state'
 import { Spinner } from '@/components/spinner'
 
 type Hit = {
   ref: string
   title: string
+  /** `subject` for a lab subject (ref S-12); a todo otherwise. */
+  kind?: string
   type: TaskType
   status: TaskStatus
   resolved: boolean
   loose?: boolean
   tokens: number
+}
+
+const subjectNumber = (hit: Hit) => {
+  const match = /^S-(\d+)$/.exec(hit.ref)
+  return hit.kind === 'subject' || match ? match?.[1] ?? null : null
 }
 
 /** Keyboard hint, rendered as the chips Linear shows on the right of a row. */
@@ -60,6 +68,7 @@ export const CommandPalette = ({ projects }: { projects: { key: string; title: s
   const router = useRouter()
   const { resolvedTheme, setTheme } = useTheme()
   const { open: openCreate } = useCreateTask()
+  const { open: openSubject } = useCreateSubject()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState<Hit[]>([])
@@ -135,7 +144,7 @@ export const CommandPalette = ({ projects }: { projects: { key: string; title: s
             autoFocus
             value={query}
             onValueChange={setQuery}
-            placeholder="Search tasks, or jump to a project…"
+            placeholder="Search subjects and todos, or jump somewhere…"
             className="placeholder:text-fg-subtle text-fg h-[3.25rem] w-full bg-transparent text-[0.9375rem] outline-none"
           />
           {loading ? (
@@ -151,7 +160,7 @@ export const CommandPalette = ({ projects }: { projects: { key: string; title: s
           <Command.Empty>
             <EmptyState
               compact
-              title={searchable ? 'Nothing found — this subject looks new.' : 'Type to search.'}
+              title={searchable ? 'Nothing found — this looks like a new subject.' : 'Type to search.'}
             />
           </Command.Empty>
 
@@ -173,9 +182,28 @@ export const CommandPalette = ({ projects }: { projects: { key: string; title: s
             </Command.Group>
           )}
 
-          {visibleHits.length > 0 && (
-            <Command.Group heading="Tasks" className={groupClass}>
-              {visibleHits.map((hit) => {
+          {visibleHits.some((hit) => subjectNumber(hit)) && (
+            <Command.Group heading="Subjects" className={groupClass}>
+              {visibleHits
+                .filter((hit) => subjectNumber(hit))
+                .map((hit) => (
+                  <Command.Item
+                    key={hit.ref}
+                    value={hit.ref}
+                    onSelect={() => go(`/subjects/${subjectNumber(hit)}`)}
+                    className={itemClass}
+                  >
+                    <FlaskConical size={13} className={iconClass} />
+                    <code className="text-fg-subtle w-[4.25rem] shrink-0 truncate text-[0.6875rem] tabular">{hit.ref}</code>
+                    <span className="min-w-0 flex-1 truncate">{hit.title}</span>
+                  </Command.Item>
+                ))}
+            </Command.Group>
+          )}
+
+          {visibleHits.some((hit) => !subjectNumber(hit)) && (
+            <Command.Group heading="Todos" className={groupClass}>
+              {visibleHits.filter((hit) => !subjectNumber(hit)).map((hit) => {
                 const idx = hit.ref.lastIndexOf('-')
                 const key = hit.ref.slice(0, idx)
                 const number = hit.ref.slice(idx + 1)
@@ -212,20 +240,39 @@ export const CommandPalette = ({ projects }: { projects: { key: string; title: s
             <>
               <Command.Group heading="Create" className={groupClass}>
                 <Command.Item
-                  value="new task create"
+                  value="new subject create"
+                  onSelect={() => {
+                    setOpen(false)
+                    openSubject()
+                  }}
+                  className={itemClass}
+                >
+                  <Plus size={14} className={iconClass} />
+                  New subject
+                  <Keys keys={['C']} />
+                </Command.Item>
+                <Command.Item
+                  value="new todo task create"
                   onSelect={() => {
                     setOpen(false)
                     openCreate()
                   }}
                   className={itemClass}
                 >
-                  <Plus size={14} className={iconClass} />
-                  New task
-                  <Keys keys={['C']} />
+                  <ListTodo size={14} className={iconClass} />
+                  New todo
                 </Command.Item>
               </Command.Group>
 
               <Command.Group heading="Go to" className={groupClass}>
+                <Command.Item value="lab home subjects" onSelect={() => go('/')} className={itemClass}>
+                  <FlaskConical size={14} className={iconClass} />
+                  Lab
+                </Command.Item>
+                <Command.Item value="todos all" onSelect={() => go('/todos')} className={itemClass}>
+                  <ListTodo size={14} className={iconClass} />
+                  Todos
+                </Command.Item>
                 <Command.Item value="settings" onSelect={() => go('/settings')} className={itemClass}>
                   <Settings size={14} className={iconClass} />
                   Settings

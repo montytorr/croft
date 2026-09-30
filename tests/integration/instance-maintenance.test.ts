@@ -6,21 +6,13 @@ import { spawn } from 'node:child_process'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 /**
- * `reconcile` and `vitals` belong to an instance, not a directory, and run
+ * `reconcile` and `sync` belong to an instance, not a directory, and run
  * from a scheduler at `/` (CROFT-301). `--all-instances` runs them once per
  * instance, each under that instance's own maintenance key.
  */
 const cli = join(process.cwd(), 'cli', 'croft.mjs')
 
 type Seen = { auth?: string; path?: string; body?: string }[]
-
-const VITALS = {
-  windowHours: 24,
-  findings: [{ code: 'x', severity: 'warning', message: 'something is off' }],
-  sessions: { recent: 0, recentWithFiles: 0 },
-  tasks: { opened: 0, closed: 0, stalled: 0 },
-  autoReleased: 0,
-}
 
 const serve = (seen: Seen) =>
   new Promise<{ server: Server; url: string }>((resolve) => {
@@ -34,8 +26,7 @@ const serve = (seen: Seen) =>
           return
         }
         seen.push({ auth: req.headers.authorization, path: req.url, ...(body ? { body } : {}) })
-        const data = req.url?.startsWith('/api/v1/vitals') ? VITALS : { released: [] }
-        res.end(JSON.stringify({ success: true, data }))
+        res.end(JSON.stringify({ success: true, data: { released: [] } }))
       })
     })
     server.listen(0, '127.0.0.1', () =>
@@ -124,20 +115,11 @@ describe('maintenance on a machine with several instances', () => {
     expect(result.stderr).toContain('reconcile on instance work failed')
   })
 
-  it('refuses a --notify that does not say which instance the task is on', async () => {
-    await configure({ personal: 'CROFT_API_KEY_MAINTENANCE=m\n', work: 'CROFT_API_KEY_MAINTENANCE=m\n' })
-    const result = await run(['vitals', '--all-instances', '--notify', 'CROFT-107'])
-
-    expect(result.code).not.toBe(0)
-    expect(result.stderr).toContain('--notify <instance>:CROFT-107')
-    expect(seenA.length + seenB.length).toBe(0)
-  })
-
   it('is only for the commands about an instance', async () => {
     await configure({ personal: 'CROFT_API_KEY_MAINTENANCE=m\n' })
     const result = await run(['note', 'ACME-1', 'x', '--all-instances'])
     expect(result.code).not.toBe(0)
-    expect(result.stderr).toContain('--all-instances is for reconcile and vitals')
+    expect(result.stderr).toContain('--all-instances is for reconcile and sync')
   })
 
   const both = {
@@ -145,46 +127,12 @@ describe('maintenance on a machine with several instances', () => {
     work: 'CROFT_API_KEY_MAINTENANCE=crn_maint_work\n',
   }
 
-  it("posts each instance's vitals to its own task, and skips an instance with no entry", async () => {
+  it('refuses --instance beside --all-instances', async () => {
     await configure(both)
-    const result = await run(['vitals', '--all-instances', '--notify', 'work:OPS-3'])
-    expect(result.code).toBe(0)
-    expect(seenA.map((r) => r.path)).toEqual(['/api/v1/vitals?hours=24'])
-    expect(seenB.map((r) => r.path)).toEqual(['/api/v1/vitals?hours=24', '/api/v1/tasks/OPS-3/notes'])
-
-    seenA.length = 0
-    seenB.length = 0
-    await run(['vitals', '--all-instances', '--notify', 'personal:CROFT-107,work:OPS-3'])
-    expect(seenA.at(-1)?.path).toBe('/api/v1/tasks/CROFT-107/notes')
-    expect(seenB.at(-1)?.path).toBe('/api/v1/tasks/OPS-3/notes')
-  })
-
-  it('reads instance:REF on a single vitals run too, and refuses a list that leaves this instance out', async () => {
-    await configure(both)
-    expect((await run(['vitals', '--instance', 'work', '--notify', 'personal:CROFT-1,work:OPS-3'])).code).toBe(0)
-    expect(seenB.at(-1)?.path).toBe('/api/v1/tasks/OPS-3/notes')
-
-    const missing = await run(['vitals', '--instance', 'work', '--notify', 'personal:CROFT-1'])
-    expect(missing.code).not.toBe(0)
-    expect(missing.stderr).toContain('no entry for instance work')
-  })
-
-  it('refuses a bare --notify, and --instance beside --all-instances', async () => {
-    await configure(both)
-    const bare = await run(['vitals', '--all-instances', '--notify'])
-    expect(bare.code).not.toBe(0)
-    expect(bare.stderr).toContain('--notify needs the task')
     const both2 = await run(['reconcile', '--all-instances', '--instance', 'work'])
     expect(both2.code).not.toBe(0)
     expect(both2.stderr).toContain('contradict')
     expect(seenA.length + seenB.length).toBe(0)
-  })
-
-  /** Only vitals reports; reconcile must still say that --notify does nothing for it. */
-  it('still reports --notify as ignored on reconcile', async () => {
-    await configure(both)
-    const result = await run(['reconcile', '--instance', 'work', '--notify', 'work:OPS-3'])
-    expect(result.stderr).toContain('`reconcile` does not take --notify')
   })
 
   it('gives one JSON document keyed by instance', async () => {

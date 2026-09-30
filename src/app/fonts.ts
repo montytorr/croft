@@ -1,22 +1,34 @@
-import { Inter_Tight } from 'next/font/google'
+import { JetBrains_Mono, Newsreader, Schibsted_Grotesk } from 'next/font/google'
 
 /**
- * The family's type, as Croft Cloud sets it: Inter Tight for headings, the
- * system sans for everything you read, the system mono for refs and code.
+ * Croft's three faces, one job each, self-hosted by next/font and variable so
+ * weights can sit between the named ones.
  *
- * The app used to carry a voice of its own — Instrument Serif for display
- * with italic accents, IBM Plex for text — and it read as a different product
- * from the site that sells it. The serif and the italics are exactly what the
- * family site dropped in MTC-2 for the same reason, and the login page brought
- * them back at 50px (CROFT-307).
- *
- * Only the display face is downloaded: the body and mono stacks are the
- * platform's own (SF Pro and SF Mono on a Mac), which are drawn for the 12-14px
- * this interface mostly is. Self-hosted by next/font, variable, so headings
- * can sit at a book weight between 400 and 500 as Cloud's do.
+ * - Schibsted Grotesk: the interface and its headings. A newspaper grotesk —
+ *   sturdy at the 13-15px the controls are set in, with enough character at
+ *   heading size that the lab does not read as a generic dashboard.
+ * - Newsreader: the write-ups, conclusions and log. Drawn for long reading on
+ *   screen, with an optical-size axis that tightens it for the small sizes.
+ * - JetBrains Mono: refs (S-12, T-41) and code.
  */
-export const display = Inter_Tight({
+export const sans = Schibsted_Grotesk({
   subsets: ['latin', 'latin-ext'],
-  variable: '--font-inter-tight',
+  variable: '--font-schibsted',
   display: 'swap',
 })
+
+export const serif = Newsreader({
+  subsets: ['latin', 'latin-ext'],
+  variable: '--font-newsreader',
+  style: ['normal', 'italic'],
+  axes: ['opsz'],
+  display: 'swap',
+})
+
+export const mono = JetBrains_Mono({
+  subsets: ['latin', 'latin-ext'],
+  variable: '--font-jetbrains',
+  display: 'swap',
+})
+
+export const fontVariables = `${sans.variable} ${serif.variable} ${mono.variable}`

@@ -129,22 +129,6 @@ const ARTEFACTS = [
       at(join(home, '.croft/hooks/croft-context.mjs')),
     ],
   },
-  {
-    name: 'hook:session-end',
-    file: 'hooks/croft-session-end.mjs',
-    mode: 0o755,
-    targets: [
-      at(join(home, '.croft/hooks/croft-session-end.mjs')),
-    ],
-  },
-  {
-    name: 'hook:learn-nudge',
-    file: 'hooks/croft-learn-nudge.mjs',
-    mode: 0o755,
-    targets: [
-      at(join(home, '.croft/hooks/croft-learn-nudge.mjs')),
-    ],
-  },
   /**
    * OpenClaw's bootstrap hook, which install-hooks.mjs copies here and links
    * with `openclaw hooks install --link`. A linked directory is read in place,

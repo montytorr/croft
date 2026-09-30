@@ -202,13 +202,6 @@ describe('several instances on one machine', () => {
     expect(existsSync(join(home, '.croft', 'outbox.jsonl'))).toBe(false)
   })
 
-  it('tags the breadcrumb the session-end hook reads with the instance', async () => {
-    await configure()
-    await run(['note', 'ACME-1', 'x', '--instance', 'work'])
-    const acted = (await readFile(join(home, '.croft', 'acted.jsonl'), 'utf8')).trim().split('\n').map((l) => JSON.parse(l))
-    expect(acted.at(-1)).toMatchObject({ ref: 'ACME-1', instance: 'work' })
-  })
-
   it('adds an instance and adopts this machine\'s existing files into it', async () => {
     await writeFile(join(home, '.croft', 'env'), `CROFT_BASE_URL=${a}\nCROFT_API_KEY_CLAUDE_CODE=crn_personal\n`)
     await writeFile(join(home, '.croft', 'projects.json'), '{"/x":"ACME"}')

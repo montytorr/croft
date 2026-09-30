@@ -219,7 +219,7 @@ export const createActivityEvidenceSchema = z
 /** `CAI-42` — the identifier agents actually use in prose. */
 export const taskRefSchema = z
   .string()
-  .regex(/^[A-Z][A-Z0-9]{1,9}-\d+$/, 'expected a task ref like CAI-42')
+  .regex(/^[A-Z][A-Z0-9]{0,9}-\d+$/, 'expected a task ref like CAI-42')
 
 export const parseTaskRef = (ref: string): { key: string; number: number } => {
   const parsed = taskRefSchema.parse(ref)

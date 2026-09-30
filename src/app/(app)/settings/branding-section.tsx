@@ -7,17 +7,18 @@ import { mutate } from '@/lib/api/mutate'
 import { HEX, STOCK_MARK, paletteFor, type AccentTokens } from '@/lib/brand-colour'
 import { cn } from '@/lib/utils'
 import { SettingsCard } from './settings-card'
+import { BrandMark } from '@/components/brand'
 
 export type BrandingValue = { name: string; accent: string | null }
 
-const STOCK_ACCENT = '#5e6ad2'
+const STOCK_ACCENT = '#8e3f73'
 
 /** A handful of starting points; any hex works. */
-const PRESETS = ['#5e6ad2', '#01519b', '#0e7490', '#15803d', '#b45309', '#be123c', '#7c3aed', '#3f3f46']
+const PRESETS = ['#8e3f73', '#01519b', '#0e7490', '#15803d', '#b45309', '#be123c', '#7c3aed', '#3f3f46']
 
 const STOCK_TOKENS: Record<'light' | 'dark', AccentTokens> = {
-  light: { accent: '#5e6ad2', accentFg: '#ffffff', accentSubtle: '#eceefb', ring: '#5e6ad2' },
-  dark: { accent: '#7b86e8', accentFg: '#ffffff', accentSubtle: '#23253a', ring: '#5e6ad2' },
+  light: { accent: '#8e3f73', accentFg: '#ffffff', accentSubtle: '#f0e2ea', ring: '#8e3f73' },
+  dark: { accent: '#d89bc4', accentFg: '#221c20', accentSubtle: '#3a2734', ring: '#d89bc4' },
 }
 
 /**
@@ -36,25 +37,18 @@ const Preview = ({
   mark: string
   name: string
 }) => {
-  const ground = theme === 'light' ? { bg: '#ffffff', fg: '#0d0e10', muted: '#61656c', border: '#e6e7e9' } : { bg: '#08090a', fg: '#f7f8f8', muted: '#9aa0a9', border: '#1f2023' }
+  const ground = theme === 'light' ? { bg: '#f6f2ea', fg: '#221c20', muted: '#5c5358', border: '#e2dace' } : { bg: '#161316', fg: '#f1ebe7', muted: '#b7acb1', border: '#2e272e' }
   return (
     <div
       className="flex flex-1 flex-col gap-3 rounded-md border p-3 transition-colors duration-[var(--dur-2)] ease-[var(--ease-out)]"
       style={{ background: ground.bg, color: ground.fg, borderColor: ground.border }}
     >
       <div className="flex items-center gap-2 text-[0.8125rem] font-semibold tracking-tight">
-        <svg viewBox="0 0 32 32" className="size-5 rounded-[5px]" aria-hidden>
-          <rect width="32" height="32" rx="7" fill="#08090a" />
-          <g fill={mark}>
-            <rect x="10" y="5.75" width="12" height="5.5" rx="2.75" />
-            <rect x="6" y="13.25" width="20" height="5.5" rx="2.75" />
-            <rect x="9" y="20.75" width="14" height="5.5" rx="2.75" />
-          </g>
-        </svg>
+        <BrandMark size={20} colour={mark} className="rounded-[5px]" />
         <span className="truncate">{name}</span>
       </div>
       <div className="rounded-md px-2 py-1 text-[0.75rem]" style={{ background: tokens.accentSubtle }}>
-        All tasks
+        Lab
       </div>
       <p className="text-[0.75rem]" style={{ color: ground.muted }}>
         Nothing in progress. <span style={{ color: tokens.accent }}>See the backlog</span>
@@ -63,7 +57,7 @@ const Preview = ({
         className="inline-flex h-7 w-fit items-center rounded-md px-3 text-[0.75rem] font-medium"
         style={{ background: tokens.accent, color: tokens.accentFg }}
       >
-        New task
+        New subject
       </span>
     </div>
   )
@@ -161,8 +155,8 @@ export const BrandingSection = ({ initial }: { initial: BrandingValue }) => {
                 key={preset}
                 type="button"
                 onClick={() => setAccent(preset === STOCK_ACCENT ? '' : preset)}
-                aria-label={preset === STOCK_ACCENT ? 'Stock indigo' : preset}
-                title={preset === STOCK_ACCENT ? 'Stock indigo' : preset}
+                aria-label={preset === STOCK_ACCENT ? 'Stock heather' : preset}
+                title={preset === STOCK_ACCENT ? 'Stock heather' : preset}
                 className={cn(
                   'inset-ring-black/12 size-6 rounded-full inset-ring',
                   'transition-[box-shadow] duration-[var(--dur-1)] ease-[var(--ease-out)]',

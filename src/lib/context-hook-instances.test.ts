@@ -5,43 +5,88 @@ import { spawn } from 'node:child_process'
 import { afterEach, describe, expect, it } from 'vitest'
 
 /**
- * CROFT-297. With several instances and no route for the directory, `croft
- * context` exits 10 and says on stderr what to ask the user. That is the one
- * failure the briefing hook must not swallow: an agent told nothing finds out
- * at its first write, after the moment to ask has passed.
+ * hooks/croft-context.mjs, the SessionStart briefing. It runs `croft context
+ * --brief --cwd <cwd>` and passes on whatever that prints — and in every other
+ * case says nothing and exits 0, promptly. A briefing hook that can stall or
+ * fail a session start is worse than none.
  */
 const directories: string[] = []
 afterEach(async () => {
   await Promise.all(directories.splice(0).map((d) => rm(d, { recursive: true, force: true })))
 })
 
-const hook = async (croftScript: string) => {
+const hook = async (
+  croftScript: string,
+  { env = {} as Record<string, string>, payload = { hook_event_name: 'SessionStart', cwd: '/work/lab' } as Record<string, unknown> } = {},
+) => {
   const dir = await mkdtemp(join(tmpdir(), 'croft-context-hook-'))
   directories.push(dir)
   const cli = join(dir, 'croft')
   await writeFile(cli, `#!/bin/sh\n${croftScript}\n`)
   await chmod(cli, 0o755)
-  return new Promise<{ code: number | null; stdout: string }>((resolve) => {
+  const clean = Object.fromEntries(
+    Object.entries(process.env).filter(([k]) => !k.endsWith('_SUMMARISER')),
+  )
+  const started = Date.now()
+  return new Promise<{ code: number | null; stdout: string; ms: number }>((resolve) => {
     const child = spawn('node', ['hooks/croft-context.mjs'], {
-      env: { ...process.env, CROFT_CLI: cli, TRIG_CLI: join(dir, 'no-trig') },
+      env: { ...clean, CROFT_CLI: cli, ...env } as unknown as NodeJS.ProcessEnv,
     })
     let stdout = ''
     child.stdout.on('data', (c: Buffer) => { stdout += c.toString() })
-    child.on('close', (code) => resolve({ code, stdout }))
-    child.stdin.end(JSON.stringify({ hook_event_name: 'SessionStart', cwd: '/work/client-site' }))
+    child.on('close', (code) => resolve({ code, stdout, ms: Date.now() - started }))
+    child.stdin.end(JSON.stringify(payload))
   })
 }
 
-describe('the briefing hook on a machine with several instances', () => {
-  it("passes on the CLI's instruction to ask when the directory has no instance", async () => {
-    const { code, stdout } = await hook('echo "croft: nothing says which one ~/work/client-site is for. Ask the user" >&2; exit 10')
+describe('the SessionStart briefing hook', () => {
+  it('runs context --brief for the session directory and injects what it prints', async () => {
+    const { code, stdout } = await hook('echo "Croft — lab: $*"')
     expect(code).toBe(0)
-    const context = JSON.parse(stdout).hookSpecificOutput.additionalContext
-    expect(context).toContain('Ask the user')
+    const out = JSON.parse(stdout)
+    expect(out.hookSpecificOutput.hookEventName).toBe('SessionStart')
+    expect(out.hookSpecificOutput.additionalContext).toBe('Croft — lab: context --brief --cwd /work/lab')
   })
 
-  it('stays silent on any other failure, as before', async () => {
-    const { stdout } = await hook('echo "boom" >&2; exit 1')
+  it('is silent when the CLI prints nothing', async () => {
+    const { code, stdout } = await hook('exit 0')
+    expect(code).toBe(0)
+    expect(stdout).toBe('')
+  })
+
+  it('is silent when the CLI fails, whatever it says on stderr', async () => {
+    for (const script of ['echo "boom" >&2; exit 1', 'echo "Ask the user" >&2; exit 10']) {
+      const { code, stdout } = await hook(script)
+      expect(code).toBe(0)
+      expect(stdout).toBe('')
+    }
+  })
+
+  it('is silent when the CLI is missing', async () => {
+    const { code, stdout } = await hook('exit 0', { env: { CROFT_CLI: '/nonexistent/croft' } })
+    expect(code).toBe(0)
+    expect(stdout).toBe('')
+  })
+
+  it('gives up at its deadline instead of holding the session', async () => {
+    const { code, stdout, ms } = await hook('sleep 5; echo late', { env: { CROFT_HOOK_TIMEOUT_MS: '300' } })
+    expect(code).toBe(0)
+    expect(stdout).toBe('')
+    expect(ms).toBeLessThan(3000)
+  })
+
+  it('stays out of every summariser run', async () => {
+    for (const name of ['AGENT_MEMORY_SUMMARISER', 'CAIRN_SUMMARISER', 'QUARRY_SUMMARISER', 'CROFT_SUMMARISER']) {
+      const { code, stdout } = await hook('echo "Croft — lab: 1 exploring"', { env: { [name]: '1' } })
+      expect(code, name).toBe(0)
+      expect(stdout, name).toBe('')
+    }
+  })
+
+  it('ignores any event but SessionStart and a Hermes first turn', async () => {
+    const { stdout } = await hook('echo brief', {
+      payload: { hook_event_name: 'PreToolUse', cwd: '/w', tool_input: { file_path: '/w/a.ts' } },
+    })
     expect(stdout).toBe('')
   })
 })

@@ -1,15 +1,15 @@
 import Link from 'next/link'
 import {
-  BookMarked,
   CirclePlus,
   GitCommitHorizontal,
   ListTodo,
   MessageSquare,
   PenLine,
-  Terminal,
+  Sprout,
 } from 'lucide-react'
 import { Avatar, ProjectIcon } from '@/components/icons'
 import { cn } from '@/lib/utils'
+import { RIG_PATHS } from '@/lib/brand-mark'
 import type { ActivityRow } from '@/lib/api/activity-feed'
 import { groupActivity, type ActivityGroup } from '@/lib/activity-grouping'
 
@@ -25,24 +25,26 @@ import { groupActivity, type ActivityGroup } from '@/lib/activity-grouping'
  * point; `PenLine` is someone writing as they work; `Terminal` is a session.
  * Each keeps a fixed colour, which is what makes the column sortable by eye.
  */
-const KIND: Record<
-  ActivityRow['kind'],
-  { label: string; Icon: typeof ListTodo; color: string }
-> = {
-  task: { label: 'filed', Icon: CirclePlus, color: 'var(--accent)' },
+type KindMeta = { label: string; Icon: typeof ListTodo; color: string }
+
+// Keyed by string rather than by the feed's union, so a kind the feed stops
+// (or starts) sending never breaks the page: an unknown kind reads as a change.
+const KIND: Record<string, KindMeta> = {
+  task: { label: 'filed', Icon: CirclePlus, color: 'var(--status-in-review)' },
   event: { label: 'changed', Icon: GitCommitHorizontal, color: 'var(--fg-subtle)' },
   note: { label: 'note', Icon: PenLine, color: 'var(--status-todo)' },
-  comment: { label: 'comment', Icon: MessageSquare, color: 'var(--status-in-review)' },
-  session: { label: 'session', Icon: Terminal, color: 'var(--status-doing)' },
-  knowledge: { label: 'knowledge', Icon: BookMarked, color: 'var(--status-done)' },
+  comment: { label: 'comment', Icon: MessageSquare, color: 'var(--log-finding)' },
+  subject: { label: 'subject', Icon: Sprout, color: 'var(--stage-active)' },
 }
 
-/** Where a row leads. A session has no page of its own, and its useful content
- *  is the line already shown, so it stays unlinked rather than pointing at a
- *  list the reader is already looking at. */
+const kindOf = (kind: string): KindMeta => KIND[kind] ?? KIND.event!
+
+/** Where a row leads: a subject to its page, anything on a todo to the todo. */
 export const hrefFor = (row: ActivityRow): string | null => {
-  if (row.kind === 'knowledge') return `/knowledge/${row.ref}`
-  if (row.kind === 'session') return null
+  const kind: string = row.kind
+  const subject = /^S-(\d+)$/.exec(row.ref)
+  if (subject) return `/subjects/${subject[1]}`
+  if (kind === 'session' || kind === 'knowledge') return null
   const [key, number] = row.ref.split('-')
   if (key && number) return `/projects/${key}/tasks/${number}`
   // An event about the project itself — renamed, re-keyed, archived — carries
@@ -96,13 +98,13 @@ const Trail = ({ color }: { color: string }) => (
   </span>
 )
 
-/** A small croft on the trail where a day begins: three stones, the top one lit. */
+/** A small field on the trail where a day begins: three strips, one inked. */
 const DayCroft = () => (
   <span aria-hidden className="flex w-2 shrink-0 justify-center">
-    <svg viewBox="0 0 10 10" className="size-2.5 overflow-visible">
-      <rect x="0.5" y="7.2" width="9" height="2.3" rx="1.15" fill="var(--fg-subtle)" opacity="0.5" />
-      <rect x="1.8" y="4.3" width="6.4" height="2.3" rx="1.15" fill="var(--fg-subtle)" opacity="0.8" />
-      <rect x="3" y="1.4" width="4" height="2.3" rx="1.15" fill="var(--accent)" />
+    <svg viewBox="4 5 23 22" className="size-2.5 overflow-visible">
+      {RIG_PATHS.map((d, i) => (
+        <path key={d} d={d} fill={i === 2 ? 'var(--fg-muted)' : 'var(--fg-subtle)'} opacity={i === 2 ? 1 : 0.55} />
+      ))}
     </svg>
   </span>
 )
@@ -113,7 +115,7 @@ const ROW =
   'group relative block after:pointer-events-none after:absolute after:right-0 after:bottom-0 after:left-[5.125rem] after:h-px after:bg-border/70 last:after:hidden'
 
 const Row = ({ row }: { row: ActivityGroup }) => {
-  const { label, Icon, color } = KIND[row.kind]
+  const { label, Icon, color } = kindOf(row.kind)
   const href = hrefFor(row)
   const time = row.at.slice(11, 16)
 

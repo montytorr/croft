@@ -13,8 +13,8 @@ const GlobalError = ({ error }: { error: Error & { digest?: string } }) => (
         minHeight: '100vh',
         display: 'grid',
         placeItems: 'center',
-        background: '#08090a',
-        color: '#f7f8f8',
+        background: '#f6f2ea',
+        color: '#221c20',
         fontFamily: 'ui-sans-serif, system-ui, sans-serif',
         textAlign: 'center',
         padding: '24px',
@@ -22,11 +22,11 @@ const GlobalError = ({ error }: { error: Error & { digest?: string } }) => (
     >
       <div>
         <h1 style={{ fontSize: 15, fontWeight: 500, margin: 0 }}>Croft failed to start.</h1>
-        <p style={{ fontSize: 13, color: '#8a8f98', marginTop: 8 }}>
+        <p style={{ fontSize: 13, color: '#5c5358', marginTop: 8 }}>
           Reload the page. If it persists, the server logs will have the detail.
         </p>
         {error.digest && (
-          <code style={{ fontSize: 11, color: '#8a8f98' }}>digest {error.digest}</code>
+          <code style={{ fontSize: 11, color: '#5c5358' }}>digest {error.digest}</code>
         )}
       </div>
     </body>

@@ -280,7 +280,9 @@ export const LabelPill = ({ children }: { children: React.ReactNode }) => {
  * Initials avatar. Colour is derived from the name so the same actor is always
  * the same colour — which is what lets you recognise an agent without reading.
  */
-const AVATAR_COLORS = ['#5e6ad2', '#4cb782', '#f2994a', '#eb5757', '#bb87fc', '#4ea7fc', '#26b5a2']
+// Earth tones, each carrying white initials at 4.5 or better; none of them is
+// heather, which is the accent's alone.
+const AVATAR_COLORS = ['#5a6f8c', '#4a7a2c', '#a14a22', '#5b4bb0', '#2f62a8', '#2f7a6e', '#8a5a0a']
 
 export const Avatar = ({ name, size = 18 }: { name: string; size?: number }) => {
   const initials = name
@@ -311,8 +313,8 @@ export const Avatar = ({ name, size = 18 }: { name: string; size?: number }) => 
  * near-neighbours in the sidebar on the same hue, which defeats the point.
  */
 const PROJECT_COLORS = [
-  '#5e6ad2', '#4cb782', '#f2994a', '#eb5757', '#bb87fc', '#4ea7fc', '#26b5a2',
-  '#d4a72c', '#e06c9f', '#7b8794', '#6ec7c0', '#a3874f',
+  '#6f86a8', '#6f9a4f', '#c9803a', '#c0654a', '#8f7fd6', '#4f8fcf', '#3f9a8c',
+  '#c4a23c', '#8a7a5c', '#8a8f98', '#6fb0a8', '#a3874f',
 ]
 
 /** Stable across renders, machines and reloads — it is derived, not stored. */

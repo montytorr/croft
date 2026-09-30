@@ -3,7 +3,7 @@ import { ThemeProvider } from 'next-themes'
 import { BrandProvider } from '@/components/brand'
 import { paletteCss } from '@/lib/brand-colour'
 import { getBranding } from '@/lib/branding'
-import { display } from './fonts'
+import { fontVariables } from './fonts'
 import './globals.css'
 
 /**
@@ -14,7 +14,7 @@ import './globals.css'
  */
 export const dynamic = 'force-dynamic'
 
-const DESCRIPTION = 'Agent-first task tracker whose tasks double as shared memory.'
+const DESCRIPTION = 'A lab notebook for a working group: subjects to explore, written up and walked through stages.'
 
 /**
  * Where relative metadata URLs — the opengraph-image among them — resolve.
@@ -69,7 +69,7 @@ const RootLayout = async ({ children }: { children: React.ReactNode }) => {
     <html
       lang="en"
       suppressHydrationWarning
-      className={display.variable}
+      className={fontVariables}
     >
       <body>
         {/* Every value is re-serialised from parsed numbers, never an admin's

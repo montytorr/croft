@@ -329,13 +329,14 @@ describe('which side of a drift is newer', () => {
   })
 })
 
-describe('the installer and the per-Read hook CCS-40 removed', () => {
+describe('the installer: one SessionStart hook, and nothing it used to write', () => {
   const READ_HOOK = (prefix = '') => ({
     matcher: 'Read',
     hooks: [{ type: 'command', command: `${prefix}node /old/home/.croft/hooks/croft-context.mjs`, async: true, timeout: 10 }],
   })
+  const OLD = (script: string, extra = '') => ({ type: 'command', command: `node /old/.croft/hooks/${script}${extra}`, 'croft-memory': true })
 
-  it('takes out its own Read hook, keeps everyone else’s, and is idempotent', async () => {
+  it('takes out its own retired hooks, keeps everyone else’s, installs SessionStart, and is idempotent', async () => {
     const home = await temp('croft-wiring-hooks-')
     await mkdir(join(home, '.claude'))
     await mkdir(join(home, '.codex'))
@@ -348,13 +349,22 @@ describe('the installer and the per-Read hook CCS-40 removed', () => {
             { matcher: 'Read', hooks: [READ_HOOK().hooks[0], foreignPre] },
             { matcher: 'Bash', hooks: [{ type: 'command', command: '/guard.sh' }] },
           ],
+          SessionEnd: [{ hooks: [OLD('croft-session-end.mjs')] }],
+          PreCompact: [{ hooks: [OLD('croft-session-end.mjs')] }],
+          Stop: [{ hooks: [OLD('croft-learn-nudge.mjs')] }],
         },
       }),
     )
     const quarry = { type: 'command', command: 'node /x/.quarry/hooks/quarry-session-end.mjs' }
     await writeFile(
       join(home, '.codex/hooks.json'),
-      JSON.stringify({ hooks: { PreToolUse: [READ_HOOK('CROFT_AGENT=codex ')], Stop: [{ hooks: [quarry] }] } }),
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [READ_HOOK('CROFT_AGENT=codex ')],
+          Stop: [{ hooks: [quarry] }, { hooks: [OLD('croft-session-end.mjs', ' --ongoing')] }],
+          SessionEnd: [{ hooks: [OLD('croft-session-end.mjs')] }],
+        },
+      }),
     )
 
     const env = { PATH: BASE_PATH, HOME: home, CROFT_OPENCLAW_BIN: 'openclaw-not-installed' }
@@ -366,32 +376,80 @@ describe('the installer and the per-Read hook CCS-40 removed', () => {
       { matcher: 'Read', hooks: [foreignPre] },
       { matcher: 'Bash', hooks: [{ type: 'command', command: '/guard.sh' }] },
     ])
-    expect(Object.keys(claude.hooks).sort()).toEqual(['PreCompact', 'PreToolUse', 'SessionEnd', 'SessionStart', 'Stop'])
-    // The learn nudge blocks Stop, which only a synchronous hook can (CROFT-323).
-    expect(claude.hooks.Stop).toEqual([{ hooks: [expect.objectContaining({ command: expect.stringMatching(/croft-learn-nudge\.mjs$/) })] }])
-    expect(claude.hooks.Stop[0].hooks[0].async).toBeUndefined()
+    expect(Object.keys(claude.hooks).sort()).toEqual(['PreToolUse', 'SessionStart'])
+    expect(claude.hooks.SessionStart).toEqual([
+      {
+        matcher: 'startup|resume|clear|compact',
+        hooks: [expect.objectContaining({ command: `node ${join(home, '.croft/hooks/croft-context.mjs')}`, 'croft-memory': true })],
+      },
+    ])
 
     const codex = JSON.parse(await readFile(join(home, '.codex/hooks.json'), 'utf8'))
     expect(codex.hooks.PreToolUse).toBeUndefined()
+    expect(codex.hooks.SessionEnd).toBeUndefined()
     // Somebody else's hook: warned about, never removed.
-    expect(codex.hooks.Stop.flatMap((g: { hooks: unknown[] }) => g.hooks)).toContainEqual(quarry)
+    expect(codex.hooks.Stop).toEqual([{ hooks: [quarry] }])
     expect(first.stdout).toContain('Stop (runs every turn): node /x/.quarry/hooks/quarry-session-end.mjs')
-    // Stop is a live checkpoint and SessionEnd closes the session: a Stop that
-    // ended it closed every Codex session on its first turn (CROFT-319).
-    const croftCommand = (event: string, script = 'croft-session-end.mjs') =>
-      codex.hooks[event]
-        .flatMap((g: { hooks: { command: string }[] }) => g.hooks)
-        .map((h: { command: string }) => h.command)
-        .find((command: string) => command.includes(script))
-    expect(croftCommand('Stop')).toMatch(/croft-session-end\.mjs --ongoing$/)
-    expect(croftCommand('Stop', 'croft-learn-nudge.mjs')).toMatch(/croft-learn-nudge\.mjs$/)
-    expect(croftCommand('SessionEnd')).toMatch(/croft-session-end\.mjs$/)
-    expect(first.stdout).toContain('removed the per-Read PreToolUse hook')
+    const start = codex.hooks.SessionStart.flatMap((g: { hooks: { command: string }[] }) => g.hooks)
+    expect(start).toEqual([expect.objectContaining({ command: expect.stringMatching(/^CROFT_AGENT=codex .*croft-context\.mjs$/), 'croft-memory': true })])
+    expect(first.stdout).toContain("removed Croft's old")
 
     const second = await run('node', ['scripts/install-hooks.mjs'], env)
     expect(second.code, second.stderr).toBe(0)
     expect(second.stdout).toContain(`${join(home, '.claude/settings.json')} — unchanged`)
     expect(second.stdout).toContain(`${join(home, '.codex/hooks.json')} — unchanged`)
+  })
+
+  it('yields to Cairn: no Croft briefing where Cairn\'s SessionStart hook is installed', async () => {
+    const home = await temp('croft-wiring-cairn-')
+    await mkdir(join(home, '.claude'))
+    await mkdir(join(home, '.codex'))
+    const cairn = { type: 'command', command: 'node /h/.cairn/hooks/cairn-context.mjs', 'cairn-memory': true, timeout: 10 }
+    await writeFile(
+      join(home, '.claude/settings.json'),
+      JSON.stringify({
+        hooks: {
+          SessionStart: [
+            { matcher: 'startup|resume|clear|compact', hooks: [cairn] },
+            // A Croft entry from before Cairn was installed: taken out.
+            { matcher: 'startup', hooks: [OLD('croft-context.mjs')] },
+          ],
+        },
+      }),
+    )
+    // Codex has no Cairn here, so Croft briefs it.
+    await writeFile(join(home, '.codex/hooks.json'), JSON.stringify({ hooks: {} }))
+
+    const env = { PATH: BASE_PATH, HOME: home, CROFT_OPENCLAW_BIN: 'openclaw-not-installed' }
+    const out = await run('node', ['scripts/install-hooks.mjs'], env)
+    expect(out.code, out.stderr).toBe(0)
+    expect(out.stdout).toContain('claude: briefing: carried by Cairn')
+    expect(out.stdout).not.toContain('codex: briefing: carried by Cairn')
+
+    const claude = JSON.parse(await readFile(join(home, '.claude/settings.json'), 'utf8'))
+    expect(claude.hooks.SessionStart).toEqual([{ matcher: 'startup|resume|clear|compact', hooks: [cairn] }])
+    const codex = JSON.parse(await readFile(join(home, '.codex/hooks.json'), 'utf8'))
+    expect(codex.hooks.SessionStart[0].hooks).toEqual([expect.objectContaining({ 'croft-memory': true })])
+
+    // And a re-run still says so, without touching the file.
+    const again = await run('node', ['scripts/install-hooks.mjs'], env)
+    expect(again.stdout).toContain('claude: briefing: carried by Cairn')
+    expect(again.stdout).toContain(`${join(home, '.claude/settings.json')} — unchanged`)
+  })
+
+  it('installs its own tagged SessionStart entry where Cairn is absent', async () => {
+    const home = await temp('croft-wiring-nocairn-')
+    await mkdir(join(home, '.claude'))
+    await writeFile(join(home, '.claude/settings.json'), JSON.stringify({ hooks: {} }))
+    const out = await run('node', ['scripts/install-hooks.mjs'], {
+      PATH: BASE_PATH, HOME: home, CROFT_OPENCLAW_BIN: 'openclaw-not-installed',
+    })
+    expect(out.code, out.stderr).toBe(0)
+    expect(out.stdout).not.toContain('carried by Cairn')
+    expect(out.stdout).toContain('claude: SessionStart')
+    const claude = JSON.parse(await readFile(join(home, '.claude/settings.json'), 'utf8'))
+    expect(claude.hooks.SessionStart[0].hooks[0]).toMatchObject({ 'croft-memory': true })
+    expect(claude.hooks.SessionStart[0].hooks[0].command).toMatch(/croft-context\.mjs$/)
   })
 })
 

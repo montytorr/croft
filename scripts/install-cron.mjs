@@ -11,8 +11,8 @@
  *   node scripts/install-cron.mjs --remove   # take it out again
  *   node scripts/install-cron.mjs --run agent-files   # run that job now
  *
- * `croft setup` runs this with `--only agent-files` (plus reconcile and vitals
- * under `--maintenance`); the rest, like openclaw-sessions, are installed here.
+ * `croft setup` runs this with `--only agent-files` (plus reconcile under
+ * `--maintenance`).
  *
  * Printing is the default on purpose: a script that edits a crontab the moment
  * it is run is a script nobody should run.
@@ -77,7 +77,6 @@ const SYNC = env(
     : '/opt/croft-maintenance/sync-agent-files.mjs',
 )
 const RAW = env('CROFT_RAW_BASE', 'https://raw.githubusercontent.com/montytorr/croft/main')
-const HOOKS = env('CROFT_HOOKS_DIR', join(homedir(), '.croft/hooks'))
 
 /**
  * An env override that ends up, unquoted for cron's own purposes, in a
@@ -90,35 +89,21 @@ const HOOKS = env('CROFT_HOOKS_DIR', join(homedir(), '.croft/hooks'))
  * it; refusing the value up front is simpler than trying to escape it well.
  */
 const UNSAFE_ENV_VALUE = /[\n\r%]/
-const rejectUnsafeEnvValue = (name, value) => {
-  if (value && UNSAFE_ENV_VALUE.test(value)) {
+const rejectUnsafeEnvValue = (name, value, unsafe = UNSAFE_ENV_VALUE) => {
+  if (value && unsafe.test(value)) {
     console.error(`${name} contains a newline, carriage return or % — refusing to schedule it as given.`)
     console.error('Fix the value (it should be a plain path or command), then run this again.')
     process.exit(2)
   }
 }
 
-/** Where a runtime keeps transcripts nothing else will hand us. */
-const OPENCLAW_SESSIONS = env('CROFT_OPENCLAW_SESSIONS', '')
-rejectUnsafeEnvValue('CROFT_OPENCLAW_SESSIONS', OPENCLAW_SESSIONS)
-
-/**
- * How the sweep reaches a summariser, when the identity it must run as cannot.
- *
- * The OpenClaw sweep has to be root — the transcripts live under a 0700 home —
- * and `claude -p` as root answered "Not logged in". The hook swallows a failed
- * summariser so as not to lose the session row, so every OpenClaw session was
- * recorded with its files and refs and no prose at all, silently, for the life
- * of the feature. Point this at a wrapper that can summarise.
- */
-const SUMMARY_CLI = env('CROFT_SUMMARY_CLI', '')
-rejectUnsafeEnvValue('CROFT_SUMMARY_CLI', SUMMARY_CLI)
-
 /** Tasks the jobs report into. Empty disables reporting for that job. */
 const NOTIFY_FILES = env('CROFT_NOTIFY_FILES', '')
-const NOTIFY_VITALS = env('CROFT_NOTIFY_VITALS', '')
+// A literal % is escaped for cron by cronLine; a line break would forge a line.
+rejectUnsafeEnvValue('CROFT_NOTIFY_FILES', NOTIFY_FILES, /[\n\r]/)
 
 /** Extra copies outside this user's home, as `artefact=path`, comma separated. */
+rejectUnsafeEnvValue('CROFT_SYNC_ALSO', env('CROFT_SYNC_ALSO', ''))
 const ALSO = env('CROFT_SYNC_ALSO', '')
   .split(',')
   .map((s) => s.trim())
@@ -142,7 +127,7 @@ const FANS_OUT = (() => {
 const ALL_INSTANCES = FANS_OUT ? ['--all-instances'] : []
 if (!FANS_OUT && existsSync(join(homedir(), '.croft', 'instances.json'))) {
   console.error(
-    `warning: ${CLI} predates --all-instances, so reconcile and vitals will reach one instance only. ` +
+    `warning: ${CLI} predates --all-instances, so reconcile will reach one instance only. ` +
       'Run the agent-files job to update it, then run this installer again.',
   )
 }
@@ -163,14 +148,6 @@ const JOBS = [
     // One run per instance where a machine has several (README, "Several
     // instances"); exactly the old run where it has one.
     command: [CLI, 'reconcile', ...ALL_INSTANCES],
-  },
-  {
-    name: 'vitals',
-    why: 'Asks daily whether the memory is still being written, and says so only when it is not.',
-    requires: [CLI],
-    at: { hour: 8, minute: 0 },
-    env: { CROFT_AGENT: 'maintenance' },
-    command: [CLI, 'vitals', ...ALL_INSTANCES, ...(NOTIFY_VITALS ? ['--notify', NOTIFY_VITALS] : [])],
   },
   {
     name: 'agent-files',
@@ -195,18 +172,6 @@ const JOBS = [
       ...ALSO.flatMap((pair) => ['--also', pair]),
       ...(NOTIFY_FILES ? ['--notify', NOTIFY_FILES] : []),
     ],
-  },
-  {
-    name: 'openclaw-sessions',
-    why: 'OpenClaw has no session-end event, so its transcripts are swept instead.',
-    requires: [OPENCLAW_SESSIONS, join(HOOKS, 'croft-session-end.mjs'), NODE],
-    every: 30,
-    env: {
-      CROFT_AGENT: 'openclaw',
-      CROFT_PLATFORM: 'openclaw',
-      ...(SUMMARY_CLI ? { CROFT_SUMMARY_CLI: SUMMARY_CLI } : {}),
-    },
-    command: [NODE, join(HOOKS, 'croft-session-end.mjs'), '--scan', OPENCLAW_SESSIONS],
   },
 ]
 
@@ -365,8 +330,8 @@ const withoutOurs = (text) => {
  * managed block already in the crontab, keyed by name.
  *
  * `--only` is what `croft setup` passes on every re-run, naming just the jobs
- * it is touching this time (agent-files, plus reconcile/vitals under
- * --maintenance, plus openclaw-sessions where it applies) — never the full
+ * it is touching this time (agent-files, plus reconcile under
+ * --maintenance) — never the full
  * JOBS list. Rewriting the whole block to hold only those names used to throw
  * away every other already-installed job's line on each such re-run, which is
  * exactly backwards: a job nobody asked to change this time should not be
@@ -670,7 +635,7 @@ const kept = trimEnd(withoutOurs(existing))
 // `applicable` alone, exactly as before — a full run still fully re-syncs.
 const untouchedLines = only
   ? Object.entries(existingManagedLines(existing))
-      .filter(([jobName]) => !only.includes(jobName))
+      .filter(([jobName]) => !only.includes(jobName) && JOBS.some((job) => job.name === jobName))
       .flatMap(([, jobLines]) => jobLines)
   : []
 

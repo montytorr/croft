@@ -27,8 +27,6 @@ const DELIBERATELY_STATIC: Record<string, string> = {
     '"last used" is a timestamp worth reloading for, not one worth a live stream',
   'users/page.tsx':
     'administrator actions refresh the page after every write; remote account changes are deliberately not applied mid-form',
-  'vitals/page.tsx':
-    'a five-minute cached rollup — refreshing it faster than the cache would repaint identical numbers',
   'api-docs/page.tsx': 'the spec changes on deploy, not while you read',
   'connect/page.tsx': 'a bare code-entry form; there is nothing on it that can go stale',
   'connect/[code]/page.tsx':

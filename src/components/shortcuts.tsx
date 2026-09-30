@@ -7,13 +7,20 @@ const GROUPS: { title: string; keys: [string[], string][] }[] = [
     title: 'Global',
     keys: [
       [['⌘', 'K'], 'Search and jump'],
-      [['C'], 'New task'],
+      [['C'], 'New subject (a todo, on todo pages)'],
       [['?'], 'This list'],
       [['Esc'], 'Close, or leave a field'],
     ],
   },
   {
-    title: 'Lists',
+    title: 'Lab',
+    keys: [
+      [['/'], 'Focus the filter'],
+      [['⌘', '↵'], 'Save the write-up'],
+    ],
+  },
+  {
+    title: 'Todo lists',
     keys: [
       [['/'], 'Focus the filter'],
       [['1'], 'Doing'],

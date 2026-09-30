@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic'
 const createProject = z.object({
   key: z
     .string()
-    .regex(/^[A-Z][A-Z0-9]{1,9}$/, 'key must be 2-10 uppercase alphanumerics, e.g. CAI'),
+    .regex(/^[A-Z][A-Z0-9]{0,9}$/, 'key must be 1-10 uppercase alphanumerics starting with a letter, e.g. CAI'),
   title: z.string().min(1).max(200),
   description: z.string().max(100_000).optional(),
 })

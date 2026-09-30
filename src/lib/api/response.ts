@@ -40,6 +40,8 @@ export type ApiError =
   | 'already_claimed'
   | 'session_closed'
   | 'resolution_required'
+  | 'conclusion_required'
+  | 'stage_in_use'
   | 'secret_detected'
   | 'rate_limited'
   | 'internal_error'
@@ -53,6 +55,8 @@ const STATUS: Record<ApiError, number> = {
   already_claimed: 409,
   session_closed: 409,
   resolution_required: 400,
+  conclusion_required: 400,
+  stage_in_use: 409,
   secret_detected: 400,
   rate_limited: 429,
   internal_error: 500,

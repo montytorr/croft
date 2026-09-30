@@ -8,10 +8,8 @@ import { spawn } from 'node:child_process'
 /**
  * KNOWN_FLAGS is one list for every verb, which is what makes it cheap and
  * what makes it blind: it catches a flag nothing reads, never a flag one verb
- * reads and another does not. `croft relearn <slug> --global` parsed, printed
- * the entry with its old scope still on it and exited 0 — three lines below
- * the comment explaining why a silently dropped flag is unacceptable
- * (CROFT-262).
+ * reads and another does not. A verb that parsed a flag and never read it
+ * printed its answer and exited 0 (CROFT-262).
  *
  * The guard is not a per-verb table. `flags` is a proxy that records what the
  * running command actually looked at, so the reads are the registry: exact,
@@ -115,91 +113,6 @@ describe('a flag the running command never read', () => {
 })
 
 /**
- * The instance that exposed all of the above. `--global` means something
- * different on a PATCH than on a POST: `learn` uses it to say "do not infer a
- * project from this directory", `relearn` has to actively clear what is there.
- */
-describe('relearn --global', () => {
-  it('clears both scopes, because a fact true everywhere has neither', async () => {
-    const seen: { body?: Record<string, unknown> } = {}
-    const base = await serve(seen)
-    const { code } = await run(['relearn', 'a-fact', '--global'], base)
-
-    expect(code).toBe(0)
-    expect(seen.body?.projects).toEqual([])
-    // Clearing only projects would leave `relearn --global` producing a state
-    // `learn --global` cannot.
-    expect(seen.body?.entities).toEqual([])
-  })
-
-  it('refuses to be combined with a scope it contradicts', async () => {
-    const seen: { body?: Record<string, unknown> } = {}
-    const base = await serve(seen)
-    const { code, stderr } = await run(['relearn', 'a-fact', '--global', '--project', 'CAI'], base)
-
-    expect(code).not.toBe(0)
-    expect(stderr).toContain('--global means no project and no entity')
-    // Nothing reached the wire: the contradiction is caught before the write.
-    expect(seen.body).toBeUndefined()
-  })
-
-  /**
-   * CROFT-295. A PATCH touches only the side it is given, so moving a fact from
-   * a project to an entity has to clear the project explicitly. `--entity X`
-   * alone adds and keeps the project, which is right; `none` is the clear.
-   */
-  it('moves a fact from a project to an entity with --project none', async () => {
-    const seen: { body?: Record<string, unknown> } = {}
-    const base = await serve(seen)
-    const { code } = await run(['relearn', 'a-fact', '--entity', 'clawdius', '--project', 'none'], base)
-
-    expect(code).toBe(0)
-    expect(seen.body?.projects).toEqual([])
-    expect(seen.body?.entities).toEqual(['clawdius'])
-  })
-
-  it('clears only the side named none, and leaves the other alone', async () => {
-    const seen: { body?: Record<string, unknown> } = {}
-    const base = await serve(seen)
-    const { code } = await run(['relearn', 'a-fact', '--entity', 'none'], base)
-
-    expect(code).toBe(0)
-    expect(seen.body?.entities).toEqual([])
-    expect(seen.body).not.toHaveProperty('projects')
-  })
-
-  it('adds an entity without touching the project when none is not given', async () => {
-    const seen: { body?: Record<string, unknown> } = {}
-    const base = await serve(seen)
-    await run(['relearn', 'a-fact', '--entity', 'clawdius'], base)
-
-    expect(seen.body?.entities).toEqual(['clawdius'])
-    expect(seen.body).not.toHaveProperty('projects')
-  })
-
-  /** An empty value used to read as "not given" and be dropped without a word. */
-  it('refuses an empty scope instead of silently ignoring it', async () => {
-    const seen: { body?: Record<string, unknown> } = {}
-    const base = await serve(seen)
-    const { code, stderr } = await run(['relearn', 'a-fact', '--entity', 'clawdius', '--project', ''], base)
-
-    expect(code).not.toBe(0)
-    expect(stderr).toContain('--project needs a value')
-    expect(stderr).toContain('none to clear it')
-    expect(seen.body).toBeUndefined()
-  })
-
-  it('is offered by the help text, which is the contract people read', async () => {
-    const base = await serve({})
-    const { stdout } = await run(['help'], base)
-    const relearn = stdout.split('\n').findIndex((l) => l.includes('croft relearn'))
-
-    expect(relearn).toBeGreaterThan(-1)
-    expect(stdout.split('\n').slice(relearn, relearn + 2).join(' ')).toContain('--global')
-  })
-})
-
-/**
  * A sweep, because the mechanism's risk is not that it misses something — it is
  * that it fires on a legitimate command and starts exiting 2 on every machine
  * at once. Each of these is a documented invocation whose every flag the verb
@@ -225,9 +138,19 @@ describe('documented invocations stay silent', () => {
     ['release', 'CAI-1', '--force'],
     ['checkpoint', 'CAI-1', '--summary', 's'],
     ['block', 'CAI-1', '--reason', 'r'],
-    ['learn', 'A fact', '--body', 'b', '--global', '--label', 'l', '--task', 'CAI-1'],
-    ['relearn', 'a-fact', '--body', 'b', '--title', 'T'],
-    ['unlearn', 'a-fact', '--superseded-by', 'b-fact'],
+    ['note', 'T-1', 'text', '--kind', 'attempt'],
+    ['done', 'T-1', '--resolution', 'r'],
+    ['push', 'T-1', 'abc1234', '--repo', '/tmp', '--branch', 'b', '--remote', 'origin'],
+    ['subject', 'add', 'A subject', '--stage', 'exploring', '--tag', 'a', '--tag', 'b,c', '--owner', 'me', '--body', 'b'],
+    ['subject', 'list', '--stage', 'exploring', '--tag', 'a', '--mine', '--all'],
+    ['subject', 'show', 'S-1', '--full'],
+    ['subject', 'edit', 'S-1', '--title', 'T', '--body', 'b'],
+    ['subject', 'stage', 'S-1', 'done', '--conclusion', 'c'],
+    ['subject', 'note', 'S-1', 'text', '--kind', 'finding'],
+    ['subject', 'todo', 'S-1', 'A todo', '--body', 'b', '--no-start'],
+    ['stages'],
+    ['tags'],
+    ['context', '--brief', '--cwd', '/tmp'],
     ['check', 'x', '--project', 'CAI', '--kinds', 'task'],
     ['check', 'x', '--tasks'],
     ['show', 'CAI-1', '--full'],

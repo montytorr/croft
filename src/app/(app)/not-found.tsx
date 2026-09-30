@@ -6,7 +6,7 @@ const NotFound = () => (
     <EmptyState
       as="h1"
       title={<span className="text-fg text-[0.9375rem]">Nothing here.</span>}
-      hint="That task or project does not exist, or it was deleted."
+      hint="That subject, todo or project does not exist, or it was deleted."
       action={
         <Link
           href="/"

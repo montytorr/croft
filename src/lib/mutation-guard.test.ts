@@ -20,8 +20,6 @@ describe('writes go through the mutate helper', () => {
 
   /** Each with the reason it is allowed to stay hand-rolled. */
   const EXEMPT: Record<string, string> = {
-    'knowledge/[slug]/knowledge-detail.tsx':
-      'its own patch() throws, and every caller catches and renders the message',
     'user-menu.tsx':
       'sign-out ignores the response on purpose — the local session is gone either way',
     'settings/password-section.tsx':

@@ -1,59 +1,40 @@
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MarkdownView } from './markdown'
-import { KnowledgeSlugsProvider } from './knowledge-slugs'
+import { ProjectKeysProvider } from './project-keys'
 
 /**
- * How a reference to something nobody wrote is drawn.
- *
- * The linkifier marks these, and `remarkKnowledgeRefs` has its own tests for
- * that. What is asserted here is what the mark turns into — which used to be a
- * working link. Following it landed on the generic empty state, "That task or
- * project does not exist, or it was deleted": the wrong noun for a knowledge
- * slug, and it tells the reader the entry was lost rather than never written.
- * The tooltip says "— yet". The mark should not contradict it.
+ * Refs in prose. A write-up that says "supersedes S-4" or a log entry that
+ * says "done in T-41" is only worth writing if the reader can follow it.
  */
-
-const render = (body: string, known: readonly string[] | null) =>
+const render = (body: string, keys: string[] = ['T'], prose?: 'writeup') =>
   renderToStaticMarkup(
-    <KnowledgeSlugsProvider slugs={known}>
-      <MarkdownView>{body}</MarkdownView>
-    </KnowledgeSlugsProvider>,
+    <ProjectKeysProvider keys={keys}>
+      <MarkdownView prose={prose}>{body}</MarkdownView>
+    </ProjectKeysProvider>,
   )
 
-describe('a knowledge reference in a body', () => {
-  it('does not offer a link to an entry nobody has written', () => {
-    const html = render('see [[never-written]] for context', ['something-else'])
-
-    expect(html).toContain('never-written')
-    expect(html).not.toContain('href="/knowledge/never-written"')
+describe('refs in a body', () => {
+  it('links a subject ref to its page', () => {
+    const html = render('this supersedes S-4 entirely')
+    expect(html).toContain('href="/subjects/4"')
   })
 
-  it('still says what it is, and that it could yet exist', () => {
-    const html = render('see [[never-written]] for context', ['something-else'])
-
-    expect(html).toContain('No knowledge')
-    expect(html).toContain('decoration-dotted')
-    // A pointer promising a destination was part of what made it read as a
-    // working link.
-    expect(html).toContain('cursor-help')
+  it('links a todo ref to its task page', () => {
+    expect(render('done in T-41')).toContain('href="/projects/T/tasks/41"')
   })
 
-  it('leaves a reference that does resolve as a link', () => {
-    const html = render('see [[written-down]] for context', ['written-down'])
-
-    expect(html).toContain('href="/knowledge/written-down"')
-    expect(html).toContain('text-accent')
-    expect(html).not.toContain('cursor-help')
+  it('leaves a ref inside an explicit link as the author wrote it', () => {
+    const html = render('[the old one](https://example.com/S-4)')
+    expect(html).not.toContain('href="/subjects/4"')
+    expect(html).toContain('href="https://example.com/S-4"')
   })
 
-  it('marks nothing at all when the slug list is unknown', () => {
-    // The provider's default is null rather than [], and the difference is the
-    // whole point: an empty list means "nothing exists" and would paint every
-    // reference on the page as broken.
-    const html = render('see [[written-down]] for context', null)
+  it('does not take a longer key for a subject', () => {
+    expect(render('see HTTPS-4 and XS-9', [])).not.toContain('/subjects/')
+  })
 
-    expect(html).toContain('href="/knowledge/written-down"')
-    expect(html).not.toContain('cursor-help')
+  it('sets a write-up in the reading voice', () => {
+    expect(render('A paragraph.', ['T'], 'writeup')).toContain('class="text-fg writeup"')
   })
 })

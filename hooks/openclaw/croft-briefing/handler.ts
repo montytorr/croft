@@ -1,21 +1,19 @@
 /**
- * OpenClaw's half of "inject the briefing at session start".
+ * OpenClaw's half of "brief the agent at session start".
  *
  * OpenClaw has no session-start hook that can return text. What it has is
  * `agent:bootstrap`, fired before the workspace's bootstrap files are injected,
  * with `context.bootstrapFiles` open to mutation. So the briefing arrives as
- * one more bootstrap file: a short rule, then live `croft context` output for
- * the agent's workspace.
+ * one more bootstrap file: the one rule, then `croft context --brief` for the
+ * agent's workspace (five lines at most).
  *
- * The rule travels with the data because it is the one piece of the lifecycle
- * an OpenClaw agent reliably sees. Its AGENTS.md is hand-maintained per
- * machine and drifts; the skill is read in about half of sessions. A briefing
- * that carried data only told the agent what exists, never what to do next.
- *
- * Same rules as hooks/croft-context.mjs: never block (a 5 s deadline, and every
+ * Same rules as hooks/croft-context.mjs: never block (a 3 s deadline, and every
  * failure leaves the session starting as it would have without this hook), and
  * stay small. Unlike that hook it still injects the rule when the CLI fails,
- * because an agent that cannot reach Croft should still know how to use it.
+ * because an agent that cannot reach Croft should still know when to use it.
+ *
+ * Not linked when Cairn's own cairn-briefing hook is: Cairn's briefing then
+ * carries Croft's block (scripts/install-hooks.mjs).
  *
  * No imports from OpenClaw: the hook is linked from outside its tree, so the
  * types below are the subset of its documented event this reads.
@@ -33,29 +31,22 @@ type HookEvent = {
 
 export const FILE_NAME = 'CROFT.md'
 
-export const RULE = `## Croft — live briefing
-Durable work (a fix, config change, deploy, migration, investigation, delegation): \`croft check "<subject>"\` first, and \`show\` the hits that matter.
-- Own it: \`croft add "<title>" --project <KEY> --type <type> --body -\` (claims by default for agents; assigned to your human unless \`--assignee <who>\`) or \`croft claim <ref>\`. Exit 9 = another agent holds it: pick other work.
-- Bodies are markdown: \`##\` headings, lists, paths and calls in backticks; a wall of text is refused.
-- Record: \`croft note <ref> "…" --kind attempt|finding|decision|handoff\`. Dead ends are \`attempt\`.
-- \`croft checkpoint <ref> --summary "state + next step"\` before yielding. Written but not landed: \`croft update <ref> --status in-review\`.
-- Close: \`croft done <ref> --resolution "…" --kind fixed|verified|answered|wont-fix|duplicate|superseded\` (\`verified\` when the fix was already there).
-- Sweeping a backlog: claim one task for the sweep, note on the rest. Not for trivia, or work another agent holds.
-- \`croft learn\` needs \`--project\`, \`--entity\` or \`--global\` outside a mapped checkout.`
+export const RULE = `## Croft — the lab
+Exploring or proving an idea → croft check first; changing a repo for real → a Cairn task (croft push).`
 
 const timeoutMs = () => {
-  const value = Number(process.env.CROFT_HOOK_TIMEOUT_MS ?? 5000)
-  return Number.isFinite(value) && value > 0 ? value : 5000
+  const value = Number(process.env.CROFT_HOOK_TIMEOUT_MS ?? 3000)
+  return Number.isFinite(value) && value > 0 ? value : 3000
 }
 
-/** `croft context` for the workspace, or '' on any failure, never slower than the deadline. */
+/** `croft context --brief` for the workspace, or '' on any failure, never slower than the deadline. */
 export const briefing = (cwd: string): Promise<string> =>
   new Promise((resolve) => {
     const cli = process.env.CROFT_CLI?.trim() || 'croft'
     try {
       execFile(
         cli,
-        ['context', '--cwd', cwd],
+        ['context', '--brief', '--cwd', cwd],
         {
           cwd,
           timeout: timeoutMs(),

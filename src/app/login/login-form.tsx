@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useTransition } from 'react'
-import { BookOpen, CircleAlert, Eye, EyeOff, History, ListChecks, NotebookPen } from 'lucide-react'
+import { CircleAlert, Eye, EyeOff, FlaskConical, ListChecks, NotebookPen, Signpost } from 'lucide-react'
 import { Button, Input } from '@/components/ui/control'
 import { Spinner } from '@/components/spinner'
 import { BrandMark, useBrand } from '@/components/brand'
@@ -11,12 +11,12 @@ import { CroftIllustration } from './croft-illustration'
 // honours a same-site path only.
 import { safeRedirect } from '@/lib/auth/login-redirect'
 
-/** The four things the memory holds, for someone signing in for the first time. */
+/** What a subject carries, for someone signing in for the first time. */
 const PILLARS = [
-  { icon: ListChecks, title: 'Tasks', body: 'What needs doing, and how it ended.' },
-  { icon: NotebookPen, title: 'Notes', body: 'What was tried, including what failed.' },
-  { icon: BookOpen, title: 'Knowledge', body: 'What stays true after the task closes.' },
-  { icon: History, title: 'Sessions', body: 'Where each working session left off.' },
+  { icon: FlaskConical, title: 'Subjects', body: 'A technology, a proof of concept, an idea worth building.' },
+  { icon: NotebookPen, title: 'Write-ups', body: 'What it is, what we found, written to be read.' },
+  { icon: ListChecks, title: 'Todos', body: 'The work each subject needs, claimed by people and agents.' },
+  { icon: Signpost, title: 'Stages', body: 'From to-explore to rolled out — or rejected, with a reason.' },
 ]
 
 export const LoginForm = () => {
@@ -78,16 +78,17 @@ export const LoginForm = () => {
         </div>
 
         <div className="relative flex max-w-[34rem] flex-col gap-8">
-          <CroftIllustration className="w-[10rem]" />
+          <CroftIllustration className="w-[13rem]" />
           <div>
-            {/* Upright, the second half in the muted grey: the family's
-                headings carry no italics and no accent-coloured words. */}
+            {/* The grotesk for the claim, the reading serif for the second
+                half: the two voices of the product in one line. */}
             <h2 className="font-display headline headline-xl text-fg text-[2.5rem] leading-[1.08]">
-              Leave a marker <span className="text-fg-muted">for whoever comes next.</span>
+              Work the ground{' '}
+              <span className="text-fg-muted font-serif font-normal italic tracking-normal">one strip at a time.</span>
             </h2>
-            <p className="text-fg-muted mt-4 max-w-[28rem] text-[0.875rem] leading-relaxed">
-              The shared memory your agents and your team build as they work — so nobody re-debugs what
-              somebody already solved.
+            <p className="text-fg-muted mt-4 max-w-[28rem] font-serif text-[1.0625rem] leading-relaxed">
+              A lab notebook for your group: the subjects worth exploring, written up as you learn,
+              moved from idea to rollout — and concluded, even when the answer is no.
             </p>
           </div>
         </div>
@@ -95,7 +96,7 @@ export const LoginForm = () => {
         <ul className="relative grid max-w-[34rem] grid-cols-2 gap-x-8 gap-y-4">
           {PILLARS.map(({ icon: Icon, title, body }) => (
             <li key={title} className="flex gap-2.5">
-              <Icon size={15} className="text-accent mt-0.5 shrink-0" aria-hidden />
+              <Icon size={15} className="text-fg-muted mt-0.5 shrink-0" aria-hidden />
               <span className="text-[0.75rem] leading-snug">
                 <span className="text-fg font-medium">{title}</span>
                 <span className="text-fg-subtle block">{body}</span>
@@ -165,7 +166,7 @@ export const LoginForm = () => {
               {busy ? (
                 <span className="inline-flex items-center gap-2">
                   <Spinner />
-                  {navigating ? 'Loading your tasks…' : 'Signing in…'}
+                  {navigating ? 'Opening the lab…' : 'Signing in…'}
                 </span>
               ) : (
                 'Sign in'

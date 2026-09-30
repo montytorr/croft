@@ -1,14 +1,17 @@
 import { cn } from '@/lib/utils'
+import { RIG_PATHS } from '@/lib/brand-mark'
+
+const RIG_TONES = ['var(--border-strong)', 'color-mix(in oklab, var(--border-strong) 55%, var(--bg))', 'var(--fg-subtle)']
 
 /**
  * One empty state for the whole product (CROFT-308). There were fourteen,
  * each a line of grey text in its own padding, so an empty list looked like a
  * page that had failed to load.
  *
- * Three small stones settle onto each other: the product's mark, at rest,
- * saying "nothing here yet" rather than "something broke". The top stone
- * takes the accent. `compact` is for panels and popovers, where the stones
- * would be too much.
+ * Three rig strips grow up a small hill: the product's mark, unploughed,
+ * saying "nothing here yet" rather than "something broke". No accent — the
+ * accent is for the thing to press, and an empty state's action carries it.
+ * `compact` is for panels and popovers, where the field would be too much.
  */
 export const EmptyState = ({
   title,
@@ -34,16 +37,19 @@ export const EmptyState = ({
     )}
   >
     {compact ? null : (
-      <svg viewBox="0 0 40 30" className="h-8 w-auto" aria-hidden>
-        <g className="login-stone" style={{ '--d': '60ms' } as React.CSSProperties}>
-          <rect x="8" y="22" width="24" height="6" rx="3" fill="var(--border-strong)" />
-        </g>
-        <g className="login-stone" style={{ '--d': '160ms' } as React.CSSProperties}>
-          <rect x="5" y="13.5" width="30" height="6.5" rx="3.25" fill="var(--border-strong)" opacity="0.8" />
-        </g>
-        <g className="login-stone" style={{ '--d': '260ms' } as React.CSSProperties}>
-          <rect x="12" y="5" width="16" height="6.5" rx="3.25" fill="var(--accent)" opacity="0.85" />
-        </g>
+      <svg viewBox="3 4 26 24" className="h-8 w-auto" aria-hidden>
+        {RIG_PATHS.map((d, i) => (
+          <path
+            key={d}
+            d={d}
+            fill={RIG_TONES[i]}
+            stroke={RIG_TONES[i]}
+            strokeWidth="0.8"
+            strokeLinejoin="round"
+            className="rig-grow"
+            style={{ '--d': `${60 + i * 100}ms` } as React.CSSProperties}
+          />
+        ))}
       </svg>
     )}
     <Title className={cn('text-fg-muted font-medium', compact ? 'text-[0.75rem]' : 'text-[0.8125rem]')}>{title}</Title>

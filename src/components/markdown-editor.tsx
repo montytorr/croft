@@ -140,7 +140,7 @@ export const MarkdownEditor = ({
           state === 'error' && 'border-danger focus-within:border-danger focus-within:ring-danger',
         )}
       >
-        <EditorContent editor={editor} />
+        <EditorContent editor={editor} className="prose-editor" />
       </div>
       <div className="mt-2 flex items-center gap-2">
         <Button

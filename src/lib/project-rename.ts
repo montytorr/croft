@@ -11,7 +11,7 @@ import { shortDateWithYear } from '@/lib/dates'
  */
 
 /** The rule the API enforces on a project key. Kept here so the form can say it first. */
-export const PROJECT_KEY_RULE = /^[A-Z][A-Z0-9]{1,9}$/
+export const PROJECT_KEY_RULE = /^[A-Z][A-Z0-9]{0,9}$/
 
 export type RetiredKey = { key: string; retired_at: string }
 
@@ -52,7 +52,7 @@ export const formerRefsOf = (
     .filter((rename) => time(task.created_at) < time(rename.at))
     .map((rename) => ({ ref: `${rename.from}-${task.number}`, rename }))
 
-const REF = /^([A-Z][A-Z0-9]{1,9})-(\d+)$/
+const REF = /^([A-Z][A-Z0-9]{0,9})-(\d+)$/
 
 /**
  * The line shown after `/projects/AC/tasks/113` redirected here, or null.
@@ -122,7 +122,7 @@ export const keyChangeProblem = (
   const key = draft.trim().toUpperCase()
   if (!key) return 'Type the new key.'
   if (!PROJECT_KEY_RULE.test(key)) {
-    return 'Two to ten letters or digits, starting with a letter.'
+    return 'One to ten letters or digits, starting with a letter.'
   }
   if (key === current) return `${key} is already this project's key.`
   if (liveKeys.includes(key)) return `${key} is already the key of another project.`

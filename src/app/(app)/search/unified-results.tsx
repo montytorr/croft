@@ -1,37 +1,33 @@
 import Link from 'next/link'
-import { BookMarked, FileText, ListTodo, Radio } from 'lucide-react'
+import { FileText, FlaskConical, ListTodo } from 'lucide-react'
 import { ProjectIcon } from '@/components/icons'
 import { cn } from '@/lib/utils'
 import type { SearchAllRow } from '@/lib/api/search'
 import { Highlight, queryTerms } from './highlight'
 
 /**
- * Results across all four stores.
+ * Results across subjects, todos and their notes.
  *
  * The task-only list next door stays as it is because it carries selection and
- * bulk edit, which only mean anything for tasks. This renders the rest in rank
- * order without pretending a session can be bulk-assigned a priority.
+ * bulk edit, which only mean anything for todos. This renders the rest in rank
+ * order without pretending a subject can be bulk-assigned a priority.
  */
 
-const KIND_META: Record<
-  SearchAllRow['kind'],
-  { label: string; Icon: typeof ListTodo; tone: string; color: string }
-> = {
-  task: { label: 'Task', Icon: ListTodo, tone: 'text-accent', color: 'var(--accent)' },
+type KindMeta = { label: string; Icon: typeof ListTodo; tone: string; color: string }
+
+// Keyed by string, so a kind the search stops or starts returning renders as
+// something rather than breaking the page.
+const KIND_META: Record<string, KindMeta> = {
+  subject: { label: 'Subject', Icon: FlaskConical, tone: 'text-stage-active', color: 'var(--stage-active)' },
+  task: { label: 'Todo', Icon: ListTodo, tone: 'text-status-in-review', color: 'var(--status-in-review)' },
   note: { label: 'Note', Icon: FileText, tone: 'text-fg-muted', color: 'var(--fg-muted)' },
-  knowledge: {
-    label: 'Knowledge',
-   
-    Icon: BookMarked,
-    tone: 'text-status-done',
-    color: 'var(--status-done)',
-  },
-  session: { label: 'Session', Icon: Radio, tone: 'text-fg-subtle', color: 'var(--fg-subtle)' },
 }
+const metaOf = (kind: string): KindMeta =>
+  KIND_META[kind] ?? { label: kind, Icon: FileText, tone: 'text-fg-subtle', color: 'var(--fg-subtle)' }
 
 /** The kind of a hit, as a small pill in its own colour. */
-const KindBadge = ({ kind }: { kind: SearchAllRow['kind'] }) => {
-  const { label, color } = KIND_META[kind]
+const KindBadge = ({ kind }: { kind: string }) => {
+  const { label, color } = metaOf(kind)
   return (
     <span
       className="inline-flex h-[1rem] shrink-0 items-center rounded-full border px-1.5 text-[0.625rem] font-medium tracking-[0.04em] uppercase"
@@ -47,22 +43,22 @@ const KindBadge = ({ kind }: { kind: SearchAllRow['kind'] }) => {
 }
 
 /**
- * Where a hit leads. A note lives on its task, so it opens the task — the note
- * ref IS the task ref. A session has no page of its own: its useful content is
- * already the two lines shown here, and a link to a list would be a worse
- * answer than no link.
+ * Where a hit leads. A subject opens its page; a note lives on its todo, so it
+ * opens the todo — the note ref IS the task ref.
  */
 const hrefFor = (row: SearchAllRow): string | null => {
-  if (row.kind === 'task' || row.kind === 'note') {
+  const kind: string = row.kind
+  const subject = /^S-(\d+)$/.exec(row.ref)
+  if (kind === 'subject' || subject) return subject ? `/subjects/${subject[1]}` : null
+  if (kind === 'task' || kind === 'note') {
     const [key, number] = row.ref.split('-')
     return key && number ? `/projects/${key}/tasks/${number}` : null
   }
-  if (row.kind === 'knowledge') return `/knowledge/${row.ref}`
   return null
 }
 
 const Row = ({ row, terms }: { row: SearchAllRow; terms: string[] }) => {
-  const { Icon, tone } = KIND_META[row.kind]
+  const { Icon, tone } = metaOf(row.kind)
   const href = hrefFor(row)
 
   const body = (
@@ -75,7 +71,7 @@ const Row = ({ row, terms }: { row: SearchAllRow; terms: string[] }) => {
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="text-fg-subtle shrink-0 font-mono text-[0.6875rem]">{row.ref}</span>
-          {row.project_key && row.kind !== 'knowledge' && (
+          {row.project_key && (
             <span className="flex shrink-0 items-center gap-1">
               <ProjectIcon size={11} projectKey={row.project_key} />
             </span>
@@ -83,7 +79,7 @@ const Row = ({ row, terms }: { row: SearchAllRow; terms: string[] }) => {
           <KindBadge kind={row.kind} />
           {row.answered && (
             <span className="text-status-done text-[0.6875rem]">
-              {row.kind === 'task' ? 'answered' : row.kind === 'session' ? 'has next steps' : 'verified'}
+              {(row.kind as string) === 'subject' ? 'concluded' : 'answered'}
             </span>
           )}
           {row.status === 'superseded' && (
