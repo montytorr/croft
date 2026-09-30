@@ -13,6 +13,7 @@ import {
   type SubjectNoteKind,
   type SubjectSummary,
   type SubjectTodo,
+  type SubjectVisibility,
   type Tag,
 } from '@/lib/lab/types'
 import { createTaskSchema } from '@/schemas/task'
@@ -28,10 +29,11 @@ import {
   unknownTags,
   type Outcome,
 } from './lab-admin'
-import { resolveAssignee } from './people'
+import { resolveAssignee, type Person } from './people'
 import { fail, failValidation } from './response'
 import { createTaskInProject } from './task-create'
 import { recordActivity } from './activity'
+import { subjectVisibleSql } from './visibility'
 
 type Db = Pool | PoolClient
 
@@ -98,7 +100,15 @@ export const stageNoteHash = (from: string, to: string, at: string) =>
 
 const SUBJECT_SELECT = `
   select s.id, s.number, s.title, s.body, s.conclusion, s.concluded_at, s.position,
-         s.actor_id, s.created_at, s.updated_at, s.archived_at,
+         s.actor_id, s.created_at, s.updated_at, s.archived_at, s.visibility,
+         coalesce((
+           select json_agg(json_build_object('id', mu.id, 'name', coalesce(nullif(trim(mp.display_name), ''), mu.email))
+                           order by lower(coalesce(nullif(trim(mp.display_name), ''), mu.email)))
+             from subject_members m
+             join app_users mu on mu.id = m.user_id
+             left join user_profiles mp on mp.id = mu.id
+            where m.subject_id = s.id
+         ), '[]'::json) as members,
          json_build_object('id', st.id, 'name', st.name, 'color', st.color,
                            'category', st.category, 'position', st.position) as stage,
          coalesce((
@@ -159,12 +169,19 @@ export type SubjectFilters = {
 
 const escapeLike = (value: string) => value.replace(/[\\%_]/g, (c) => `\\${c}`)
 
-/** The board: lanes in order, then each lane's own order. */
-export const listSubjects = async (filters: SubjectFilters = {}, db: Db = pool()): Promise<SubjectSummary[]> => {
+/**
+ * The board: lanes in order, then each lane's own order. Only the subjects
+ * `viewerId` may see — a private one of somebody else's is not on it at all.
+ */
+export const listSubjects = async (
+  filters: SubjectFilters,
+  viewerId: string,
+  db: Db = pool(),
+): Promise<SubjectSummary[]> => {
   const archived = filters.archived === true ? 'only' : filters.archived || 'exclude'
-  const where: string[] =
-    archived === 'include' ? [] : [archived === 'only' ? 's.archived_at is not null' : 's.archived_at is null']
-  const values: unknown[] = []
+  const values: unknown[] = [viewerId]
+  const where: string[] = [subjectVisibleSql('s.id', '$1')]
+  if (archived !== 'include') where.push(archived === 'only' ? 's.archived_at is not null' : 's.archived_at is null')
   const bind = (value: unknown) => {
     values.push(value)
     return `$${values.length}`
@@ -204,29 +221,53 @@ export const listSubjects = async (filters: SubjectFilters = {}, db: Db = pool()
 
   const result = await db.query(
     `${SUBJECT_SELECT}
-      ${where.length ? `where ${where.join(' and ')}` : ''}
+      where ${where.join(' and ')}
       order by st.position, s.position, s.number desc`,
     values,
   )
   return rows<SubjectRow>(result).map(toSummary)
 }
 
-export const getSubjectById = async (id: string, db: Db = pool()): Promise<Subject | null> => {
+/**
+ * A subject by id, or null when there is none or `viewerId` may not see it —
+ * the two are the same answer on purpose.
+ */
+export const getSubjectById = async (id: string, viewerId: string, db: Db = pool()): Promise<Subject | null> => {
+  if (!isUuid(id)) return null
+  const row = rows<SubjectRow>(
+    await db.query(`${SUBJECT_SELECT} where s.id = $1 and ${subjectVisibleSql('s.id', '$2')}`, [id, viewerId]),
+  )[0]
+  return row ? toSubject(row) : null
+}
+
+export const getSubjectByNumber = async (number: number, viewerId: string, db: Db = pool()): Promise<Subject | null> => {
+  const row = rows<SubjectRow>(
+    await db.query(`${SUBJECT_SELECT} where s.number = $1 and ${subjectVisibleSql('s.id', '$2')}`, [number, viewerId]),
+  )[0]
+  return row ? toSubject(row) : null
+}
+
+/**
+ * A subject read back after the caller wrote it, whoever can see it now: an
+ * owner who hands a private subject to somebody else still gets the result
+ * of their own write. Never for a read the caller did not just make.
+ */
+const reloadSubject = async (id: string, db: Db = pool()): Promise<Subject> => {
   const row = rows<SubjectRow>(await db.query(`${SUBJECT_SELECT} where s.id = $1`, [id]))[0]
-  return row ? toSubject(row) : null
+  if (!row) throw new Error(`subject ${id} vanished after a write`)
+  return toSubject(row)
 }
 
-export const getSubjectByNumber = async (number: number, db: Db = pool()): Promise<Subject | null> => {
-  const row = rows<SubjectRow>(await db.query(`${SUBJECT_SELECT} where s.number = $1`, [number]))[0]
-  return row ? toSubject(row) : null
-}
-
-/** `S-12`, `s-12`, `12` or the subject's uuid. */
-export const resolveSubject = async (raw: string): Promise<Subject | null> => {
+/**
+ * `S-12`, `s-12`, `12` or the subject's uuid — the choke point every
+ * `/subjects/[ref]` route resolves through. A subject the viewer may not see
+ * resolves to null, so reads and writes alike answer `not_found`.
+ */
+export const resolveSubject = async (raw: string, viewerId: string): Promise<Subject | null> => {
   const value = decodeURIComponent(raw).trim()
-  if (isUuid(value)) return getSubjectById(value)
+  if (isUuid(value)) return getSubjectById(value, viewerId)
   const number = parseSubjectRef(value)
-  return number === null ? null : getSubjectByNumber(number)
+  return number === null ? null : getSubjectByNumber(number, viewerId)
 }
 
 export const noSuchSubject = (raw: string) =>
@@ -264,6 +305,91 @@ const setTags = async (client: PoolClient, subjectId: string, tags: Tag[]) => {
   )
 }
 
+// ---------------------------------------------------------------------------
+// Visibility (v0.4): who may see a subject, and who may change that.
+// ---------------------------------------------------------------------------
+
+/**
+ * Who may change a non-lab subject's visibility, members or owner: its owner,
+ * or — only once that owner is deactivated, deleted or gone — an active
+ * administrator, so a departed colleague's private work is not stranded.
+ * Nobody else, admins included.
+ */
+export const canManageSubject = async (subjectId: string, viewerId: string, db: Db = pool()): Promise<boolean> => {
+  const result = await db.query<{ can: boolean }>(
+    `select (s.owner_user_id = $2::uuid)
+             or (not croft_user_active(s.owner_user_id)
+                 and croft_user_active($2::uuid)
+                 and exists (select 1 from app_users a where a.id = $2::uuid and a.role = 'admin')) as can
+       from subjects s
+      where s.id = $1`,
+    [subjectId, viewerId],
+  )
+  return result.rows[0]?.can === true
+}
+
+const notTheOwner = (subject: Pick<Subject, 'ref' | 'visibility'>) =>
+  fail(
+    'forbidden',
+    `Only the owner of ${subject.ref} can change who sees it (it is ${subject.visibility}). ` +
+      `Ask them to share it, or to publish it to the lab.`,
+  )
+
+const alreadyPublished = (subject: Pick<Subject, 'ref'>) =>
+  fail(
+    'already_published',
+    `${subject.ref} is in the lab: everyone can see it, and publishing cannot be undone. ` +
+      `File a new private subject for work that should stay private.`,
+    { visibility: 'lab' },
+  )
+
+const ownerRequired = (visibility: SubjectVisibility) =>
+  fail(
+    'owner_required',
+    `A ${visibility} subject needs an owner: they are the one person who can always see it. ` +
+      `Name one (owner: "me"), or publish it to the lab first.`,
+    { visibility },
+  )
+
+/** `published to the lab`, `made private`, `shared with Mael`. */
+export const visibilityNoteText = (
+  from: SubjectVisibility,
+  to: SubjectVisibility,
+  members: readonly { name: string }[] = [],
+): string => {
+  if (to === 'lab') return 'published to the lab'
+  if (to === 'private') return 'made private'
+  if (from === 'lab') return 'shared with its members'
+  return members.length ? `shared with ${members.map((m) => m.name).join(', ')}` : 'shared with its members (none yet)'
+}
+
+/** Never deduplicated: private → members → private → members is four changes. */
+export const visibilityNoteHash = (note: string, at: string) =>
+  createHash('sha256').update(`visibility\n${note}\n${at}`, 'utf8').digest('hex').slice(0, 32)
+
+const writeVisibilityNote = async (client: PoolClient, actor: Actor, subjectId: string, note: string) => {
+  await client.query(
+    `insert into subject_notes (subject_id, kind, note, actor_type, actor_id, user_id, content_hash)
+     values ($1, 'visibility', $2, $3, $4, $5, $6)`,
+    [subjectId, note, actor.actorType, actor.actorId, actor.userId, visibilityNoteHash(note, new Date().toISOString())],
+  )
+}
+
+/** Each of `refs` as a person, deduplicated; the owner is dropped (owners are not listed as members). */
+const resolveMembers = async (
+  refs: readonly string[],
+  actor: Actor,
+  ownerId: string | null,
+): Promise<Outcome<Person[]>> => {
+  const found = new Map<string, Person>()
+  for (const ref of refs) {
+    const person = await resolveAssignee(ref, actor.userId)
+    if (!person.ok) return { ok: false, response: fail(person.code, person.error) }
+    if (person.person.id !== ownerId) found.set(person.person.id, person.person)
+  }
+  return { ok: true, value: [...found.values()] }
+}
+
 export type CreateSubjectInput = {
   title: string
   body?: string
@@ -273,6 +399,10 @@ export type CreateSubjectInput = {
   /** A lab project by name or id; omitted or null, none. */
   project?: string | null
   conclusion?: string
+  /** Omitted: `lab`, visible to everyone. */
+  visibility?: SubjectVisibility
+  /** Who a `members` subject is shared with: `me`, an id, an email or a display name each. */
+  members?: string[]
 }
 
 /** `undefined` → leave it; `null` → none; anything else → that lab project, or a refusal listing the real ones. */
@@ -283,6 +413,21 @@ const resolveLabProject = async (ref: string | null | undefined): Promise<Outcom
 }
 
 export const createSubject = async (actor: Actor, input: CreateSubjectInput): Promise<Outcome<Subject>> => {
+  const visibility = input.visibility ?? 'lab'
+  const memberRefs = input.members ?? []
+  if (memberRefs.length && visibility !== 'members') {
+    return {
+      ok: false,
+      response: fail(
+        'validation_failed',
+        visibility === 'lab'
+          ? 'A lab subject is open to everyone, so it has no members. Send visibility: "members" to share it with some people only.'
+          : 'A private subject is its owner\'s alone. Send visibility: "members" to share it with the people named.',
+        { field: 'members', visibility },
+      ),
+    }
+  }
+
   const stage = input.stage ? await findStage(input.stage) : await defaultStage()
   if (!stage) {
     return { ok: false, response: input.stage ? await unknownStage(input.stage) : fail('conflict', 'The board has no stages yet.') }
@@ -300,13 +445,33 @@ export const createSubject = async (actor: Actor, input: CreateSubjectInput): Pr
   const owner = await resolveOwner(input.owner, actor)
   if (!owner.ok) return owner
 
+  if (visibility !== 'lab') {
+    if (owner.value === null) return { ok: false, response: ownerRequired(visibility) }
+    // Filing a private subject for someone else would hand the caller a
+    // subject they cannot see the moment it exists.
+    if (owner.value !== actor.userId) {
+      return {
+        ok: false,
+        response: fail(
+          'forbidden',
+          `A ${visibility} subject is filed by its owner. Leave owner out (it is you), or file it in the lab ` +
+            `and let them take it.`,
+        ),
+      }
+    }
+  }
+
+  const members = await resolveMembers(memberRefs, actor, owner.value)
+  if (!members.ok) return members
+
   const id = await transaction(async (client) => {
     const inserted = await client.query(
       `insert into subjects
-         (title, body, stage_id, owner_user_id, conclusion, concluded_at, position, actor_type, actor_id, project_id)
+         (title, body, stage_id, owner_user_id, conclusion, concluded_at, position, actor_type, actor_id, project_id,
+          visibility)
        values ($1, $2, $3, $4, $5, $6,
                (select coalesce(max(position) + 1, 0) from subjects where stage_id = $3),
-               $7, $8, $9)
+               $7, $8, $9, $10)
        returning id`,
       [
         input.title,
@@ -318,14 +483,22 @@ export const createSubject = async (actor: Actor, input: CreateSubjectInput): Pr
         actor.actorType,
         actor.actorId,
         project.value ?? null,
+        visibility,
       ],
     )
     const subjectId = (inserted.rows[0] as { id: string }).id
     await setTags(client, subjectId, tags)
+    if (members.value.length) {
+      await client.query(
+        `insert into subject_members (subject_id, user_id, added_by)
+         select $1, unnest($2::uuid[]), $3 on conflict do nothing`,
+        [subjectId, members.value.map((m) => m.id), actor.userId],
+      )
+    }
     return subjectId
   })
 
-  return { ok: true, value: (await getSubjectById(id))! }
+  return { ok: true, value: await reloadSubject(id) }
 }
 
 export type UpdateSubjectInput = {
@@ -339,17 +512,55 @@ export type UpdateSubjectInput = {
   project?: string | null
   position?: number
   archived?: boolean
+  /**
+   * `private ↔ members` freely; either → `lab` publishes, for good. `lab →`
+   * anything else is refused (`already_published`). Owner only.
+   */
+  visibility?: SubjectVisibility
 }
 
 /**
  * Edits a subject. A stage change writes a `stage` note in the same
- * transaction, so the log can never disagree with the board.
+ * transaction, so the log can never disagree with the board; a visibility
+ * change writes a `visibility` note the same way.
+ *
+ * The caller has already resolved `subject` through `resolveSubject`, so it
+ * can see it: for a non-lab subject that is its owner and members, which is
+ * exactly who may edit it. Who sees it — visibility and owner — is the
+ * owner's alone (`canManageSubject`).
  */
+/**
+ * Whether the subject still has the visibility and owner the caller read,
+ * with its row locked until the transaction ends. Who may see a subject is
+ * decided from that read, and two requests can interleave: a stale "make it
+ * members" landing after a publish would take a lab subject back out of the
+ * lab, which publishing promises can never happen.
+ */
+const stillAsRead = async (client: PoolClient, subject: Pick<Subject, 'id' | 'visibility' | 'owner'>) => {
+  const { rows: locked } = await client.query<{ visibility: string; owner_user_id: string | null }>(
+    'select visibility, owner_user_id from subjects where id = $1 for update',
+    [subject.id],
+  )
+  const row = locked[0]
+  return Boolean(row) && row!.visibility === subject.visibility && row!.owner_user_id === (subject.owner?.id ?? null)
+}
+
+const changedMeanwhile = (subject: Pick<Subject, 'ref'>) =>
+  fail('conflict', `${subject.ref} changed while this was being applied. Read it again, then retry.`)
+
 export const updateSubject = async (
   actor: Actor,
   subject: Subject,
   patch: UpdateSubjectInput,
 ): Promise<Outcome<Subject>> => {
+  const visibilityChanging = patch.visibility !== undefined && patch.visibility !== subject.visibility
+  const targetVisibility = patch.visibility ?? subject.visibility
+
+  if (visibilityChanging && subject.visibility === 'lab') return { ok: false, response: alreadyPublished(subject) }
+  if (visibilityChanging || (patch.owner !== undefined && subject.visibility !== 'lab')) {
+    if (!(await canManageSubject(subject.id, actor.userId))) return { ok: false, response: notTheOwner(subject) }
+  }
+
   let target: Stage = subject.stage
   if (patch.stage !== undefined) {
     const found = await findStage(patch.stage)
@@ -386,6 +597,10 @@ export const updateSubject = async (
     if (!owner.ok) return owner
     ownerId = owner.value
   }
+  const finalOwner = ownerId !== undefined ? ownerId : (subject.owner?.id ?? null)
+  if (targetVisibility !== 'lab' && finalOwner === null) {
+    return { ok: false, response: ownerRequired(targetVisibility) }
+  }
 
   const now = new Date().toISOString()
   const set: string[] = []
@@ -400,6 +615,7 @@ export const updateSubject = async (
   if (patch.conclusion !== undefined) assign('conclusion', patch.conclusion)
   if (ownerId !== undefined) assign('owner_user_id', ownerId)
   if (project.value !== undefined) assign('project_id', project.value)
+  if (visibilityChanging) assign('visibility', targetVisibility)
   if (patch.archived !== undefined) {
     if (patch.archived && !subject.archived_at) assign('archived_at', now)
     if (!patch.archived && subject.archived_at) assign('archived_at', null)
@@ -423,7 +639,9 @@ export const updateSubject = async (
     set.push(`position = (select coalesce(max(position) + 1, 0) from subjects where stage_id = $${values.length})`)
   }
 
-  await transaction(async (client) => {
+  const guarded = visibilityChanging || ownerId !== undefined
+  const applied = await transaction(async (client) => {
+    if (guarded && !(await stillAsRead(client, subject))) return false
     if (set.length > 0) {
       await client.query(`update subjects set ${set.join(', ')} where id = $1`, values)
     }
@@ -431,6 +649,18 @@ export const updateSubject = async (
       await setTags(client, subject.id, tags)
       // Tags live in another table, so the row's own trigger never saw them.
       if (set.length === 0) await client.query('update subjects set updated_at = now() where id = $1', [subject.id])
+    }
+    // An owner is never also listed as a member.
+    if (ownerId) await client.query('delete from subject_members where subject_id = $1 and user_id = $2', [subject.id, ownerId])
+    if (visibilityChanging) {
+      // In the lab everyone sees it; a members list would only mislead.
+      if (targetVisibility === 'lab') await client.query('delete from subject_members where subject_id = $1', [subject.id])
+      await writeVisibilityNote(
+        client,
+        actor,
+        subject.id,
+        visibilityNoteText(subject.visibility, targetVisibility, subject.members.filter((m) => m.id !== ownerId)),
+      )
     }
     if (stageChanging) {
       await client.query(
@@ -446,9 +676,95 @@ export const updateSubject = async (
         ],
       )
     }
+    return true
   })
+  if (!applied) return { ok: false, response: changedMeanwhile(subject) }
 
-  return { ok: true, value: (await getSubjectById(subject.id))! }
+  return { ok: true, value: await reloadSubject(subject.id) }
+}
+
+/** `POST /subjects/[ref]/publish`: private or members → lab, for good. */
+export const publishSubject = async (actor: Actor, subject: Subject): Promise<Outcome<Subject>> =>
+  subject.visibility === 'lab'
+    ? { ok: false, response: alreadyPublished(subject) }
+    : updateSubject(actor, subject, { visibility: 'lab' })
+
+/**
+ * Shares a subject with one more person. Sharing a private subject makes it a
+ * `members` one — that is what sharing means. Owner only; a lab subject has
+ * nobody to add (everyone sees it already).
+ */
+export const addSubjectMember = async (actor: Actor, subject: Subject, userRef: string): Promise<Outcome<Subject>> => {
+  if (subject.visibility === 'lab') return { ok: false, response: alreadyPublished(subject) }
+  if (!(await canManageSubject(subject.id, actor.userId))) return { ok: false, response: notTheOwner(subject) }
+
+  const person = await resolveAssignee(userRef, actor.userId)
+  if (!person.ok) return { ok: false, response: fail(person.code, person.error) }
+  if (person.person.id === subject.owner?.id) {
+    return {
+      ok: false,
+      response: fail('validation_failed', `${person.person.name} owns ${subject.ref}; an owner always sees it.`),
+    }
+  }
+
+  const applied = await transaction(async (client) => {
+    if (!(await stillAsRead(client, subject))) return false
+    const added = await client.query(
+      `insert into subject_members (subject_id, user_id, added_by) values ($1, $2, $3)
+       on conflict do nothing returning user_id`,
+      [subject.id, person.person.id, actor.userId],
+    )
+    const flipping = subject.visibility === 'private'
+    if (flipping) await client.query(`update subjects set visibility = 'members' where id = $1`, [subject.id])
+    if (added.rowCount || flipping) {
+      await writeVisibilityNote(client, actor, subject.id, `shared with ${person.person.name}`)
+    }
+    return true
+  })
+  if (!applied) return { ok: false, response: changedMeanwhile(subject) }
+  return { ok: true, value: await reloadSubject(subject.id) }
+}
+
+/**
+ * Stops sharing a subject with someone. The owner (or the admin exception)
+ * removes anybody; a member may remove themselves. `userRef` is an id, `me`,
+ * an email or a name — an id works for a deactivated member too.
+ */
+export const removeSubjectMember = async (
+  actor: Actor,
+  subject: Subject,
+  userRef: string,
+): Promise<Outcome<Subject | { ref: string; left: true }>> => {
+  if (subject.visibility === 'lab') return { ok: false, response: alreadyPublished(subject) }
+
+  const value = decodeURIComponent(userRef).trim()
+  const listed = subject.members.find((m) => m.id === value)
+  let member: { id: string; name: string } | undefined = listed
+  if (!member) {
+    const person = await resolveAssignee(value, actor.userId)
+    if (person.ok) member = { id: person.person.id, name: person.person.name }
+    else if (!isUuid(value)) return { ok: false, response: fail(person.code, person.error) }
+  }
+
+  const self = member?.id === actor.userId
+  if (!self && !(await canManageSubject(subject.id, actor.userId))) return { ok: false, response: notTheOwner(subject) }
+
+  const removed = member
+    ? await transaction(async (client) => {
+        const gone = await client.query('delete from subject_members where subject_id = $1 and user_id = $2', [
+          subject.id,
+          member.id,
+        ])
+        if (gone.rowCount) await writeVisibilityNote(client, actor, subject.id, `no longer shared with ${member.name}`)
+        return Boolean(gone.rowCount)
+      })
+    : false
+  if (!removed) {
+    return { ok: false, response: fail('not_found', `${member?.name ?? value} is not a member of ${subject.ref}.`) }
+  }
+
+  const after = await getSubjectById(subject.id, actor.userId)
+  return { ok: true, value: after ?? { ref: subject.ref, left: true } }
 }
 
 // ---------------------------------------------------------------------------
@@ -624,13 +940,17 @@ export type SubjectBrief = {
  * three live subjects the caller's human owns — active ones before planned.
  */
 export const subjectBrief = async (userId: string): Promise<SubjectBrief> => {
+  // Counted as the caller sees the board: a lane holding only somebody
+  // else's private subjects reads as empty.
   const countRows = rows<{ name: string; n: number }>(
     await pool().query(
       `select st.name, count(s.id)::int as n
          from subject_stages st
          left join subjects s on s.stage_id = st.id and s.archived_at is null
+                             and ${subjectVisibleSql('s.id', '$1')}
         group by st.id, st.name, st.position
         order by st.position, st.name`,
+      [userId],
     ),
   )
   const counts = Object.fromEntries(countRows.map((r) => [r.name, r.n]))
@@ -640,6 +960,7 @@ export const subjectBrief = async (userId: string): Promise<SubjectBrief> => {
       `${SUBJECT_SELECT}
         where s.archived_at is null
           and s.owner_user_id = $1
+          and ${subjectVisibleSql('s.id', '$1')}
           and st.category in ('active', 'planned')
         order by (st.category = 'active') desc, s.updated_at desc
         limit 3`,
@@ -650,8 +971,8 @@ export const subjectBrief = async (userId: string): Promise<SubjectBrief> => {
   return { counts, mine }
 }
 
-/** Used by search: the subject an `S-12` query names, if it exists. */
-export const subjectByRefQuery = async (q: string): Promise<Subject | null> => {
+/** Used by search: the subject an `S-12` query names, if it exists and `viewerId` may see it. */
+export const subjectByRefQuery = async (q: string, viewerId: string): Promise<Subject | null> => {
   const match = /^\s*[Ss]-(\d{1,7})\s*$/.exec(q)
-  return match ? getSubjectByNumber(Number(match[1])) : null
+  return match ? getSubjectByNumber(Number(match[1]), viewerId) : null
 }

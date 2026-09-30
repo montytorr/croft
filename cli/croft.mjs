@@ -1052,13 +1052,13 @@ const KNOWN_FLAGS = new Set([
   'adopt', 'all', 'all-instances', 'also-project', 'archived', 'assignee', 'body', 'branch', 'brief',
   'conclusion', 'confirm', 'cwd', 'default', 'dir', 'dry-run', 'duplicate-of', 'duration-ms', 'exit-code',
   'file', 'folder', 'force', 'force-empty', 'full', 'help', 'instance', 'json', 'key', 'kind', 'kinds',
-  'label', 'limit', 'link', 'maintenance', 'message', 'mine', 'name', 'no-hooks', 'no-jobs', 'no-parent',
+  'label', 'limit', 'link', 'maintenance', 'member', 'message', 'mine', 'name', 'no-hooks', 'no-jobs', 'no-parent',
   'no-skill', 'no-start', 'older', 'output', 'owner', 'parent', 'pretty', 'priority', 'project', 'reason',
   'remote', 'repo', 'resolution', 'runtimes', 'scope', 'session', 'stage', 'start', 'status', 'summary', 'tag',
-  'tasks', 'title', 'to', 'type', 'url', 'version',
+  'tasks', 'title', 'to', 'type', 'url', 'version', 'visibility',
 ])
 
-const REPEATABLE = new Set(['tag', 'label'])
+const REPEATABLE = new Set(['tag', 'label', 'member'])
 
 for (let i = 0; i < argv.length; i += 1) {
   const arg = argv[i]
@@ -2384,10 +2384,21 @@ const subjectArg = (value, usage) => {
 const subjectTokens = (s) =>
   s.tokens ?? Math.ceil((String(s.title ?? '').length + String(s.body ?? '').length + String(s.conclusion ?? '').length) / 4) + 20
 
-const SUBJECT_COLUMNS = ['ref', 'stage', 'todos', 'tags', 'project', 'tokens', 'title']
+/**
+ * Who sees a subject, in one cell: `lab`, `private`, or `members:2` (the
+ * people it is shared with, its owner aside). A server older than 0.4 sends
+ * no visibility, and everything on it is in the lab.
+ */
+const visibilityCell = (s) => {
+  const v = s.visibility ?? 'lab'
+  return v === 'members' ? `members:${(s.members ?? []).length}` : v
+}
+
+const SUBJECT_COLUMNS = ['ref', 'stage', 'visibility', 'todos', 'tags', 'project', 'tokens', 'title']
 const subjectRow = (s) => ({
   ref: s.ref ?? (s.number !== undefined ? `S-${s.number}` : ''),
   stage: cellOf(s.stage),
+  visibility: visibilityCell(s),
   todos: `${s.todos?.open ?? 0}/${s.todos?.done ?? 0}`,
   tags: (s.tags ?? []).map((t) => cellOf(t)).join(','),
   project: cellOf(s.project),
@@ -2428,6 +2439,11 @@ const renderSubject = (s, notes, todos, { full, humanNotes = [], files = [] }) =
   const out = [`${s.ref}  ${cellOf(s.stage)}  ${s.title}`]
   const facts = [
     s.owner?.name ? `owner ${s.owner.name}` : 'no owner',
+    s.visibility && s.visibility !== 'lab'
+      ? s.visibility === 'members'
+        ? `shared with ${(s.members ?? []).map((m) => cellOf(m)).join(', ') || 'nobody yet'}`
+        : 'private'
+      : '',
     s.project?.name ? `project ${s.project.name}${s.project.cairn_key ? ` (Cairn ${s.project.cairn_key})` : ''}` : '',
     s.tags?.length ? `tags ${s.tags.map((t) => cellOf(t)).join(', ')}` : '',
     s.updated_at ? `updated ${DAY(s.updated_at)}` : '',
@@ -2491,6 +2507,50 @@ const labProjectFlag = () => {
   if (flags.project === undefined) return undefined
   const value = String(need(flags.project, '--project needs a lab project name, or none (croft projects lists them)')).trim()
   return value.toLowerCase() === 'none' ? null : value
+}
+
+const VISIBILITIES = ['private', 'members', 'lab']
+
+/** `--visibility` on subject add/share: undefined when not given. */
+const visibilityFlag = () => {
+  if (flags.visibility === undefined) return undefined
+  const value = String(need(flags.visibility, `--visibility needs one of ${VISIBILITIES.join(', ')}`)).trim().toLowerCase()
+  if (!VISIBILITIES.includes(value)) die(`--visibility must be one of ${VISIBILITIES.join(', ')}`)
+  return value
+}
+
+/** `+who` adds, `-who` removes; `who` is me, a user id, an email or a name (croft people). */
+const memberChanges = (args) => {
+  const add = []
+  const remove = []
+  for (const arg of args.map((a) => String(a).trim()).filter(Boolean)) {
+    if (arg.startsWith('-')) remove.push(arg.slice(1).trim())
+    else add.push(arg.replace(/^\+/, '').trim())
+  }
+  return { add: add.filter(Boolean), remove: remove.filter(Boolean) }
+}
+
+/**
+ * A todo of a subject not yet in the lab stays out of Cairn unless forced:
+ * Cairn has no idea who may read it, so filing it there is publishing it.
+ */
+const unpublishedMessage = (todoRef, subjectRef, visibility) =>
+  `${todoRef} belongs to ${subjectRef ?? 'a subject'}, which is ${visibility === 'private' ? 'private' : 'shared with its members only'}: ` +
+  `filing it in Cairn shows it to everyone there.\n` +
+  `publish the subject first (croft subject publish ${subjectRef ?? 'S-n'}), or re-run with --force to file it anyway`
+
+const unpublishedRefusal = (todoRef) => (payload) => {
+  if (payload.code === 'subject_not_published') die(`${todoRef}: ${payload.error}\nre-run with --force to link it anyway`)
+}
+
+/** A refusal on a visibility change, said with what to do instead. */
+const visibilityRefusal = (ref) => (payload) => {
+  if (payload.code === 'already_published') {
+    die(`${ref} is already in the lab: publishing is one-way, it cannot be made private or shared again`)
+  }
+  if (payload.code === 'owner_required') {
+    die(`${ref}: only its owner can change who sees it — ${payload.error}`)
+  }
 }
 
 /**
@@ -2685,11 +2745,19 @@ const HELP = `croft — the lab board: subjects to explore and prove, their todo
 
   subjects (refs S-12)
     croft subject add "<title>" [--stage S] [--tag t]... [--project P] [--owner me] [--body -]
-                                   --tag repeats or takes a comma list
+                                   [--visibility lab|members|private] [--member <who>]...
+                                   --tag and --member repeat or take a comma list;
+                                   default visibility: lab (everyone)
     croft subject list [--stage S] [--tag t] [--project P|none] [--mine] [--all]
                                    --mine: owned by your human; --all: archived too
     croft subject show S-12 [--full]       a digest unless --full
     croft subject edit S-12 [--title T] [--body -] [--project P|none]
+    croft subject share S-12 +who -who [--visibility members|private]
+                                   who: me, an email or a name (croft people);
+                                   sharing a private subject makes it members
+    croft subject publish S-12 --confirm S-12
+                                   into the lab, for everyone. ONE-WAY: it
+                                   cannot be made private again
     croft subject stage S-12 "<stage>" [--conclusion -|"<text>"]
                                    done, rejected, rolled out (any completed or
                                    dropped stage) need a --conclusion
@@ -2736,6 +2804,8 @@ const HELP = `croft — the lab board: subjects to explore and prove, their todo
                                    files it in Cairn (cairn add … --label croft:T-41)
                                    and links it; from then on Cairn owns its status.
                                    Without --to: the Cairn key of its subject's project.
+                                   A todo of a private or members subject is refused:
+                                   publish the subject, or --force to file it anyway
                                    Needs the cairn CLI (PATH, ~/.local/bin or CROFT_CAIRN_BIN)
     croft push T-41 --link CAIRN-331       record a link made by hand
     croft push T-41 <sha> [--repo PATH] [--branch NAME] [--remote NAME] [--url URL]
@@ -3867,7 +3937,7 @@ const commands = {
    */
   async subject() {
     const verb = positional[0]
-    const usage = 'usage: croft subject add|list|show|edit|stage|note|notes|attach|files|tag|todo …  (croft help)'
+    const usage = 'usage: croft subject add|list|show|edit|share|publish|stage|note|notes|attach|files|tag|todo …  (croft help)'
 
     if (verb === 'add') {
       const title = need(positional[1], 'usage: croft subject add "<title>" [--stage S] [--tag t] [--project P] [--owner me] [--body -]')
@@ -3879,10 +3949,23 @@ const commands = {
       if (flags.owner !== undefined) body.owner = need(flags.owner, '--owner needs me or a user id')
       const project = labProjectFlag()
       if (project) body.project = project
+      const visibility = visibilityFlag()
+      const members = splitList(flags.member)
+      if (members.length && visibility !== 'members') {
+        die('--member shares the subject with someone: it needs --visibility members')
+      }
+      if (visibility) body.visibility = visibility
+      if (members.length) body.members = members
       const created = await request('POST', '/api/v1/subjects', body)
       if (FORMAT !== 'tsv') return emit(created)
       emitSubjects([created])
       process.stderr.write(`filed ${created.ref} — log as you go: croft subject note ${created.ref} - --kind finding\n`)
+      if (created.visibility && created.visibility !== 'lab') {
+        process.stderr.write(
+          `${created.ref} is ${created.visibility === 'private' ? 'private' : 'shared with its members only'}; ` +
+            `croft subject publish ${created.ref} --confirm ${created.ref} puts it in the lab (one-way)\n`,
+        )
+      }
       return
     }
 
@@ -3944,6 +4027,56 @@ const commands = {
       if (!Object.keys(patch).length) die('nothing to change — pass --title, --body and/or --project')
       const updated = await request('PATCH', `/api/v1/subjects/${ref}`, patch)
       return FORMAT === 'tsv' ? emitSubjects([updated]) : emit(updated)
+    }
+
+    if (verb === 'share') {
+      const shareUsage = 'usage: croft subject share S-12 +who -who [--visibility members|private]'
+      const ref = subjectArg(positional[1], shareUsage)
+      const { add, remove } = memberChanges(positional.slice(2))
+      const visibility = visibilityFlag()
+      if (visibility === 'lab') die(`the lab is one-way: croft subject publish ${ref}`)
+      if (!add.length && !remove.length && !visibility) die(shareUsage)
+      const onError = visibilityRefusal(ref)
+      const current = await request('GET', `/api/v1/subjects/${ref}`)
+      if (current.visibility === 'lab' || current.visibility === undefined) {
+        die(`${ref} is in the lab: everyone already sees it, and publishing cannot be undone`)
+      }
+      // The server resolves me, an id, an email or a name, on both verbs; a
+      // private subject that gains a member becomes a members one by itself.
+      for (const who of add) {
+        await request('POST', `/api/v1/subjects/${ref}/members`, { user: who }, { onError })
+      }
+      for (const who of remove) {
+        await request('DELETE', `/api/v1/subjects/${ref}/members/${encodeURIComponent(who)}`, undefined, { onError })
+      }
+      let updated = await request('GET', `/api/v1/subjects/${ref}`)
+      if (visibility && visibility !== updated.visibility) {
+        updated = await request('PATCH', `/api/v1/subjects/${ref}`, { visibility }, { onError })
+      }
+      if (current.visibility === 'private' && updated.visibility === 'members' && !visibility) {
+        process.stderr.write(`${ref} was private; it is now shared with its members\n`)
+      }
+      if (FORMAT !== 'tsv') return emit(updated)
+      emitSubjects([updated])
+      if (updated.visibility === 'members') {
+        const names = (updated.members ?? []).map((m) => cellOf(m)).join(', ')
+        process.stderr.write(`${ref} is shared with ${names || 'nobody yet besides its owner'}\n`)
+      }
+      return
+    }
+
+    if (verb === 'publish') {
+      const ref = subjectArg(positional[1], 'usage: croft subject publish S-12 --confirm S-12')
+      // One-way, so the ref is typed twice, as for a project delete: an agent
+      // cannot publish a private subject by getting one argument wrong.
+      if (String(flags.confirm ?? '').toUpperCase() !== ref) {
+        die(`publishing ${ref} puts it in the lab for everyone, and cannot be undone. Re-run with --confirm ${ref} if that is what you want.`)
+      }
+      const published = await request('POST', `/api/v1/subjects/${ref}/publish`, {}, { onError: visibilityRefusal(ref) })
+      if (FORMAT !== 'tsv') return emit(published)
+      emitSubjects([published])
+      process.stderr.write(`${ref} is in the lab: everyone sees it now, and that cannot be undone\n`)
+      return
     }
 
     if (verb === 'stage') {
@@ -4080,7 +4213,9 @@ const commands = {
     if (flags.link !== undefined) {
       const cairnRef = String(need(flags.link, '--link needs the Cairn ref, e.g. --link CAIRN-331')).toUpperCase()
       if (!/^[A-Z][A-Z0-9]{0,9}-\d+$/.test(cairnRef)) die(`"${cairnRef}" is not a Cairn task ref`)
-      return emit(await request('POST', `/api/v1/tasks/${ref}/cairn-link`, { cairnRef }))
+      return emit(await request('POST', `/api/v1/tasks/${ref}/cairn-link`, { cairnRef, ...(flags.force ? { force: true } : {}) }, {
+        onError: unpublishedRefusal(ref),
+      }))
     }
 
     if (flags.to === undefined && positional[1] !== undefined) {
@@ -4104,6 +4239,10 @@ const commands = {
     if (todo.cairn_ref && !flags.force) {
       die(`${todoRef} is already paired with ${todo.cairn_ref} — \`croft sync\` pulls its status; --force files another`)
     }
+    // Checked here, before Cairn is touched: the server refuses the link too,
+    // but by then the Cairn task would already exist.
+    const visibility = todo.subject?.visibility
+    if (visibility && visibility !== 'lab' && !flags.force) die(unpublishedMessage(todoRef, todo.subject.ref, visibility))
     if (!key) {
       const target = pushTarget(todo, todoRef)
       if (!target.key) die(target.why)
@@ -4136,7 +4275,7 @@ const commands = {
     // Said before the link is recorded, so a failure below still leaves the
     // ref on screen rather than a Cairn task nobody knows was filed.
     process.stderr.write(`filed ${cairnRef} in Cairn\n`)
-    const linked = await request('POST', `/api/v1/tasks/${todoRef}/cairn-link`, { cairnRef }, {
+    const linked = await request('POST', `/api/v1/tasks/${todoRef}/cairn-link`, { cairnRef, ...(flags.force ? { force: true } : {}) }, {
       onError: (payload) =>
         die(`${cairnRef} was filed, but Croft refused the link: ${payload.error}\nrecord it once that is fixed: croft push ${todoRef} --link ${cairnRef}`),
     })

@@ -25,7 +25,7 @@ const SettingsPage = async () => {
     getBranding(),
     listStages(),
     listTags(),
-    listLabProjects(),
+    listLabProjects({ id: user.id, role: user.role }),
     // The connection is an administrator's business; nobody else is sent it.
     isAdmin ? getCairnConnection() : Promise.resolve(null),
   ])

@@ -1,14 +1,16 @@
 import { z } from 'zod'
-import { STAGE_CATEGORIES, SUBJECT_NOTE_KINDS } from '@/lib/lab/types'
+import { STAGE_CATEGORIES, SUBJECT_NOTE_KINDS, SUBJECT_VISIBILITIES } from '@/lib/lab/types'
 import { taskPriority, taskStatus, taskType } from './task'
 
 /**
- * Kinds a caller may write. `stage` is the server's own: it is written on
- * every stage change, and one posted by hand would put a move in the history
- * that never happened.
+ * Kinds a caller may write. `stage` and `visibility` are the server's own:
+ * written on every stage move and every publish or share, and one posted by
+ * hand would put a move — or a "published to the lab" — in the history that
+ * never happened.
  */
 export const WRITABLE_NOTE_KINDS = SUBJECT_NOTE_KINDS.filter(
-  (kind): kind is Exclude<(typeof SUBJECT_NOTE_KINDS)[number], 'stage'> => kind !== 'stage',
+  (kind): kind is Exclude<(typeof SUBJECT_NOTE_KINDS)[number], 'stage' | 'visibility'> =>
+    kind !== 'stage' && kind !== 'visibility',
 )
 
 const HEX = /^#[0-9a-fA-F]{6}$/
@@ -25,6 +27,8 @@ const tagNames = z.array(z.string().trim().min(1).max(40)).max(20)
 const owner = z.string().trim().min(1).max(320)
 /** A lab project by name (any case) or id. Unknown ones are refused by the route, which lists the real ones. */
 const projectRef = z.string().trim().min(1).max(80)
+/** `lab` (everyone), `members` (owner + members) or `private` (owner). */
+const visibility = z.enum(SUBJECT_VISIBILITIES)
 
 export const createSubjectSchema = z.object({
   title,
@@ -36,6 +40,10 @@ export const createSubjectSchema = z.object({
   project: projectRef.nullable().optional(),
   /** Only needed when the subject is filed straight into a completed or dropped stage. */
   conclusion: conclusion.optional(),
+  /** Omitted: `lab`. A `private` or `members` subject is filed by its owner (the caller). */
+  visibility: visibility.optional(),
+  /** Who a `members` subject is shared with: `me`, a user id, an email or a display name each. */
+  members: z.array(owner).max(50).optional(),
 })
 
 /** No defaults here: a PATCH must never rewrite a field its caller did not send. */
@@ -51,9 +59,17 @@ export const updateSubjectSchema = z
     project: projectRef.nullable(),
     position: z.number().int().min(-1_000_000).max(1_000_000),
     archived: z.boolean(),
+    /** Owner only. `lab` publishes, one-way; `lab →` anything else is refused (`already_published`). */
+    visibility,
   })
   .partial()
   .refine((value) => Object.keys(value).length > 0, 'Send at least one field to change.')
+
+/** `POST /subjects/{ref}/members`: who to share the subject with. */
+export const subjectMemberSchema = z.object({
+  /** `me`, a user id, an email or a display name. */
+  user: owner,
+})
 
 export const createSubjectNoteSchema = z.object({
   note: z.string().trim().min(1).max(100_000),
@@ -208,4 +224,10 @@ export const cairnLinkSchema = z.object({
   cairnResolution: z.string().trim().max(20_000).optional(),
   /** Cairn's resolution kind. One Croft does not have closes the todo as `verified`. */
   cairnResolutionKind: z.string().trim().min(1).max(40).optional(),
+  /**
+   * Link a todo whose subject is private or members-only anyway (`croft push
+   * --force`). Without it that is refused with `subject_not_published`: Cairn
+   * has no notion of who may see what.
+   */
+  force: z.boolean().optional(),
 })

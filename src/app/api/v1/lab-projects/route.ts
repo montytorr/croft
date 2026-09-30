@@ -7,7 +7,7 @@ import { createLabProjectSchema } from '@/schemas/subject'
 export const dynamic = 'force-dynamic'
 
 /** In order, each with how many subjects (archived ones included) are in it. */
-export const GET = route({ handler: async () => ok(await listLabProjects()) })
+export const GET = route({ handler: async ({ actor }) => ok(await listLabProjects(actor.userId)) })
 
 /** Lab projects are curated: administrators add them, everyone files subjects under them. */
 export const POST = route<Record<string, string>, z.infer<typeof createLabProjectSchema>>({

@@ -44,9 +44,10 @@ const BoardPage = async ({
   ).toString()
   // Each card carries its subject and Cairn push; the lab projects are the
   // lab-project filter's options.
+  const viewer = { id: user.id, role: user.role }
   const [{ tasks, projects, closedHidden }, labProjects] = await Promise.all([
-    listBoardTasks(user.id, { includeClosed }),
-    listLabProjects().catch(() => []),
+    listBoardTasks(user.id, { includeClosed }, viewer),
+    listLabProjects(viewer).catch(() => []),
   ])
 
   return (

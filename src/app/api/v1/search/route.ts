@@ -6,6 +6,7 @@ import { TASK_STATUSES, TASK_TYPES } from '@/schemas/task'
 import { admin } from '@/lib/db/client'
 import { liveProjectKey } from '@/lib/api/project-keys'
 import { resolveAssignee } from '@/lib/api/people'
+import { visibleSubjectIds } from '@/lib/api/visibility'
 
 export const dynamic = 'force-dynamic'
 
@@ -82,7 +83,7 @@ export const GET = route({
       const { rows, widened } = await searchAll(actor.userId, q, { project, kinds }, limit)
 
       const results = rows.map(unifiedResult)
-      await attachConclusions(rows, results)
+      await attachConclusions(rows, results, actor.userId)
       return ok({ count: rows.length, query: q, widened, results, ...told })
     } catch (error) {
       return fail('internal_error', error instanceof Error ? error.message : 'Search failed.')
@@ -96,8 +97,14 @@ export const GET = route({
  * had room for a 120-character subtitle. One query for every subject hit.
  */
 const CONCLUSION_CLIP = 500
-const attachConclusions = async (rows: SearchAllRow[], results: ReturnType<typeof unifiedResult>[]) => {
-  const ids = rows.filter((r) => r.kind === 'subject').map((r) => r.id)
+const attachConclusions = async (
+  rows: SearchAllRow[],
+  results: ReturnType<typeof unifiedResult>[],
+  viewerId: string,
+) => {
+  // search_all already keeps to what the viewer may see; checked again here
+  // because this reads the subjects table directly.
+  const ids = [...(await visibleSubjectIds(rows.filter((r) => r.kind === 'subject').map((r) => r.id), viewerId))]
   if (ids.length === 0) return
   const { data } = await admin().from('subjects').select('id, conclusion').in('id', ids)
   const byId = new Map(((data ?? []) as { id: string; conclusion: string | null }[]).map((s) => [s.id, s.conclusion]))

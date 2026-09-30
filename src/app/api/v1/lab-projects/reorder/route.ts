@@ -12,7 +12,7 @@ export const POST = route<Record<string, string>, z.infer<typeof reorderSchema>>
   handler: async ({ actor, body }) => {
     const refused = refuseNonAdmin(actor, 'the lab projects')
     if (refused) return refused
-    const reordered = await reorderLabProjects(body.ids)
+    const reordered = await reorderLabProjects(body.ids, actor.userId)
     return reordered.ok ? ok(reordered.value) : reordered.response
   },
 })

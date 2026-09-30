@@ -9,8 +9,8 @@ export const dynamic = 'force-dynamic'
 
 /** People's notes on the subject, newest first. Anyone may read them, agents included. */
 export const GET = route<{ ref: string }>({
-  handler: async ({ params }) => {
-    const subject = await resolveSubject(params.ref)
+  handler: async ({ actor, params }) => {
+    const subject = await resolveSubject(params.ref, actor.userId)
     if (!subject) return noSuchSubject(params.ref)
     return ok(await listSubjectHumanNotes(subject.id))
   },
@@ -24,7 +24,7 @@ export const POST = route<{ ref: string }, z.infer<typeof subjectHumanNoteSchema
   schema: subjectHumanNoteSchema,
   secretFields: ['body'],
   handler: async ({ actor, params, body }) => {
-    const subject = await resolveSubject(params.ref)
+    const subject = await resolveSubject(params.ref, actor.userId)
     if (!subject) return noSuchSubject(params.ref)
     const unreadable = refuseUnreadableNote(actor, body.body)
     if (unreadable) return unreadable

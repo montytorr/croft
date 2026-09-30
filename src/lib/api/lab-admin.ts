@@ -268,14 +268,22 @@ const LAB_PROJECT_COLUMNS = 'id, name, color, cairn_key, position'
 /** A lab project with how many subjects (archived ones included) are in it. */
 export type LabProjectListed = LabProject & { subjects: number }
 
-export const listLabProjects = async (db: Db = pool()): Promise<LabProjectListed[]> =>
+/**
+ * Lab projects in order, each with how many subjects `viewerId` can see in it
+ * — a count that included somebody else's private subjects would say they
+ * exist. `null` counts every subject: only for the refusal that lists names.
+ */
+export const listLabProjects = async (viewerId: string | null, db: Db = pool()): Promise<LabProjectListed[]> =>
   rows<LabProjectListed>(
     await db.query(
       `select lp.id, lp.name, lp.color, lp.cairn_key, lp.position,
-              (select count(*) from subjects s where s.project_id = lp.id)::int as subjects
+              (select count(*) from subjects s
+                where s.project_id = lp.id
+                  and ($1::uuid is null or croft_subject_visible(s.id, $1::uuid)))::int as subjects
          from lab_projects lp
         where lp.archived_at is null
         order by lp.position, lower(lp.name)`,
+      [viewerId],
     ),
   )
 
@@ -289,7 +297,7 @@ export const findLabProject = async (ref: string, db: Db = pool()): Promise<LabP
 }
 
 export const unknownLabProject = async (ref: string) => {
-  const projects = await listLabProjects()
+  const projects = await listLabProjects(null)
   return fail(
     'validation_failed',
     `No lab project ${ref}. Lab projects are curated by an administrator. ` +
@@ -388,7 +396,7 @@ export const deleteLabProject = async (id: string): Promise<Outcome<{ id: string
 }
 
 /** `ids` must name every lab project exactly once; the order given becomes the order. */
-export const reorderLabProjects = async (ids: string[]): Promise<Outcome<LabProjectListed[]>> =>
+export const reorderLabProjects = async (ids: string[], viewerId: string): Promise<Outcome<LabProjectListed[]>> =>
   transaction(async (client) => {
     const current = rows<{ id: string }>(
       await client.query('select id from lab_projects where archived_at is null for update'),
@@ -407,5 +415,5 @@ export const reorderLabProjects = async (ids: string[]): Promise<Outcome<LabProj
         where p.id = o.id`,
       [ids],
     )
-    return { ok: true, value: await listLabProjects(client) }
+    return { ok: true, value: await listLabProjects(viewerId, client) }
   })

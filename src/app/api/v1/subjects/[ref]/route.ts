@@ -8,8 +8,8 @@ export const dynamic = 'force-dynamic'
 
 /** `S-12`, `12` or the subject's id. */
 export const GET = route<{ ref: string }>({
-  handler: async ({ params }) => {
-    const subject = await resolveSubject(params.ref)
+  handler: async ({ actor, params }) => {
+    const subject = await resolveSubject(params.ref, actor.userId)
     if (!subject) return noSuchSubject(params.ref)
     return ok(subject)
   },
@@ -19,12 +19,16 @@ export const GET = route<{ ref: string }>({
  * Edits a subject. Moving it into a completed or dropped stage without a
  * conclusion (already recorded, or sent with the move) is refused with
  * `conclusion_required`. Every stage change writes a `stage` note.
+ *
+ * `visibility` (owner only): `private ↔ members` freely, either → `lab` for
+ * good; `lab →` anything else is `already_published`. A non-lab subject with
+ * no owner is `owner_required`. Each change writes a `visibility` note.
  */
 export const PATCH = route<{ ref: string }, z.infer<typeof updateSubjectSchema>>({
   schema: updateSubjectSchema,
   secretFields: ['title', 'body', 'conclusion'],
   handler: async ({ actor, params, body }) => {
-    const subject = await resolveSubject(params.ref)
+    const subject = await resolveSubject(params.ref, actor.userId)
     if (!subject) return noSuchSubject(params.ref)
     const updated = await updateSubject(actor, subject, body)
     if (!updated.ok) return updated.response

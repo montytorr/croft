@@ -16,8 +16,8 @@ export const dynamic = 'force-dynamic'
  * reads http://, and an absolute redirect built from it would downgrade.
  */
 export const GET = route<{ id: string }>({
-  handler: async ({ params }) => {
-    const row = await findAnyAttachment(params.id)
+  handler: async ({ actor, params }) => {
+    const row = await findAnyAttachment(params.id, actor.userId)
     if (!row) return fail('not_found', 'No such attachment.')
     const { previewUrl } = await signUrls(row.storage_path, row.filename, row.mime_type)
     return new Response(null, {

@@ -25,10 +25,14 @@ export const GET = route({
       ownerId = person.person.id
     }
 
-    return ok(await listSubjects({ stage, tag, ownerId, project, q, archived }))
+    return ok(await listSubjects({ stage, tag, ownerId, project, q, archived }, actor.userId))
   },
 })
 
+/**
+ * Files a subject. `visibility` defaults to `lab`; a `private` or `members`
+ * one is filed by its owner (the caller) and `members` names who else sees it.
+ */
 export const POST = route<Record<string, string>, z.infer<typeof createSubjectSchema>>({
   schema: createSubjectSchema,
   secretFields: ['title', 'body', 'conclusion'],

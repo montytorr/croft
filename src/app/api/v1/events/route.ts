@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { authenticate } from '@/lib/api/auth'
 import { admin } from '@/lib/db/client'
 import { liveProjectKey } from '@/lib/api/project-keys'
@@ -42,6 +43,11 @@ export const GET = async (req: Request) => {
    *
    * In the database rather than four round trips from here, because this runs
    * every few seconds for every open tab.
+   *
+   * Scoped to what this viewer can see (076), and sent as a hash: the raw
+   * string is timestamps and row counts, and a count of subjects or notes is
+   * precisely what an outsider must not learn about someone's private work.
+   * The client only ever compares it for equality.
    */
   const fingerprint = async (): Promise<string> => {
     const { data, error } = await admin().rpc('croft_pulse', {
@@ -51,7 +57,8 @@ export const GET = async (req: Request) => {
     // A failed read must not look like a change: returning something new would
     // refresh every open page on a loop for as long as the error lasts.
     if (error) return 'unavailable'
-    return typeof data === 'string' ? data : String(data ?? '-')
+    const pulse = typeof data === 'string' ? data : String(data ?? '-')
+    return createHash('sha256').update(pulse).digest('hex')
   }
 
   const encoder = new TextEncoder()

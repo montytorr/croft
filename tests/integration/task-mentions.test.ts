@@ -37,7 +37,7 @@ const addNote = async (taskId: string, note: string, kind = 'note') => {
   return rows[0].id as string
 }
 
-const mentionsOfTarget = async () => (await mentionsOf(ids.target)).mentions
+const mentionsOfTarget = async () => (await mentionsOf(ids.target, 10, { id: ownerId })).mentions
 
 beforeAll(async () => {
   await pool().query('insert into app_users (id, email, encrypted_password) values ($1,$2,$3)', [
@@ -110,9 +110,9 @@ describe('task mentions', () => {
 
   it('goes when the note that made it goes', async () => {
     const noteId = await addNote(ids.chatter, `one more about ${KEY}-1`)
-    const before = (await mentionsOf(ids.target)).total
+    const before = (await mentionsOf(ids.target, 10, { id: ownerId })).total
     await pool().query('delete from task_notes where id = $1', [noteId])
-    expect((await mentionsOf(ids.target)).total).toBe(before - 1)
+    expect((await mentionsOf(ids.target, 10, { id: ownerId })).total).toBe(before - 1)
   })
 
   it('counts a ref once per note, however often it is repeated', async () => {

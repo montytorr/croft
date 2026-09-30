@@ -3,9 +3,10 @@ import { byTitle } from '@/lib/utils'
 import { sessionUser } from '@/lib/auth/session'
 import { withAssignee, withAssignees, type Person } from '@/lib/api/people'
 import type { TaskPriority, TaskStatus, TaskType } from '@/schemas/task'
-import { subjectRef, type Attachment as LabAttachment } from '@/lib/lab/types'
+import { subjectRef, type Attachment as LabAttachment, type SubjectVisibility } from '@/lib/lab/types'
 import { withTaskSubjects, type LabTodoSubject } from '@/lib/api/lab-todos'
 import { toAttachment } from '@/lib/attachments'
+import { isTaskIdVisible, isTaskVisible, restrictTo, visibleTasksOr, withoutHiddenLinks, type Viewer } from '@/lib/api/visibility'
 
 export type Task = {
   id: string
@@ -65,6 +66,9 @@ export const currentUser = async () => {
 export const listProjects = async (
   _userId: string,
   { includeArchived = false }: { includeArchived?: boolean } = {},
+  // Projects are not scoped (their `task_counter` is a high-water mark; gaps
+  // in T-n numbering are accepted, see SECURITY.md). Taken for uniformity.
+  _viewer?: Viewer,
 ): Promise<Project[]> => {
   const query = admin()
     .from('projects')
@@ -201,9 +205,12 @@ const PREVIEW_CHARS = 280
  */
 export const listTasks = async (
   projectId: string,
-  { includeClosed = false, limit = 300 }: { includeClosed?: boolean; limit?: number } = {},
+  { includeClosed = false, limit = 300 }: { includeClosed?: boolean; limit?: number },
+  viewer: Viewer,
 ): Promise<TaskPage> => {
   const closedFilter = ['done', 'cancelled']
+  // Every list and count below holds only what `viewer` may see.
+  const visible = await visibleTasksOr(viewer.id)
 
   // Tasks filed elsewhere and linked here. The API route has included these
   // since cross-project links shipped; this did not, so `croft list --project HM`
@@ -216,28 +223,22 @@ export const listTasks = async (
 
   const [openRows, guestRows, totals, closedRows] = await Promise.all([
     (() => {
-      let q = admin()
-        .from('tasks')
-        .select(LIST_COLUMNS)
+      let q = restrictTo(admin().from('tasks').select(LIST_COLUMNS), visible)
         .eq('project_id', projectId)
       if (!includeClosed) q = q.not('status', 'in', `(${closedFilter.join(',')})`)
       return q.order('position').order('number', { ascending: false }).limit(limit)
     })(),
     (async () => {
       if (guestIds.length === 0) return { data: [] }
-      let q = admin()
-        .from('tasks')
-        .select(`${LIST_COLUMNS}, project:projects!project_id!inner(key)`)
+      let q = restrictTo(admin().from('tasks').select(`${LIST_COLUMNS}, project:projects!project_id!inner(key)`), visible)
         .in('id', guestIds)
       if (!includeClosed) q = q.not('status', 'in', `(${closedFilter.join(',')})`)
       return q.order('number', { ascending: false }).limit(limit)
     })(),
-    admin()
-      .from('tasks')
-      .select('status', { count: 'exact', head: false })
+    restrictTo(admin().from('tasks').select('status', { count: 'exact', head: false }), visible)
       .eq('project_id', projectId),
     byWhenFinished(
-      admin().from('tasks').select(LIST_COLUMNS).eq('project_id', projectId).in('status', CLOSED),
+      restrictTo(admin().from('tasks').select(LIST_COLUMNS), visible).eq('project_id', projectId).in('status', CLOSED),
     ),
   ])
 
@@ -264,8 +265,10 @@ export const listTasks = async (
   }))
 
   const [tasks, recentlyClosed] = await Promise.all([
-    withAssignees([...owned, ...guests]).then(withTaskSubjects),
-    withAssignees((((closedRows as { data?: unknown }).data ?? []) as RawListItem[]).map(clip)).then(withTaskSubjects),
+    withAssignees([...owned, ...guests]).then((rows) => withTaskSubjects(rows, viewer.id)),
+    withAssignees((((closedRows as { data?: unknown }).data ?? []) as RawListItem[]).map(clip)).then((rows) =>
+      withTaskSubjects(rows, viewer.id),
+    ),
   ])
 
   return {
@@ -280,7 +283,8 @@ export const listTasks = async (
  * The projects a task is linked into beyond the one that owns its ref. Keys
  * only — the detail panel needs to render them and toggle them, not join them.
  */
-export const listAlsoProjects = async (taskId: string): Promise<string[]> => {
+export const listAlsoProjects = async (taskId: string, viewer: Viewer): Promise<string[]> => {
+  if (!(await isTaskIdVisible(taskId, viewer.id))) return []
   const { data } = await admin()
     .from('task_projects')
     .select('project:projects(key)')
@@ -293,28 +297,41 @@ export const listAlsoProjects = async (taskId: string): Promise<string[]> => {
 }
 
 /** The subject a todo is part of, for "part of S-12". Null on an ordinary task. */
-export type TaskSubject = { ref: string; number: number; title: string }
+export type TaskSubject = { ref: string; number: number; title: string; visibility: SubjectVisibility }
 
+/** A task by ref, or null when there is none or `viewer` may not see it — one answer for both. */
 export const getTask = async (
   _userId: string,
   key: string,
   number: number,
+  viewer: Viewer,
 ): Promise<(Task & { project: Project; subject: TaskSubject | null }) | null> => {
   const { data } = await admin()
     .from('tasks')
     .select(
       '*, project:projects!project_id!inner(id, key, title, description, status, task_counter), ' +
-        'subject:subjects!subject_id(number, title)',
+        'subject:subjects!subject_id(number, title, visibility)',
     )
     .eq('projects.key', key.toUpperCase())
     .eq('number', number)
     .maybeSingle()
   if (!data) return null
-  const row = data as unknown as Task & { project: Project; subject: { number: number; title: string } | null }
+  const row = data as unknown as Task & {
+    project: Project
+    subject_id: string | null
+    subject: { number: number; title: string; visibility: SubjectVisibility } | null
+  }
+  if (!(await isTaskVisible(row.subject_id, viewer.id))) return null
   const subject = row.subject
-    ? { ref: subjectRef(row.subject.number), number: row.subject.number, title: row.subject.title }
+    ? {
+        ref: subjectRef(row.subject.number),
+        number: row.subject.number,
+        title: row.subject.title,
+        visibility: row.subject.visibility,
+      }
     : null
-  return await withAssignee({ ...row, subject })
+  // The row goes to a client component whole: no ids of hidden tasks in it.
+  return await withAssignee(await withoutHiddenLinks({ ...row, subject }, viewer.id))
 }
 
 /**
@@ -324,10 +341,11 @@ export const getTask = async (
  */
 export const getDuplicateOf = async (
   taskId: string,
+  viewer: Viewer,
 ): Promise<{ ref: string; title: string; status: string } | null> => {
   const { data } = await admin()
     .from('tasks')
-    .select('number, title, status, project:projects!project_id!inner(key)')
+    .select('number, title, status, subject_id, project:projects!project_id!inner(key)')
     .eq('id', taskId)
     .maybeSingle()
   if (!data) return null
@@ -335,8 +353,10 @@ export const getDuplicateOf = async (
     number: number
     title: string
     status: string
+    subject_id: string | null
     project: { key: string } | { key: string }[]
   }
+  if (!(await isTaskVisible(row.subject_id, viewer.id))) return null
   const project = Array.isArray(row.project) ? row.project[0] : row.project
   return { ref: `${project?.key}-${row.number}`, title: row.title, status: row.status }
 }
@@ -352,10 +372,11 @@ export type ChildTask = {
 }
 
 /** Direct children only. A tree view of a two-level split is noise. */
-export const listChildren = async (taskId: string): Promise<ChildTask[]> => {
-  const { data } = await admin()
-    .from('tasks')
-    .select('id, number, title, status, type, priority, project:projects!project_id!inner(key)')
+export const listChildren = async (taskId: string, viewer: Viewer): Promise<ChildTask[]> => {
+  const { data } = await restrictTo(
+    admin().from('tasks').select('id, number, title, status, type, priority, project:projects!project_id!inner(key)'),
+    await visibleTasksOr(viewer.id),
+  )
     .eq('parent_id', taskId)
     .order('created_at')
   return ((data ?? []) as unknown as (Omit<ChildTask, 'project_key'> & {
@@ -369,10 +390,11 @@ export const listChildren = async (taskId: string): Promise<ChildTask[]> => {
 /** The parent's ref and title, for the breadcrumb on a child. */
 export const getParent = async (
   taskId: string,
+  viewer: Viewer,
 ): Promise<{ ref: string; title: string; status: TaskStatus } | null> => {
   const { data } = await admin()
     .from('tasks')
-    .select('number, title, status, project:projects!project_id!inner(key)')
+    .select('number, title, status, subject_id, project:projects!project_id!inner(key)')
     .eq('id', taskId)
     .maybeSingle()
   if (!data) return null
@@ -380,8 +402,10 @@ export const getParent = async (
     number: number
     title: string
     status: TaskStatus
+    subject_id: string | null
     project: { key: string } | { key: string }[]
   }
+  if (!(await isTaskVisible(row.subject_id, viewer.id))) return null
   const project = Array.isArray(row.project) ? row.project[0] : row.project
   return { ref: `${project?.key}-${row.number}`, title: row.title, status: row.status }
 }
@@ -396,7 +420,8 @@ export type ActivityEntry = {
 }
 
 /** The audit trail for one task, newest first. */
-export const listActivity = async (taskId: string): Promise<ActivityEntry[]> => {
+export const listActivity = async (taskId: string, viewer: Viewer): Promise<ActivityEntry[]> => {
+  if (!(await isTaskIdVisible(taskId, viewer.id))) return []
   const { data } = await admin()
     .from('task_activity_events')
     .select('id, event, data, actor_type, actor_id, created_at')
@@ -416,7 +441,8 @@ export type Note = {
   created_at: string
 }
 
-export const listNotes = async (taskId: string): Promise<Note[]> => {
+export const listNotes = async (taskId: string, viewer: Viewer): Promise<Note[]> => {
+  if (!(await isTaskIdVisible(taskId, viewer.id))) return []
   const { data } = await admin()
     .from('task_notes')
     .select('id, kind, note, facts, actor_type, actor_id, created_at')
@@ -434,7 +460,8 @@ export type Comment = {
   created_at: string
 }
 
-export const listComments = async (taskId: string): Promise<Comment[]> => {
+export const listComments = async (taskId: string, viewer: Viewer): Promise<Comment[]> => {
+  if (!(await isTaskIdVisible(taskId, viewer.id))) return []
   const { data } = await admin()
     .from('task_comments')
     .select('id, content, comment_type, actor_type, actor_id, created_at')
@@ -452,7 +479,8 @@ export type Attachment = {
   created_at: string
 }
 
-export const listAttachments = async (taskId: string): Promise<Attachment[]> => {
+export const listAttachments = async (taskId: string, viewer: Viewer): Promise<Attachment[]> => {
+  if (!(await isTaskIdVisible(taskId, viewer.id))) return []
   const { data } = await admin()
     .from('task_attachments')
     .select('id, original_name, mime_type, size_bytes, actor_id, created_at')
@@ -467,7 +495,8 @@ export const listAttachments = async (taskId: string): Promise<Attachment[]> => 
  * previews them inline. The links expire within the hour; a page re-renders
  * well before that, and `content_url` never expires.
  */
-export const listTaskAttachments = async (taskId: string): Promise<LabAttachment[]> => {
+export const listTaskAttachments = async (taskId: string, viewer: Viewer): Promise<LabAttachment[]> => {
+  if (!(await isTaskIdVisible(taskId, viewer.id))) return []
   const { data } = await admin()
     .from('task_attachments')
     .select('id, original_name, mime_type, size_bytes, actor_id, storage_path, created_at')
@@ -494,30 +523,25 @@ export const listAllTasks = async (
   {
     includeClosed = false,
     limit = 500,
-  }: { includeClosed?: boolean; limit?: number } = {},
+  }: { includeClosed?: boolean; limit?: number },
+  viewer: Viewer,
 ): Promise<{
   tasks: (TaskListItem & { project_key: string })[]
   closedHidden: number
   recentlyClosed: (TaskListItem & { project_key: string })[]
 }> => {
   const closed = ['done', 'cancelled']
+  const visible = await visibleTasksOr(viewer.id)
 
-  let q = admin()
-    .from('tasks')
-    .select(`${LIST_COLUMNS}, project:projects!project_id!inner(key)`)
+  let q = restrictTo(admin().from('tasks').select(`${LIST_COLUMNS}, project:projects!project_id!inner(key)`), visible)
 
   if (!includeClosed) q = q.not('status', 'in', `(${closed.join(',')})`)
 
   const [rows, totals, closedRows] = await Promise.all([
     q.order('updated_at', { ascending: false }).limit(limit),
-    admin()
-      .from('tasks')
-      .select('id', { count: 'exact', head: true })
-      .in('status', closed),
+    restrictTo(admin().from('tasks').select('id', { count: 'exact', head: true }), visible).in('status', closed),
     byWhenFinished(
-      admin()
-        .from('tasks')
-        .select(`${LIST_COLUMNS}, project:projects!project_id!inner(key)`)
+      restrictTo(admin().from('tasks').select(`${LIST_COLUMNS}, project:projects!project_id!inner(key)`), visible)
         .in('status', closed),
     ),
   ])
@@ -538,7 +562,7 @@ export const listAllTasks = async (
   // Named in one query across both lists. Without it every row on the home
   // page drew its assignee as "?": the id came back, the person never did.
   const recent = (((closedRows as { data?: unknown }).data ?? []) as Row[]).map(withKey)
-  const named = await withTaskSubjects(await withAssignees([...tasks, ...recent]))
+  const named = await withTaskSubjects(await withAssignees([...tasks, ...recent]), viewer.id)
 
   return {
     tasks: named.slice(0, tasks.length),
@@ -564,7 +588,8 @@ export type Relation = {
  * rendered nowhere — so "this is waiting on that" existed in the data and was
  * invisible to the person deciding what to pick up.
  */
-export const listRelations = async (taskId: string): Promise<Relation[]> => {
+export const listRelations = async (taskId: string, viewer: Viewer): Promise<Relation[]> => {
+  if (!(await isTaskIdVisible(taskId, viewer.id))) return []
   const shape = 'blocked_id, blocking_id'
   const [blockedBy, blocks] = await Promise.all([
     admin().from('task_deps').select(shape).eq('blocked_id', taskId),
@@ -583,10 +608,11 @@ export const listRelations = async (taskId: string): Promise<Relation[]> => {
   ]
   if (ids.length === 0) return []
 
-  const { data } = await admin()
-    .from('tasks')
-    .select('id, number, title, status, project:projects!project_id!inner(key)')
-    .in('id', ids.map((i) => i.id))
+  // A link to a task the viewer cannot see is not shown.
+  const { data } = await restrictTo(
+    admin().from('tasks').select('id, number, title, status, project:projects!project_id!inner(key)'),
+    await visibleTasksOr(viewer.id),
+  ).in('id', ids.map((i) => i.id))
 
   type Row = { id: string; number: number; title: string; status: string; project: { key: string } | { key: string }[] }
   return ((data ?? []) as unknown as Row[]).map((row) => ({

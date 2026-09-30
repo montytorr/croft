@@ -44,6 +44,9 @@ export type ApiError =
   | 'project_in_use'
   | 'cairn_not_configured'
   | 'secret_detected'
+  | 'already_published'
+  | 'subject_not_published'
+  | 'owner_required'
   | 'rate_limited'
   | 'internal_error'
 
@@ -60,6 +63,11 @@ const STATUS: Record<ApiError, number> = {
   project_in_use: 409,
   cairn_not_configured: 409,
   secret_detected: 400,
+  // v0.4 visibility: publishing is one-way; a non-lab todo needs --force to
+  // leave for Cairn; a non-lab subject must have an owner.
+  already_published: 409,
+  subject_not_published: 409,
+  owner_required: 400,
   rate_limited: 429,
   internal_error: 500,
 }

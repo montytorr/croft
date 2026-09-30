@@ -4,8 +4,19 @@ export type StageCategory = (typeof STAGE_CATEGORIES)[number]
 export const CONCLUDING_CATEGORIES: readonly StageCategory[] = ['completed', 'dropped']
 export const isConcluding = (category: StageCategory) => CONCLUDING_CATEGORIES.includes(category)
 
-export const SUBJECT_NOTE_KINDS = ['note', 'finding', 'decision', 'attempt', 'handoff', 'stage'] as const
+/** `stage` and `visibility` are written by the server only: a move, a publish, a share. */
+export const SUBJECT_NOTE_KINDS = ['note', 'finding', 'decision', 'attempt', 'handoff', 'stage', 'visibility'] as const
 export type SubjectNoteKind = (typeof SUBJECT_NOTE_KINDS)[number]
+
+/**
+ * Who can see a subject and its todos (v0.4). `lab`: everyone, the default.
+ * `members`: its owner and the people it is shared with. `private`: its owner.
+ * Publishing to the lab is one-way.
+ */
+export const SUBJECT_VISIBILITIES = ['private', 'members', 'lab'] as const
+export type SubjectVisibility = (typeof SUBJECT_VISIBILITIES)[number]
+
+export type SubjectMember = { id: string; name: string }
 
 export const TODO_PROJECT_KEY = 'T'
 
@@ -64,6 +75,13 @@ export type SubjectSummary = {
   updated_at: string
   /** Set when the subject was archived: off the board, still searchable. */
   archived_at: string | null
+  visibility: SubjectVisibility
+  /**
+   * Who the subject is shared with (the owner is not listed). Only a
+   * `members` subject lets them see it; a `private` one keeps the list, so
+   * sharing it again restores it. Empty for a `lab` subject.
+   */
+  members: SubjectMember[]
 }
 
 export type Subject = SubjectSummary & {
@@ -133,5 +151,12 @@ export type Attachment = {
 export type LabTodo = SubjectTodo & {
   priority: string
   assignee: { id: string; name: string } | null
-  subject: { ref: string; number: number; title: string; project: { name: string; color: string } | null } | null
+  subject: {
+    ref: string
+    number: number
+    title: string
+    project: { name: string; color: string } | null
+    /** A lock on /todos and /board for a subject that is not `lab`. Always sent; optional for fixtures. */
+    visibility?: SubjectVisibility
+  } | null
 }

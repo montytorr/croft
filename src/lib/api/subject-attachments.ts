@@ -105,21 +105,29 @@ export const deleteSubjectAttachment = async (subjectId: string, id: string): Pr
 /**
  * Any stored file by id, a task's or a subject's, in the one shape
  * `toAttachment` takes. What `content_url` resolves through.
+ *
+ * Only a file whose subject — or whose task's subject — `viewerId` may see:
+ * an id is a capability-shaped string that travels in markdown, so a file on
+ * a private subject must answer exactly as an id that names nothing.
  */
 export const findAnyAttachment = async (
   id: string,
+  viewerId: string,
 ): Promise<(Omit<Row, 'subject_id'> & { task_id: string | null; subject_id: string | null }) | null> => {
   if (!isUuid(id)) return null
   const found = normalizeDatabaseValue(
     (
       await pool().query(
         `select id, null::uuid as task_id, subject_id, filename, mime_type, size_bytes, storage_path, uploaded_by, created_at
-           from subject_attachments where id = $1
+           from subject_attachments a
+          where a.id = $1 and croft_subject_visible(a.subject_id, $2::uuid)
          union all
-         select id, task_id, null::uuid, original_name, mime_type, size_bytes, storage_path, actor_id, created_at
-           from task_attachments where id = $1
+         select a.id, a.task_id, null::uuid, a.original_name, a.mime_type, a.size_bytes, a.storage_path, a.actor_id, a.created_at
+           from task_attachments a
+           join tasks t on t.id = a.task_id
+          where a.id = $1 and croft_task_visible(t.subject_id, $2::uuid)
          limit 1`,
-        [id],
+        [id, viewerId],
       )
     ).rows,
   ) as (Omit<Row, 'subject_id'> & { task_id: string | null; subject_id: string | null })[]

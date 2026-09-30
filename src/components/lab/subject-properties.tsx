@@ -14,6 +14,7 @@ import { filterTags, tagToCreate } from '@/lib/lab/ui-tag-picker'
 import { cn } from '@/lib/utils'
 import { ProjectLabel } from './project-label'
 import { StageGlyph } from './stage'
+import { SubjectAccess } from './subject-access'
 import { TagChip } from './tag-chip'
 import { useStageMove } from './use-stage-move'
 
@@ -37,7 +38,7 @@ const Affordance = () => (
 
 /**
  * The subject's properties: stage, project, owner, tags — each changed in
- * place — and the archive action at the foot. Tags come from the curated list
+ * place — then who can see it, and the archive action at the foot. Tags come from the curated list
  * an admin keeps, so the picker is a checklist with a filter; an
  * administrator can also add to the list from here, where the need shows up.
  */
@@ -47,6 +48,7 @@ export const SubjectProperties = ({
   tags,
   projects,
   canCreateTags,
+  isAdmin = false,
 }: {
   subject: Subject
   stages: Stage[]
@@ -54,6 +56,8 @@ export const SubjectProperties = ({
   projects: LabProject[]
   /** An administrator: typing a tag that does not exist offers to create it. */
   canCreateTags?: boolean
+  /** Stands in for a departed owner on who can see the subject. */
+  isAdmin?: boolean
 }) => {
   const router = useRouter()
   const request = useMutate()
@@ -301,6 +305,8 @@ export const SubjectProperties = ({
           </div>
         ) : null}
       </section>
+
+      <SubjectAccess subject={subject} isAdmin={isAdmin} />
 
       <section className="text-fg-subtle flex flex-col gap-1 text-[0.75rem]">
         <p>

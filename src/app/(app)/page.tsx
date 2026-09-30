@@ -12,31 +12,40 @@ export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Lab' }
 
 /**
- * Home is the lab: every subject, filtered by the URL (`?project=`, `?tag=`,
- * `?owner=me`, `?q=`), shown as the list or the board this viewer last chose.
+ * Home is the lab: every subject this viewer may see, filtered by the URL
+ * (`?project=`, `?tag=`, `?owner=me`, `?private=1`, `?q=`), shown as the list
+ * or the board this viewer last chose.
  */
 const LabPage = async ({
   searchParams,
 }: {
-  searchParams: Promise<{ project?: string; tag?: string; owner?: string; q?: string }>
+  searchParams: Promise<{ project?: string; tag?: string; owner?: string; private?: string; q?: string }>
 }) => {
   const user = await currentUser()
   if (!user) redirect('/login')
+  const viewer = { id: user.id, role: user.role }
 
-  const { project = '', tag = '', owner, q = '' } = await searchParams
+  const { project = '', tag = '', owner, private: restricted, q = '' } = await searchParams
   const mine = owner === 'me'
+  const onlyRestricted = restricted === '1'
 
-  const [stages, tags, projects, subjects] = await Promise.all([
+  const [stages, tags, projects, listed] = await Promise.all([
     listStages(),
     listTags(),
-    listLabProjects(),
-    listSubjects({
-      ...(project ? { project } : {}),
-      ...(tag ? { tag } : {}),
-      ...(mine ? { ownerId: user.id } : {}),
-      ...(q.trim() ? { q: q.trim() } : {}),
-    }),
+    listLabProjects(viewer),
+    listSubjects(
+      {
+        ...(project ? { project } : {}),
+        ...(tag ? { tag } : {}),
+        ...(mine ? { ownerId: user.id } : {}),
+        ...(q.trim() ? { q: q.trim() } : {}),
+      },
+      viewer,
+    ),
   ])
+  // The server lists no one else's unpublished subject, so what is not `lab`
+  // is the viewer's own or shared with them.
+  const subjects = onlyRestricted ? listed.filter((s) => s.visibility !== 'lab') : listed
 
   const initialView = parseLabView((await cookies()).get(LAB_VIEW_COOKIE)?.value)
 
@@ -51,7 +60,7 @@ const LabPage = async ({
         tags={tags}
         projects={projects}
         initialView={initialView}
-        filters={{ project, tag, owner: mine ? 'me' : 'all', q }}
+        filters={{ project, tag, owner: mine ? 'me' : 'all', restricted: onlyRestricted, q }}
       />
       <LiveUpdates />
     </div>

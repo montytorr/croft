@@ -292,6 +292,7 @@ describe('the lab board', () => {
       number: Number(ref.slice(2)),
       title: `Evaluate ${WORD} for semantic recall`,
       project: null,
+      visibility: 'lab',
     })
     expect(shown.json.data).toMatchObject({ cairn_ref: null, cairn_status: null, cairn_synced_at: null })
 
@@ -303,10 +304,10 @@ describe('the lab board', () => {
     const row = listed.json.data.tasks.find((t: { number: number }) => `T-${t.number}` === todoRef)
     expect(row).toMatchObject({ subject_ref: ref, cairn_ref: null, cairn_status: null })
     // The raw `{number}` embed is folded into subject_ref; `subject` is the lab's shape (0.3).
-    expect(row.subject).toEqual({ ref, number: Number(ref.slice(2)), title: `Evaluate ${WORD} for semantic recall`, project: null })
+    expect(row.subject).toEqual({ ref, number: Number(ref.slice(2)), title: `Evaluate ${WORD} for semantic recall`, project: null, visibility: 'lab' })
 
-    const page = await getTask(adminId, 'T', Number(todoRef.slice(2)))
-    expect(page?.subject).toEqual({ ref, number: Number(ref.slice(2)), title: `Evaluate ${WORD} for semantic recall` })
+    const page = await getTask(adminId, 'T', Number(todoRef.slice(2)), { id: adminId, role: 'admin' })
+    expect(page?.subject).toEqual({ ref, number: Number(ref.slice(2)), title: `Evaluate ${WORD} for semantic recall`, visibility: 'lab' })
   })
 
   it('links a todo to Cairn and writes the outcome to the log exactly once', async () => {
@@ -506,7 +507,7 @@ describe('lab projects', () => {
     const listed = await call(listLabProjectsRoute, 'GET', '/lab-projects')
     expect(listed.status).toBe(200)
     expect(listed.json.data.find((p: { id: string }) => p.id === projectId)).toMatchObject({ name, cairn_key: 'TRIG', subjects: 0 })
-    expect((await listLabProjects()).some((p) => p.id === projectId)).toBe(true)
+    expect((await listLabProjects({ id: adminId, role: 'admin' })).some((p) => p.id === projectId)).toBe(true)
     const memberPatch = await call(patchLabProjectRoute, 'PATCH', `/lab-projects/${projectId}`, { id: projectId }, { name: 'x' })
     expect(memberPatch.status).toBe(403)
   })
@@ -525,7 +526,7 @@ describe('lab projects', () => {
   })
 
   it('reorders when every project is named once', async () => {
-    const all = (await listLabProjects()).map((p) => p.id)
+    const all = (await listLabProjects({ id: adminId, role: 'admin' })).map((p) => p.id)
     const reversed = [...all].reverse()
     const partial = await call(reorderLabProjectsRoute, 'POST', '/lab-projects/reorder', {}, { ids: [projectId] })
     expect(partial.status).toBe(400)
@@ -583,7 +584,7 @@ describe('lab projects', () => {
 
   it('refuses to delete a project while a subject, archived or not, is in it', async () => {
     await call(patchSubjectRoute, 'PATCH', `/subjects/${subjectRef}`, { ref: subjectRef }, { archived: true })
-    const counted = (await listLabProjects()).find((p) => p.id === projectId)
+    const counted = (await listLabProjects({ id: adminId, role: 'admin' })).find((p) => p.id === projectId)
     expect(counted?.subjects).toBe(1)
 
     auth.actor = actorFor(memberId, 'member')

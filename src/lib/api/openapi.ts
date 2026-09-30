@@ -16,6 +16,7 @@ import {
   createStageSchema,
   createSubjectNoteSchema,
   createSubjectSchema,
+  subjectMemberSchema,
   createSubjectTodoSchema,
   createLabProjectSchema,
   createTagSchema,
@@ -57,7 +58,8 @@ const errorResponse = {
               'unauthorized', 'forbidden', 'not_found', 'validation_failed',
               'conflict', 'already_claimed', 'resolution_required',
               'conclusion_required', 'stage_in_use', 'project_in_use', 'cairn_not_configured',
-              'secret_detected', 'rate_limited', 'internal_error',
+              'secret_detected', 'already_published', 'subject_not_published', 'owner_required',
+              'rate_limited', 'internal_error',
             ],
           },
           suggestedResolution: {
@@ -169,6 +171,16 @@ const subjectSchema = {
     created_at: { type: 'string', format: 'date-time' },
     updated_at: { type: 'string', format: 'date-time' },
     archived_at: { type: ['string', 'null'], format: 'date-time' },
+    visibility: {
+      type: 'string',
+      enum: ['private', 'members', 'lab'],
+      description: '`lab`: everyone. `members`: the owner and `members`. `private`: the owner.',
+    },
+    members: {
+      type: 'array',
+      items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' } } },
+      description: 'Who the subject is shared with; the owner is not listed. Empty for a lab subject.',
+    },
   },
 }
 
@@ -1185,7 +1197,11 @@ export const openapiSpec = () => ({
           'Without `stage`, it lands in the first planned stage. `tags` are names of existing tags ' +
           '(unknown ones are refused with the valid list). `project` is a lab project\'s name or id (unknown ones are ' +
           'refused the same way). `owner` defaults to the caller; `null` leaves it unowned. ' +
-          'Filing straight into a completed or dropped stage needs a `conclusion` (`conclusion_required`).',
+          'Filing straight into a completed or dropped stage needs a `conclusion` (`conclusion_required`). ' +
+          '`visibility` defaults to `lab`; a `private` or `members` subject is filed by its owner (the caller: ' +
+          'another owner is `forbidden`, none is `owner_required`), and `members` (`members` visibility only) ' +
+          'names who else sees it. A subject the caller cannot see is `not_found` everywhere, exactly as one ' +
+          'that does not exist.',
         requestBody: body(json(createSubjectSchema)),
         responses: { '201': okResponse('The subject.', subjectSchema), '400': errorResponse, '404': errorResponse },
       },
@@ -1217,9 +1233,73 @@ export const openapiSpec = () => ({
           'Moving into a completed or dropped stage without a conclusion (already recorded or sent with ' +
           'the move) is refused with `conclusion_required`. Every stage change appends a `stage` note ' +
           '(`to explore → exploring`). `tags` replaces the whole set. `project` is a lab project\'s name or id; ' +
-          '`null` takes the subject out of its project. `archived: true` takes it off the board.',
+          '`null` takes the subject out of its project. `archived: true` takes it off the board. ' +
+          '`visibility` and, on a non-lab subject, `owner` are the owner\'s to change (`forbidden` otherwise; an ' +
+          'active admin may once the owner is deactivated): `private ↔ members` freely, either → `lab` for good; ' +
+          '`lab →` anything else is `already_published`. Each change appends a `visibility` note.',
         requestBody: body(json(updateSubjectSchema)),
-        responses: { '200': okResponse('The subject.', subjectSchema), '400': errorResponse, '404': errorResponse },
+        responses: {
+          '200': okResponse('The subject.', subjectSchema),
+          '400': errorResponse,
+          '403': errorResponse,
+          '404': errorResponse,
+          '409': errorResponse,
+        },
+      },
+    },
+    '/subjects/{ref}/members': {
+      parameters: [{ name: 'ref', in: 'path', required: true, schema: { type: 'string', example: 'S-12' } }],
+      get: {
+        summary: 'Who a subject is shared with',
+        responses: { '200': okResponse('`{ref, visibility, owner, members}`.'), '404': errorResponse },
+      },
+      post: {
+        summary: 'Share a subject with one more person',
+        description:
+          'Owner only (`forbidden`). `user` is `me`, an id, an email or a display name. A private subject ' +
+          'becomes a `members` one; a lab subject is `already_published` (everyone sees it). Appends a ' +
+          '`visibility` note (`shared with Mael`).',
+        requestBody: body(json(subjectMemberSchema)),
+        responses: {
+          '201': okResponse('The subject.', subjectSchema),
+          '400': errorResponse,
+          '403': errorResponse,
+          '404': errorResponse,
+          '409': errorResponse,
+        },
+      },
+    },
+    '/subjects/{ref}/members/{userId}': {
+      parameters: [
+        { name: 'ref', in: 'path', required: true, schema: { type: 'string', example: 'S-12' } },
+        { name: 'userId', in: 'path', required: true, schema: { type: 'string' }, description: 'An id, `me`, an email or a name.' },
+      ],
+      delete: {
+        summary: 'Stop sharing a subject with someone',
+        description:
+          'The owner removes anybody; a member may remove themselves. File links already issued stay valid ' +
+          'for up to an hour.',
+        responses: {
+          '200': okResponse('The subject, or `{ref, left: true}` when the caller removed themselves.'),
+          '403': errorResponse,
+          '404': errorResponse,
+          '409': errorResponse,
+        },
+      },
+    },
+    '/subjects/{ref}/publish': {
+      parameters: [{ name: 'ref', in: 'path', required: true, schema: { type: 'string', example: 'S-12' } }],
+      post: {
+        summary: 'Publish a private or members subject to the lab, for good',
+        description:
+          'Owner only. Everyone sees it and its todos from now on; it cannot be made private again ' +
+          '(`already_published`, also the answer for a subject already in the lab). Appends a `visibility` note.',
+        responses: {
+          '200': okResponse('The subject.', subjectSchema),
+          '403': errorResponse,
+          '404': errorResponse,
+          '409': errorResponse,
+        },
       },
     },
     '/subjects/{ref}/notes': {
@@ -1479,7 +1559,9 @@ export const openapiSpec = () => ({
         description:
           'Also how `croft sync` reports a status it read through a local cairn CLI. With a done or ' +
           'cancelled `cairnStatus` it does what the server sync does: the once-only ' +
-          '`CAIRN-331 done: <cairnResolution>` subject note, and the todo closed unless it already is.',
+          '`CAIRN-331 done: <cairnResolution>` subject note, and the todo closed unless it already is. ' +
+          'A todo whose subject is not `lab` is refused with `subject_not_published` unless `force: true` ' +
+          '(`croft push --force`).',
         requestBody: body(json(cairnLinkSchema)),
         responses: { '200': okResponse('The link.'), '400': errorResponse, '404': errorResponse, '409': errorResponse },
       },

@@ -3,6 +3,7 @@ import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { admin } from '@/lib/db/client'
 import { findTask, refuseArchived, TASK_LIST_FIELDS } from '@/lib/api/tasks'
+import { withoutHiddenLinks } from '@/lib/api/visibility'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,6 +68,6 @@ export const POST = route<{ ref: string }, z.infer<typeof releaseBody>>({
     // behind it would answer "which session holds this" with one that does
     // not. It also moves a held `doing` task back to `todo`, as the reaper
     // does, so a released task stops saying somebody is on it.
-    return ok(data)
+    return ok(await withoutHiddenLinks(data, actor.userId))
   },
 })

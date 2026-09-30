@@ -2,7 +2,8 @@ import { z } from 'zod'
 import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { failFromDb } from '@/lib/api/db-errors'
-import { admin } from '@/lib/db/client'
+import { admin, pool } from '@/lib/db/client'
+import { restrictTo, taskVisibleSql, visibleTasksOr } from '@/lib/api/visibility'
 import { recordActivity } from '@/lib/api/activity'
 import type { Actor } from '@/lib/api/auth'
 import { removeAttachments } from '@/lib/attachments'
@@ -41,10 +42,11 @@ export const GET = route<{ id: string }>({
     const { project, renamed } = resolved
 
     const [{ count }, former] = await Promise.all([
-      admin()
-        .from('tasks')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', project.id),
+      // As the caller sees the project: private todos are not counted.
+      restrictTo(
+        admin().from('tasks').select('id', { count: 'exact', head: true }).eq('project_id', project.id),
+        await visibleTasksOr(actor.userId),
+      ),
       formerKeysByProject([project.id]),
     ])
 
@@ -175,6 +177,24 @@ export const DELETE = route<{ id: string }>({
       .select('id', { count: 'exact', head: true })
       .eq('project_id', project.id)
 
+    // Deleting cascades to every task in it, so a project holding todos the
+    // caller cannot see (another person's private subject) is not theirs to
+    // delete: they would destroy work they may not even read. The refusal
+    // says how many, never which (see SECURITY.md).
+    const { count: seen } = await restrictTo(
+      admin().from('tasks').select('id', { count: 'exact', head: true }).eq('project_id', project.id),
+      await visibleTasksOr(actor.userId),
+    )
+    const unseen = (count ?? 0) - (seen ?? 0)
+    if (unseen > 0) {
+      return fail(
+        'conflict',
+        `${project.key} holds ${unseen} task${unseen === 1 ? '' : 's'} of subjects you cannot see, and deleting ` +
+          `it would delete them too. Their owners can move them out first.`,
+        { hiddenTasks: unseen },
+      )
+    }
+
     const confirm = url.searchParams.get('confirm')
     if (confirm !== project.key) {
       return fail(
@@ -211,8 +231,15 @@ export const DELETE = route<{ id: string }>({
       },
     ], actor.userId, actor.host)
 
-    const { error } = await admin().from('projects').delete().eq('id', project.id)
-    if (error) return failFromDb(error)
+    // And again in the delete itself, for a todo moved in since the check.
+    const gone = await pool().query(
+      `delete from projects p
+        where p.id = $1
+          and not exists (select 1 from tasks t
+                           where t.project_id = p.id and not ${taskVisibleSql('t.subject_id', '$2')})`,
+      [project.id, actor.userId],
+    )
+    if (!gone.rowCount) return fail('conflict', `${project.key} changed while it was being deleted. Try again.`)
 
     return ok({
       deleted: true,

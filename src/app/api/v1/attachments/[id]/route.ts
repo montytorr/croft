@@ -4,20 +4,21 @@ import { admin } from '@/lib/db/client'
 import { recordActivity } from '@/lib/api/activity'
 import { removeAttachments, signUrls, toAttachment } from '@/lib/attachments'
 import { findAnyAttachment } from '@/lib/api/subject-attachments'
+import { isTaskVisible } from '@/lib/api/visibility'
 
 export const dynamic = 'force-dynamic'
 
 /** Attachments are shared workspace data and remain reachable through their task. */
-const findWorkspaceAttachment = async (id: string) => {
+const findWorkspaceAttachment = async (id: string, viewerId: string) => {
   const { data } = await admin()
     .from('task_attachments')
     .select(
       'id, original_name, mime_type, size_bytes, sha256, storage_path, actor_id, created_at, ' +
-        'task:tasks!inner(id, project:projects!project_id!inner(id))',
+        'task:tasks!inner(id, subject_id, project:projects!project_id!inner(id))',
     )
     .eq('id', id)
     .maybeSingle()
-  return data as unknown as
+  const row = data as unknown as
     | {
         id: string
         original_name: string
@@ -28,9 +29,13 @@ const findWorkspaceAttachment = async (id: string) => {
         created_at: string
         // The embed is the only place the task id is available here, and the
         // activity row needs it to attach the removal to the right timeline.
-        task?: { id: string } | { id: string }[] | null
+        task?: { id: string; subject_id: string | null } | { id: string; subject_id: string | null }[] | null
       }
     | null
+  if (!row) return null
+  // A file on a todo of a subject the caller cannot see is no file at all.
+  const task = Array.isArray(row.task) ? row.task[0] : row.task
+  return (await isTaskVisible(task?.subject_id ?? null, viewerId)) ? row : null
 }
 
 /**
@@ -40,10 +45,10 @@ const findWorkspaceAttachment = async (id: string) => {
  * subject's file goes through DELETE /subjects/{ref}/attachments/{id}.
  */
 export const GET = route<{ id: string }>({
-  handler: async ({ params }) => {
-    const row = await findWorkspaceAttachment(params.id)
+  handler: async ({ actor, params }) => {
+    const row = await findWorkspaceAttachment(params.id, actor.userId)
     if (!row) {
-      const other = await findAnyAttachment(params.id)
+      const other = await findAnyAttachment(params.id, actor.userId)
       if (!other?.subject_id) return fail('not_found', 'No such attachment.')
       const signed = await signUrls(other.storage_path, other.filename, other.mime_type)
       return ok({ ...(await toAttachment(other)), subject_id: other.subject_id, ...signed })
@@ -66,7 +71,7 @@ export const GET = route<{ id: string }>({
 
 export const DELETE = route<{ id: string }>({
   handler: async ({ actor, params }) => {
-    const row = await findWorkspaceAttachment(params.id)
+    const row = await findWorkspaceAttachment(params.id, actor.userId)
     if (!row) return fail('not_found', 'No such attachment.')
 
     // Object first: a failed row delete leaves a recoverable inconsistency,

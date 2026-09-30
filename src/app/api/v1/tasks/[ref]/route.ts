@@ -17,6 +17,7 @@ import {
 import { formerKeysByProject, formerRefsOf, projectsForKeys, resolveProject } from '@/lib/api/project-keys'
 import { buildDigest } from '@/lib/api/digest'
 import { mentionsOf } from '@/lib/api/mentions'
+import { viewerOf, withoutHiddenLinks } from '@/lib/api/visibility'
 import { peopleByIds, resolveAssignee, withAssignee } from '@/lib/api/people'
 import { removeAttachments } from '@/lib/attachments'
 import { refuseUnreadableBody } from '@/lib/api/task-body'
@@ -38,7 +39,7 @@ export const GET = route<{ ref: string }>({
   handler: async ({ actor, params, url }) => {
     const resolved = await resolveTask(actor, params.ref)
     if (!resolved.task) return fail('not_found', noSuchTaskMessage(params.ref, resolved), renameFields(resolved))
-    const task = await withAssignee(resolved.task)
+    const task = await withoutHiddenLinks(await withAssignee(resolved.task), actor.userId)
 
     const formerKeys = (await formerKeysByProject([String(task.project_id)])).get(String(task.project_id)) ?? []
     const former_refs = formerRefsOf(
@@ -47,7 +48,7 @@ export const GET = route<{ ref: string }>({
     )
     const told = { ...renameFields(resolved), ...(former_refs.length > 0 ? { former_refs } : {}) }
     // A todo says which subject it is part of, by ref, so nobody has to map a uuid.
-    const subject = await subjectOfTask(task.subject_id)
+    const subject = await subjectOfTask(task.subject_id, actor.userId)
 
     // `full` stays the default so nothing already calling this changes
     // behaviour. The CLI asks for the digest explicitly.
@@ -59,9 +60,9 @@ export const GET = route<{ ref: string }>({
           ? { cairn_ref: task.cairn_ref, cairn_status: task.cairn_status, cairn_synced_at: task.cairn_synced_at }
           : {}),
       }
-      return ok({ ...(await buildDigest(task)), ...lab, ...told })
+      return ok({ ...(await buildDigest(task, viewerOf(actor))), ...lab, ...told })
     }
-    const mentioned = await mentionsOf(task.id as string, 50)
+    const mentioned = await mentionsOf(task.id as string, 50, viewerOf(actor))
     return ok({ ...task, subject, ...told, mentioned_in: mentioned.mentions, mentioned_in_total: mentioned.total })
   },
 })
@@ -279,10 +280,10 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
     }
 
     if (Object.keys(patch).length === 0) {
-      if (alsoProjects) return ok({ ...task, alsoProjects })
+      if (alsoProjects) return ok({ ...(await withoutHiddenLinks(task, actor.userId)), alsoProjects })
       if (moved) {
         return ok({
-          ...task,
+          ...(await withoutHiddenLinks(task, actor.userId)),
           ref: moved.ref,
           moved,
           note: `Ref changed from ${moved.from}-${task.number} to ${moved.ref}; anything referring to the old one is now stale.`,

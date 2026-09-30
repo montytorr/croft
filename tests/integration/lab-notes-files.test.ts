@@ -172,7 +172,7 @@ describe("people's notes on a subject", () => {
     const list = await call(listHumanNotesRoute, 'GET', `/subjects/${ref}/human-notes`, { ref })
     expect(list.status).toBe(200)
     expect(list.json.data.map((n: { id: string }) => n.id)).toEqual([second.json.data.id, noteId])
-    expect((await listSubjectHumanNotes(subjectIds[0]!)).length).toBe(2)
+    expect((await listSubjectHumanNotes(subjectIds[0]!, { id: memberId, role: 'member' as const })).length).toBe(2)
   })
 
   it("attributes an agent's note to its human, who can then edit it", async () => {
@@ -228,7 +228,7 @@ describe("people's notes on a subject", () => {
     const empty = await call(addHumanNoteRoute, 'POST', `/subjects/${ref}/human-notes`, { ref }, { body: '   ' })
     expect(empty.status).toBe(400)
 
-    const [remaining] = (await listSubjectHumanNotes(subjectIds[0]!))
+    const [remaining] = (await listSubjectHumanNotes(subjectIds[0]!, { id: memberId, role: 'member' as const }))
     const crossed = await call(patchHumanNoteRoute, 'PATCH', `/subjects/${otherRef}/human-notes/${remaining!.id}`, { ref: otherRef, id: remaining!.id }, { body: 'x' })
     expect(crossed.status).toBe(404)
 
@@ -287,7 +287,7 @@ describe('files on a subject', () => {
   it("lists the subject's files oldest first", async () => {
     const list = await call(listSubjectFilesRoute, 'GET', `/subjects/${ref}/attachments`, { ref })
     expect(list.json.data.map((a: { id: string }) => a.id)).toEqual([imageId, htmlId])
-    expect((await listSubjectAttachments(subjectIds[0]!)).map((a) => a.kind)).toEqual(['image', 'html'])
+    expect((await listSubjectAttachments(subjectIds[0]!, { id: memberId, role: 'member' as const })).map((a) => a.kind)).toEqual(['image', 'html'])
     const refreshed = await call(attachmentRoute, 'GET', `/attachments/${imageId}`, { id: imageId })
     expect(refreshed.status).toBe(200)
     expect(refreshed.json.data).toMatchObject({ id: imageId, kind: 'image', subject_id: subjectIds[0] })
@@ -318,7 +318,7 @@ describe('files on a subject', () => {
     expect(deleted.status).toBe(200)
     expect(deleted.json.data).toEqual({ deleted: true, id: htmlId })
     expect(await pulse()).not.toBe(before)
-    expect((await listSubjectAttachments(subjectIds[0]!)).map((a) => a.id)).toEqual([imageId])
+    expect((await listSubjectAttachments(subjectIds[0]!, { id: memberId, role: 'member' as const })).map((a) => a.id)).toEqual([imageId])
   })
 })
 
@@ -337,7 +337,7 @@ describe("a todo's files", () => {
     const list = await call(listTaskFilesRoute, 'GET', `/tasks/${todoRef.ref}/attachments`, { ref: todoRef.ref })
     expect(list.json.data[0]).toMatchObject({ id: res.json.data.id, kind: 'html', original_name: 'r.html' })
     expect(list.json.data[0]).not.toHaveProperty('storage_path')
-    expect((await listTaskAttachments(todoRef.id))[0]).toMatchObject({ kind: 'html', filename: 'r.html' })
+    expect((await listTaskAttachments(todoRef.id, { id: memberId, role: 'member' as const }))[0]).toMatchObject({ kind: 'html', filename: 'r.html' })
 
     const content = await contentRoute(new Request(`${ORIGIN}/api/v1/attachments/${res.json.data.id}/content`), { params: Promise.resolve({ id: res.json.data.id }) })
     expect(content.status).toBe(302)
@@ -351,7 +351,7 @@ describe('todo lists carry their subject', () => {
     const all = await call(listProjectTasksRoute, 'GET', '/projects/T/tasks?limit=200', { id: 'T' })
     expect(all.status).toBe(200)
     const mine = all.json.data.tasks.find((t: { title: string }) => t.title === `Bench ${RUN}`)
-    expect(mine.subject).toEqual({ ref, number: Number(ref.slice(2)), title: `Files ${RUN}`, project: { name: projectName, color: '#4f8c86' } })
+    expect(mine.subject).toEqual({ ref, number: Number(ref.slice(2)), title: `Files ${RUN}`, project: { name: projectName, color: '#4f8c86' }, visibility: 'lab' })
     expect(mine.subject_ref).toBe(ref)
 
     const bySubject = await call(listProjectTasksRoute, 'GET', `/projects/T/tasks?subject=${ref}`, { id: 'T' })
@@ -375,7 +375,7 @@ describe('todo lists carry their subject', () => {
   })
 
   it('listLabTodos gives the LabTodo shape and the same filters', async () => {
-    const byProject = await listLabTodos({ project: projectName })
+    const byProject = await listLabTodos({ project: projectName }, { id: memberId, role: 'member' as const })
     expect(byProject).toHaveLength(1)
     expect(byProject[0]).toMatchObject({
       ref: expect.stringMatching(/^T-\d+$/),
@@ -387,23 +387,23 @@ describe('todo lists carry their subject', () => {
       assignee: { id: adminId, name: expect.any(String) },
       subject: { ref, title: `Files ${RUN}`, project: { name: projectName, color: '#4f8c86' } },
     })
-    expect((await listLabTodos({ subject: otherRef })).map((t) => t.title)).toEqual([`Loose todo ${RUN}`])
-    expect((await listLabTodos({ project: 'none' })).map((t) => t.title)).toContain(`Loose todo ${RUN}`)
-    expect(await listLabTodos({ project: 'no-such-project-anywhere' })).toEqual([])
+    expect((await listLabTodos({ subject: otherRef }, { id: memberId, role: 'member' as const })).map((t) => t.title)).toEqual([`Loose todo ${RUN}`])
+    expect((await listLabTodos({ project: 'none' }, { id: memberId, role: 'member' as const })).map((t) => t.title)).toContain(`Loose todo ${RUN}`)
+    expect(await listLabTodos({ project: 'no-such-project-anywhere' }, { id: memberId, role: 'member' as const })).toEqual([])
 
     await pool().query(`update tasks set status = 'done' where subject_id = $1`, [subjectIds[1]])
-    expect(await listLabTodos({ subject: otherRef })).toEqual([])
-    expect((await listLabTodos({ subject: otherRef, includeClosed: true })).map((t) => t.status)).toEqual(['done'])
+    expect(await listLabTodos({ subject: otherRef }, { id: memberId, role: 'member' as const })).toEqual([])
+    expect((await listLabTodos({ subject: otherRef, includeClosed: true }, { id: memberId, role: 'member' as const })).map((t) => t.status)).toEqual(['done'])
   })
 
   it('the board and the project list carry it too', async () => {
-    const board = await listBoardTasks('', { includeClosed: true })
+    const board = await listBoardTasks('', { includeClosed: true }, { id: memberId, role: 'member' as const })
     const card = board.tasks.find((t) => t.title === `Bench ${RUN}`)!
     expect(card.subject).toMatchObject({ ref, project: { name: projectName } })
     expect(card).toHaveProperty('cairn_ref', null)
 
     const t = (await pool().query(`select id from projects where key = 'T'`)).rows[0].id as string
-    const page = await listTasks(t, { includeClosed: true })
+    const page = await listTasks(t, { includeClosed: true }, { id: memberId, role: 'member' as const })
     expect(page.tasks.find((x) => x.title === `Bench ${RUN}`)?.subject?.ref).toBe(ref)
   })
 })

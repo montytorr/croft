@@ -8,8 +8,8 @@ export const dynamic = 'force-dynamic'
 
 /** The subject's todos — tasks in project T — open ones first. */
 export const GET = route<{ ref: string }>({
-  handler: async ({ params }) => {
-    const subject = await resolveSubject(params.ref)
+  handler: async ({ actor, params }) => {
+    const subject = await resolveSubject(params.ref, actor.userId)
     if (!subject) return noSuchSubject(params.ref)
     return ok(await listSubjectTodos(subject.id))
   },
@@ -23,7 +23,7 @@ export const POST = route<{ ref: string }, z.infer<typeof createSubjectTodoSchem
   schema: createSubjectTodoSchema,
   secretFields: ['title', 'description'],
   handler: async ({ actor, params, body }) => {
-    const subject = await resolveSubject(params.ref)
+    const subject = await resolveSubject(params.ref, actor.userId)
     if (!subject) return noSuchSubject(params.ref)
     const created = await createSubjectTodo(actor, subject, body)
     if (!created.ok) return created.response

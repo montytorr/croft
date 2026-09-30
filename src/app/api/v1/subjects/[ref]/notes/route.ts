@@ -9,8 +9,8 @@ export const dynamic = 'force-dynamic'
 
 /** The work log, newest first. `?kind=` narrows it. */
 export const GET = route<{ ref: string }>({
-  handler: async ({ params, url }) => {
-    const subject = await resolveSubject(params.ref)
+  handler: async ({ actor, params, url }) => {
+    const subject = await resolveSubject(params.ref, actor.userId)
     if (!subject) return noSuchSubject(params.ref)
 
     const kind = url.searchParams.get('kind')
@@ -29,7 +29,7 @@ export const POST = route<{ ref: string }, z.infer<typeof createSubjectNoteSchem
   schema: createSubjectNoteSchema,
   secretFields: ['note'],
   handler: async ({ actor, params, body }) => {
-    const subject = await resolveSubject(params.ref)
+    const subject = await resolveSubject(params.ref, actor.userId)
     if (!subject) return noSuchSubject(params.ref)
     const { note } = await addSubjectNote(actor, subject.id, body)
     return note ? ok(note, { status: 201 }) : ok({ duplicate: true })

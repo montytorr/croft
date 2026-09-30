@@ -103,8 +103,8 @@ describe('croft subject', () => {
     })
     const lines = stdout.trim().split('\n')
     expect(lines[0]).toBe('#1')
-    expect(lines[1]).toBe('ref\tstage\ttodos\ttags\tproject\ttokens\ttitle')
-    expect(lines[2]).toMatch(/^S-12\texploring\t2\/1\tdb\t\t~\d+\tpgvector for recall$/)
+    expect(lines[1]).toBe('ref\tstage\tvisibility\ttodos\ttags\tproject\ttokens\ttitle')
+    expect(lines[2]).toMatch(/^S-12\texploring\tlab\t2\/1\tdb\t\t~\d+\tpgvector for recall$/)
   })
 
   it('list passes its filters and prints one row per subject', async () => {
@@ -119,7 +119,7 @@ describe('croft subject', () => {
     // `include`, not `1`: the server reads `1`/`true` as archived ONLY.
     expect(params.get('archived')).toBe('include')
     expect(stdout.split('\n')[0]).toBe('#2')
-    expect(stdout).toContain('S-13\tto explore\t2/1')
+    expect(stdout).toContain('S-13\tto explore\tlab\t2/1')
   })
 
   it('show is a digest: conclusion, open todos, clipped write-up, findings, and what was withheld', async () => {
@@ -561,6 +561,136 @@ describe('croft push --to', () => {
     const base = await serve(() => ({ event: 'git_push' }), seen)
     expect((await run(['push', 'T-41', 'abc1234'], base)).code).toBe(0)
     expect(posts(seen, '/api/v1/tasks/T-41/activity')[0]!.body).toEqual({ event: 'git_push', sha: 'abc1234' })
+  })
+})
+
+describe('subject visibility', () => {
+  const mael = { id: '5b0c9a52-7f6e-4b8e-9d1a-2f3e4d5c6b7a', name: 'Mael' }
+
+  it('add sends visibility and every member, and says how to publish', async () => {
+    const seen: Seen[] = []
+    const base = await serve(() => subject({ visibility: 'members', members: [mael] }), seen)
+    const { code, stdout, stderr } = await run(
+      ['subject', 'add', 'pgvector for recall', '--visibility', 'members', '--member', 'mael@x.dev', '--member', 'sam,me'],
+      base,
+    )
+    expect(code, stderr).toBe(0)
+    expect(seen[0]!.body).toEqual({ title: 'pgvector for recall', visibility: 'members', members: ['mael@x.dev', 'sam', 'me'] })
+    expect(stdout).toMatch(/^S-12\texploring\tmembers:1\t/m)
+    expect(stderr).toContain('croft subject publish S-12 --confirm S-12 puts it in the lab (one-way)')
+  })
+
+  it('add refuses a --member without --visibility members, and an unknown visibility, before any request', async () => {
+    const seen: Seen[] = []
+    const base = await serve(() => subject(), seen)
+    const members = await run(['subject', 'add', 'x', '--member', 'mael'], base)
+    expect(members.code).toBe(1)
+    expect(members.stderr).toContain('needs --visibility members')
+    const bad = await run(['subject', 'add', 'x', '--visibility', 'secret'], base)
+    expect(bad.code).toBe(1)
+    expect(bad.stderr).toContain('--visibility must be one of private, members, lab')
+    expect(seen).toHaveLength(0)
+  })
+
+  it('list and show say who sees a subject', async () => {
+    const base = await serve((req) =>
+      req.path.startsWith('/api/v1/subjects?') || req.path === '/api/v1/subjects'
+        ? [subject({ visibility: 'private', members: [] })]
+        : req.path.endsWith('/notes') || req.path.endsWith('/todos')
+          ? []
+          : subject({ visibility: 'members', members: [mael] }),
+    )
+    const listed = await run(['subject', 'list'], base)
+    expect(listed.stdout.split('\n')[2]).toMatch(/^S-12\texploring\tprivate\t/)
+    const shown = await run(['subject', 'show', 'S-12'], base)
+    expect(shown.stdout).toContain('shared with Mael')
+  })
+
+  it('share adds and removes people by whatever names them, and says when a private subject became shared', async () => {
+    const seen: Seen[] = []
+    let visibility = 'private'
+    const base = await serve((req) => {
+      if (req.method === 'POST') visibility = 'members'
+      return subject({ visibility, members: [mael] })
+    }, seen)
+    const { code, stderr } = await run(['subject', 'share', 'S-12', '+sam@x.dev', '-Mael Dupont'], base)
+    expect(code, stderr).toBe(0)
+    const writes = seen.filter((s) => s.method !== 'GET').map((s) => [s.method, s.path, s.body])
+    expect(writes).toEqual([
+      ['POST', '/api/v1/subjects/S-12/members', { user: 'sam@x.dev' }],
+      ['DELETE', '/api/v1/subjects/S-12/members/Mael%20Dupont', undefined],
+    ])
+    expect(stderr).toContain('it is now shared with its members')
+  })
+
+  it('share --visibility private makes it private again, and refuses a subject already in the lab', async () => {
+    const seen: Seen[] = []
+    const base = await serve(() => subject({ visibility: 'members', members: [mael] }), seen)
+    expect((await run(['subject', 'share', 'S-12', '--visibility', 'private'], base)).code).toBe(0)
+    expect(seen.filter((s) => s.method === 'PATCH').map((s) => s.body)).toEqual([{ visibility: 'private' }])
+
+    const lab = await serve(() => subject({ visibility: 'lab', members: [] }))
+    const refused = await run(['subject', 'share', 'S-12', '+mael'], lab)
+    expect(refused.code).toBe(1)
+    expect(refused.stderr).toContain('S-12 is in the lab')
+    const toLab = await run(['subject', 'share', 'S-12', '--visibility', 'lab'], lab)
+    expect(toLab.code).toBe(1)
+    expect(toLab.stderr).toContain('croft subject publish S-12')
+  })
+
+  it('publish needs the ref confirmed and sends nothing without it', async () => {
+    const seen: Seen[] = []
+    const base = await serve(() => subject({ visibility: 'lab', members: [] }), seen)
+    const { code, stderr } = await run(['subject', 'publish', 'S-12'], base)
+    expect(code).toBe(1)
+    expect(stderr).toContain('--confirm S-12')
+    expect(posts(seen, '/api/v1/subjects/S-12/publish')).toHaveLength(0)
+  })
+
+  it('publish posts once and says it is one-way; a second publish is explained', async () => {
+    const seen: Seen[] = []
+    const base = await serve(() => subject({ visibility: 'lab', members: [] }), seen)
+    const { code, stdout, stderr } = await run(['subject', 'publish', 'S-12', '--confirm', 'S-12'], base)
+    expect(code, stderr).toBe(0)
+    expect(posts(seen, '/api/v1/subjects/S-12/publish')).toHaveLength(1)
+    expect(stdout).toMatch(/^S-12\texploring\tlab\t/m)
+    expect(stderr).toContain('cannot be undone')
+
+    const again = await serve(() => ({ status: 409, payload: { success: false, error: 'already in the lab', code: 'already_published' } }))
+    const refused = await run(['subject', 'publish', 'S-12', '--confirm', 'S-12'], again)
+    expect(refused.code).toBe(1)
+    expect(refused.stderr).toContain('publishing is one-way')
+  })
+
+  it('push refuses a todo of an unpublished subject before Cairn is touched, and --force files and links it', async () => {
+    const dir = await tempDir('croft-cairn-')
+    const cairn = await fakeCairn(dir)
+    const hidden = { id: 'a', number: 41, project: { key: 'T' }, title: 'Ship it', type: 'feature', description: 'x', subject: { ref: 'S-12', visibility: 'private' } }
+    const seen: Seen[] = []
+    const base = await serve((req) => (req.method === 'GET' ? hidden : { cairn_ref: 'CAIRN-331' }), seen)
+
+    const refused = await run(['push', 'T-41', '--to', 'CAIRN'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
+    expect(refused.code).toBe(1)
+    expect(refused.stderr).toContain('S-12, which is private')
+    expect(refused.stderr).toContain('--force')
+    expect(existsSync(join(dir, 'calls.jsonl'))).toBe(false)
+    expect(seen.map((s) => s.method)).toEqual(['GET'])
+
+    const forced = await run(['push', 'T-41', '--to', 'CAIRN', '--force'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
+    expect(forced.code, forced.stderr).toBe(0)
+    expect(posts(seen, '/api/v1/tasks/T-41/cairn-link')[0]!.body).toEqual({ cairnRef: 'CAIRN-331', force: true })
+  })
+
+  it('push --link carries --force, and names the fix when the server refuses', async () => {
+    const seen: Seen[] = []
+    const base = await serve(() => ({ status: 409, payload: { success: false, error: 'S-12 is not in the lab', code: 'subject_not_published' } }), seen)
+    const refused = await run(['push', 'T-41', '--link', 'CAIRN-331'], base)
+    expect(refused.code).toBe(1)
+    expect(refused.stderr).toContain('re-run with --force')
+
+    const ok = await serve(() => ({ cairn_ref: 'CAIRN-331' }), seen)
+    expect((await run(['push', 'T-41', '--link', 'CAIRN-331', '--force'], ok)).code).toBe(0)
+    expect(posts(seen, '/api/v1/tasks/T-41/cairn-link').at(-1)!.body).toEqual({ cairnRef: 'CAIRN-331', force: true })
   })
 })
 

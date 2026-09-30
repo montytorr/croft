@@ -4,6 +4,7 @@ import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { admin } from '@/lib/db/client'
 import { findTask, refuseArchived, TASK_LIST_FIELDS } from '@/lib/api/tasks'
+import { withoutHiddenLinks } from '@/lib/api/visibility'
 
 export const dynamic = 'force-dynamic'
 
@@ -79,6 +80,6 @@ export const POST = route<{ ref: string }, z.infer<typeof checkpointBody>>({
       return fail('conflict', 'Checkpoint requires ownership and checkpoint predecessors for an existing claim.')
     }
     if (result.code === 'terminal') return fail('conflict', 'Closed tasks do not accept checkpoints.')
-    return ok({ ...(result.data ?? {}), ...(result.claimed ? { claimed: true } : {}), replay: result.code })
+    return ok({ ...(await withoutHiddenLinks(result.data ?? {}, actor.userId)), ...(result.claimed ? { claimed: true } : {}), replay: result.code })
   },
 })

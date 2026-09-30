@@ -5,6 +5,7 @@ import { findTask, refuseArchived, TASK_LIST_FIELDS } from '@/lib/api/tasks'
 import { takeTask } from '@/lib/api/claim'
 import { withAssignee } from '@/lib/api/people'
 import { CLAIM_LEASE_SECONDS } from '@/lib/utils'
+import { withoutHiddenLinks } from '@/lib/api/visibility'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,6 +62,6 @@ export const POST = route<{ ref: string }, z.infer<typeof claimBody>>({
       )
     }
 
-    return ok(await withAssignee(row))
+    return ok(await withoutHiddenLinks(await withAssignee(row), actor.userId))
   },
 })

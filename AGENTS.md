@@ -45,6 +45,10 @@ croft subject stage S-12 rejected --conclusion -                 # 5. conclude i
 5. **Entering a completed or dropped stage requires a conclusion.** A refusal naming
    `conclusion_required` means: pass `--conclusion`.
 
+**Visibility.** A subject is `lab` (everyone) by default. `--visibility private|members`
+keeps it to its owner (and `--member`s) until `croft subject publish S-n --confirm S-n` — **one-way**.
+Never push such a subject's todo to Cairn (`push` refuses without `--force`).
+
 Bodies, notes and conclusions are markdown — `##` headings, `-` lists, code and paths in
 backticks. A wall of text is refused, naming what to fix. So is anything that looks like a
 secret: write `$ENV_VAR` or a vault path.
