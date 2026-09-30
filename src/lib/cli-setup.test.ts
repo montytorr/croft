@@ -470,3 +470,45 @@ describe('croft setup — CROFT_SETUP_SOURCE', () => {
     expect(await files()).toEqual(written)
   })
 })
+
+/**
+ * The agent-files job overwrites code every agent session runs, on a timer, so
+ * setup says so before installing it. Dry run: the plan is what install-cron
+ * would render, printed and never installed.
+ */
+describe('croft setup — the agent-files job', () => {
+  const planned = async (extraEnv: Record<string, string> = {}) => {
+    const base = await serve()
+    const HOME = await home()
+    const script = join(HOME, 'sync.mjs')
+    await writeFile(script, '')
+    return run(
+      ['setup', '--url', base, '--runtimes', 'claude-code', '--no-hooks', '--dry-run'],
+      HOME,
+      { CROFT_SYNC_SCRIPT: script, CROFT_NODE_PATH: process.execPath, CROFT_LOG_DIR: HOME, ...extraEnv },
+    )
+  }
+
+  it('says what the job overwrites, how often, from where, and how to skip or remove it', async () => {
+    const { code, stdout } = await planned()
+    const version = JSON.parse(await readFile(join(REPO, 'package.json'), 'utf8')).version
+    expect(code).toBe(0)
+    expect(stdout).toContain('agent-files keeps ~/.local/bin/croft, ~/.croft/hooks and the skill')
+    expect(stdout).toContain(`v${version}, the release installed here, from github.com/montytorr/croft`)
+    expect(stdout).toMatch(/every 15 minutes and at login|hourly/)
+    expect(stdout).toContain('--no-jobs skips it')
+    expect(stdout).toContain('--remove --only agent-files takes it out')
+    // Said before the job's plan, not after it.
+    expect(stdout.indexOf('agent-files keeps')).toBeLessThan(stdout.indexOf('jobs      agent-files'))
+    expect(stdout).toContain(`/v${version}`)
+  })
+
+  it('names a fork given as CROFT_REPO, and refuses one that is not <owner>/<name>', async () => {
+    const fork = await planned({ CROFT_REPO: 'acme/croft' })
+    expect(fork.stdout).toContain('from github.com/acme/croft')
+
+    const bad = await planned({ CROFT_REPO: 'acme/../evil' })
+    expect(bad.code).not.toBe(0)
+    expect(bad.stderr).toContain('is not <owner>/<name>')
+  })
+})

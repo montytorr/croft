@@ -34,7 +34,7 @@
 import { execFileSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const BEGIN = '# >>> croft maintenance (managed by scripts/install-cron.mjs)'
@@ -70,36 +70,10 @@ const CLI = env(
 // the installed crontabs already name.
 const NODE = env('CROFT_NODE_PATH', MAC ? process.execPath : '/usr/bin/node')
 const LOGS = env('CROFT_LOG_DIR', MAC ? join(homedir(), 'Library/Logs') : '/var/log')
-const SYNC = env(
-  'CROFT_SYNC_SCRIPT',
-  MAC
-    ? join(homedir(), '.croft/maintenance/sync-agent-files.mjs')
-    : '/opt/croft-maintenance/sync-agent-files.mjs',
-)
-/**
- * The release this installer belongs to, read from the CLI shipped beside it.
- *
- * The agent-files job repairs every copy to whatever RAW serves, every 15
- * minutes on a Mac, with the user's own rights. Pointed at `main`, that makes
- * any push to `main` code that runs on every connected machine within the
- * quarter hour, including a push nobody meant to ship. Pointed at the tag of
- * the release `croft setup` installed, the job still does its job (a copy that
- * drifted from the release is put back) but moving to a newer version stays a
- * decision: re-running `croft setup`. A host that wants to track `main` (the
- * server, repaired by every deploy) says so with CROFT_RAW_BASE.
- */
-const RELEASE_VERSION = (() => {
-  try {
-    return readFileSync(join(HERE, '..', 'cli', 'croft.mjs'), 'utf8').match(/^const VERSION = '([^']+)'/m)?.[1] ?? null
-  } catch {
-    return null
-  }
-})()
-const RAW = env(
-  'CROFT_RAW_BASE',
-  `https://raw.githubusercontent.com/montytorr/croft/${RELEASE_VERSION ? `v${RELEASE_VERSION}` : 'main'}`,
-)
-
+const DEFAULT_SYNC = MAC
+  ? join(homedir(), '.croft/maintenance/sync-agent-files.mjs')
+  : '/opt/croft-maintenance/sync-agent-files.mjs'
+const SYNC = env('CROFT_SYNC_SCRIPT', DEFAULT_SYNC)
 /**
  * An env override that ends up, unquoted for cron's own purposes, in a
  * crontab line: `%` is cron's own escape for a newline in the command field
@@ -118,6 +92,84 @@ const rejectUnsafeEnvValue = (name, value, unsafe = UNSAFE_ENV_VALUE) => {
     process.exit(2)
   }
 }
+
+const refuseSetting = (why) => {
+  console.error(why)
+  process.exit(2)
+}
+
+/** A bare https base (loopback may be plain http, for tests), or a refusal. */
+const httpsBase = (name, value) => {
+  const trimmed = value.replace(/\/+$/, '')
+  rejectUnsafeEnvValue(name, trimmed)
+  let url
+  try {
+    url = new URL(trimmed)
+  } catch {
+    return refuseSetting(`${name}=${value} is not a URL.`)
+  }
+  const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) {
+    return refuseSetting(`${name}=${value} is not https: these files are code, and are not fetched in the clear.`)
+  }
+  if (url.search || url.hash || url.username || url.password || trimmed.split('/').some((s) => s === '..' || s === '.')) {
+    return refuseSetting(`${name}=${value} carries a query, fragment, credentials or a . segment; give the bare base URL.`)
+  }
+  return trimmed
+}
+
+/**
+ * Where the agent-files job syncs from.
+ *
+ * The job overwrites the CLI, the hook every agent session runs and the skill,
+ * with the user's rights, every 15 minutes on a Mac. It used to fetch all of
+ * that from `main`, so any push to `main` — including one nobody meant to ship
+ * — ran on every connected machine within the quarter hour. So:
+ *
+ *   (default)        the tag of the release this installer belongs to, read
+ *                    from the CLI shipped beside it: the release `croft setup`
+ *                    just unpacked. The job still repairs a copy that drifted
+ *                    from that release; moving to a newer one stays a decision
+ *                    (re-running setup from the newer release).
+ *   CROFT_RAW_BASE   exactly that base URL, every run: the deliberate way to
+ *                    follow a branch (the server, repaired by every deploy).
+ *                    Rendered with `--unpinned`, so the job line says in so
+ *                    many words that it is not pinned — unless it names a tag.
+ *
+ * The tags come from CROFT_RAW_REPO, a base URL any mirror can serve, or from
+ * CROFT_REPO=<owner>/<name> on GitHub — the same variable install.sh and
+ * `croft setup` read, so an install from a fork keeps following the fork.
+ */
+const RELEASE = /^\d{1,4}\.\d{1,4}\.\d{1,6}(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$/
+const RELEASE_VERSION = (() => {
+  try {
+    return readFileSync(join(HERE, '..', 'cli', 'croft.mjs'), 'utf8').match(/^const VERSION = '([^']*)'/m)?.[1] ?? null
+  } catch {
+    return null
+  }
+})()
+const GITHUB_REPO = env('CROFT_REPO', '')
+if (GITHUB_REPO && (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(GITHUB_REPO) || GITHUB_REPO.includes('..') || /(^|\/)\.(\/|$)/.test(GITHUB_REPO))) {
+  refuseSetting(`CROFT_REPO=${JSON.stringify(GITHUB_REPO)} is not <owner>/<name>.`)
+}
+const RAW_REPO = httpsBase(
+  'CROFT_RAW_REPO',
+  env('CROFT_RAW_REPO', '') || `https://raw.githubusercontent.com/${GITHUB_REPO || 'montytorr/croft'}`,
+)
+const RAW_BASE = env('CROFT_RAW_BASE', '') ? httpsBase('CROFT_RAW_BASE', env('CROFT_RAW_BASE', '')) : ''
+const SOURCE_ARGS = (() => {
+  if (RAW_BASE) {
+    const tag = RAW_BASE.slice(RAW_BASE.lastIndexOf('/') + 1)
+    const pinned = tag.startsWith('v') && RELEASE.test(tag.slice(1))
+    return ['--source', RAW_BASE, ...(pinned ? [] : ['--unpinned'])]
+  }
+  if (RELEASE_VERSION === null || !RELEASE.test(RELEASE_VERSION)) {
+    // Only reached when the agent-files job is actually being rendered: the
+    // other jobs do not care which release this is.
+    return null
+  }
+  return ['--source', `${RAW_REPO}/v${RELEASE_VERSION}`]
+})()
 
 /** Tasks the jobs report into. Empty disables reporting for that job. */
 const NOTIFY_FILES = env('CROFT_NOTIFY_FILES', '')
@@ -189,8 +241,7 @@ const JOBS = [
     command: [
       NODE,
       SYNC,
-      '--source',
-      RAW,
+      ...(SOURCE_ARGS ?? []),
       ...ALSO.flatMap((pair) => ['--also', pair]),
       ...(NOTIFY_FILES ? ['--notify', NOTIFY_FILES] : []),
     ],
@@ -504,10 +555,11 @@ const scheduledInLaunchd = (name) => {
  * the job, which is what this whole mechanism exists to avoid.
  *
  * `--source` because a deploy has the exact tree it just deployed sitting on
- * disk, which is strictly better than the schedule's raw.githubusercontent URL:
- * that URL is served from a CDN with a cache of its own, so a fetch seconds
- * after the merge can be handed the previous main and write it back as though
- * it were current. Omit it and the scheduled source is used unchanged.
+ * disk, which is strictly better than the schedule's network source: a URL is
+ * served from a CDN with a cache of its own, so a fetch seconds after the merge
+ * can be handed the previous tree and write it back as though it were current.
+ * Omit it and the scheduled source is used unchanged. An `--unpinned` that
+ * qualified the scheduled URL goes with it.
  *
  * `--no-notify` because the schedule's note means "a runtime was reading a
  * stale copy until now", which is a surprise worth recording. On the deploy
@@ -520,6 +572,9 @@ const withRunOverrides = (command) => {
     const at = out.indexOf('--source')
     if (at === -1) out.push('--source', RUN_SOURCE)
     else out[at + 1] = RUN_SOURCE
+    // It qualified a URL this run no longer reads.
+    const unpinned = out.indexOf('--unpinned')
+    if (unpinned !== -1) out.splice(unpinned, 1)
   }
   if (RUN_WITHOUT_NOTIFY) {
     const at = out.indexOf('--notify')
@@ -560,18 +615,41 @@ if (RUN) {
   process.exit(0)
 }
 
+if (SOURCE_ARGS === null && (!only || only.includes('agent-files'))) {
+  refuseSetting(
+    `${join(HERE, '..', 'cli', 'croft.mjs')} carries no release number (${JSON.stringify(RELEASE_VERSION)}), ` +
+      'so there is no tag to pin the agent-files job to. Run this from a release or a checkout, ' +
+      'or name a source with CROFT_RAW_BASE.',
+  )
+}
+
 /**
  * The repairer has to be somewhere stable before it can be scheduled: a job
  * pointed at a working tree breaks the first time the tree is moved or checked
  * out to a branch. On the server this directory was made by hand; doing it here
  * is what makes `--install` work on a machine that has never had it.
+ *
+ * It is also how those two scripts are UPDATED. The scheduled sync never
+ * replaces itself from the network, so the copies at the default location are
+ * refreshed here, from the tree this installer runs from — the release
+ * `croft setup` just unpacked, or a checkout — whenever they differ. A script
+ * named by CROFT_SYNC_SCRIPT is the operator's own and is only ever placed
+ * where it is missing, as before.
  */
 const REPO_SYNC = join(HERE, 'sync-agent-files.mjs')
-if (INSTALL && !existsSync(SYNC) && existsSync(REPO_SYNC)) {
-  mkdirSync(dirname(SYNC), { recursive: true })
-  copyFileSync(REPO_SYNC, SYNC)
-  console.log(`placed ${SYNC}`)
+const place = (from, to) => {
+  if (!existsSync(from) || resolve(from) === resolve(to)) return
+  if (existsSync(to) && readFileSync(to).equals(readFileSync(from))) return
+  try {
+    mkdirSync(dirname(to), { recursive: true })
+    copyFileSync(from, to)
+    console.log(`placed ${to}`)
+  } catch (error) {
+    console.error(`could not place ${to} (${error.code ?? error.message})`)
+  }
 }
+if (INSTALL && (SYNC === DEFAULT_SYNC || !existsSync(SYNC))) place(REPO_SYNC, SYNC)
+if (INSTALL && SYNC === DEFAULT_SYNC) place(join(HERE, 'install-cron.mjs'), join(dirname(SYNC), 'install-cron.mjs'))
 
 const applicable = JOBS.filter((job) => {
   if (only && !only.includes(job.name)) return false

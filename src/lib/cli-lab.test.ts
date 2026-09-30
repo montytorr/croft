@@ -690,7 +690,8 @@ describe('croft context --brief', () => {
     const { code, stdout, stderr } = await run(['context', '--brief', '--cwd', '/tmp/repo'], base)
     expect(code).toBe(0)
     expect(stderr).toBe('')
-    expect(new URL(seen.find((s) => s.path.startsWith('/api/v1/subjects/brief'))!.path, base).searchParams.get('cwd')).toBe('/tmp/repo')
+    // The brief is not narrowed by directory, so the directory stays here.
+    expect(seen.find((s) => s.path.startsWith('/api/v1/subjects/brief'))!.path).toBe('/api/v1/subjects/brief')
     const lines = stdout.trimEnd().split('\n')
     expect(lines.length).toBeLessThanOrEqual(5)
     expect(lines[0]).toBe('Croft — lab: 3 exploring · 1 implementing')

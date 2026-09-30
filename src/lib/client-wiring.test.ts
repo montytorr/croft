@@ -290,8 +290,8 @@ describe('which side of a drift is newer', () => {
     expect(stderr).toContain('CLI and server differ')
   })
 
-  it('names the scheduled job when this machine has one', async () => {
-    const { base } = await serve({ 'x-croft-version': '99.0.0' })
+  const withJob = async (headers: Record<string, string>) => {
+    const { base } = await serve(headers)
     const home = await homeWith('CROFT_API_KEY=croft_only')
     await mkdir(join(home, '.croft/maintenance'), { recursive: true })
     await writeFile(join(home, '.croft/maintenance/install-cron.mjs'), '')
@@ -299,11 +299,23 @@ describe('which side of a drift is newer', () => {
     await mkdir(dirname(agent), { recursive: true })
     await writeFile(agent, '')
     const { stderr } = await run('node', [CLI, 'projects'], { PATH: BASE_PATH, HOME: home, CROFT_BASE_URL: base })
+    return { stderr, home, base }
+  }
+
+  it('names the scheduled job for a copy that drifted from its own release', async () => {
+    const future = new Date(Date.now() + 86_400_000).toISOString().replace(/\.\d+Z$/, 'Z')
+    const { stderr, home } = await withJob({ 'x-croft-version': await release(), 'x-croft-cli': '0123456789abcdef', 'x-croft-built-at': future })
     expect(stderr).toContain(
       process.platform === 'darwin'
         ? 'launchctl kickstart gui/'
         : `node ${join(home, '.croft/maintenance/install-cron.mjs')} --run agent-files`,
     )
+  })
+
+  it('points a newer server release at the installer, since the job is pinned to this one', async () => {
+    const { stderr, base } = await withJob({ 'x-croft-version': '99.0.0' })
+    expect(stderr).toContain(`install.sh | sh -s -- --url ${base}`)
+    expect(stderr).not.toContain('kickstart')
   })
 
   it('--version says it once', async () => {

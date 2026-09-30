@@ -8,6 +8,38 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+### Security
+
+- **The agent-files job is pinned to the release `croft setup` installed.** It used to repair the
+  CLI, the session hook and the skill from `main` every 15 minutes; it now syncs `v<VERSION>` of
+  the installed release (#1), and moving to a newer release is re-running the installer.
+  - A job installed before this names `…/montytorr/croft/main`; the sync reads that exact URL as
+    the release installed here (the version of the installed CLI), so existing machines are
+    pinned on their next run without re-running setup.
+  - A remote source must end in a release tag, over https (loopback aside). Following a branch is
+    `CROFT_RAW_BASE` on the installer, rendered with `--unpinned`.
+  - Every file is fetched before any is written: a missing file or an outage writes nothing and
+    exits 1.
+  - From a remote source the job never rewrites its own two scripts; `install-cron.mjs --install`
+    (which setup runs) refreshes them from the release it ships with.
+  - `CROFT_REPO=<owner>/<name>` (install.sh, setup, install-cron) or `CROFT_RAW_REPO=<https base>`
+    installs from and follows a fork or mirror.
+  - `croft setup` says what the job overwrites, how often and from where before installing it,
+    and how to skip (`--no-jobs`) or remove it.
+- **Setup wires hooks only into the runtimes it paired keys for** (#2).
+- **`croft context --brief` no longer sends the working directory**, which the server never used.
+  `CROFT_SHARE_LOCATION=off` keeps the directory, git remote and hostname of every other request
+  on the machine (#3).
+
+### Changed
+
+- A CLI older than the server's release is now told to re-run the installer rather than the
+  agent-files job, which no longer moves between releases.
+
+**Server operators:** the server's hourly job was rendered with the `main` URL, so it now pins to
+the installed CLI's release between deploys. To keep following `main` there, reinstall it with
+`CROFT_RAW_BASE=https://raw.githubusercontent.com/montytorr/croft/main`.
+
 ## [0.3.0] — 2026-09-30
 
 ### Added
