@@ -8,6 +8,8 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-09-30
+
 Thanks to @domnumb for proposing the shape in #4.
 
 ### Added
@@ -175,7 +177,8 @@ Forked from Cairn v0.12.1 (1ef3556).
 
 - A field notebook: paper and peat grounds, a heather accent, Schibsted Grotesk and Newsreader, and runrig strips for a mark.
 
-[Unreleased]: https://github.com/montytorr/croft/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/montytorr/croft/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/montytorr/croft/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/montytorr/croft/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/montytorr/croft/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/montytorr/croft/compare/v0.2.0...v0.3.0
