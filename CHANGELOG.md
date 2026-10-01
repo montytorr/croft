@@ -8,6 +8,8 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-10-01
+
 ### Changed
 
 - The Croft skill and `AGENTS.md` now say that work on the agent tooling itself (Cairn's session summariser, hooks, setup, sync) is not a lab subject and goes straight to Cairn.
@@ -219,7 +221,8 @@ Forked from Cairn v0.12.1 (1ef3556).
 
 - A field notebook: paper and peat grounds, a heather accent, Schibsted Grotesk and Newsreader, and runrig strips for a mark.
 
-[Unreleased]: https://github.com/montytorr/croft/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/montytorr/croft/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/montytorr/croft/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/montytorr/croft/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/montytorr/croft/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/montytorr/croft/compare/v0.4.0...v0.4.1
