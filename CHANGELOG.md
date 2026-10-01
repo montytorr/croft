@@ -8,6 +8,10 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+### Changed
+
+- The Croft skill and `AGENTS.md` now say that work on the agent tooling itself (Cairn's session summariser, hooks, setup, sync) is not a lab subject and goes straight to Cairn.
+
 ## [0.5.0] — 2026-10-01
 
 ### Security
