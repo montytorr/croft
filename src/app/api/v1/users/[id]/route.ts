@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { route } from '@/lib/api/handler'
-import { failValidation, ok } from '@/lib/api/response'
+import { fail, failValidation, ok } from '@/lib/api/response'
 import { USER_ROLES } from '@/lib/api/actor'
 import { deactivateUser, updateUser } from '@/lib/api/users'
 import { requireUserAdministrator, userAdminFailure } from '@/lib/api/user-admin-route'
@@ -13,11 +13,23 @@ const updateUserSchema = z.object({
   role: z.enum(USER_ROLES).optional(),
 }).refine((value) => Object.keys(value).length > 0, 'At least one field is required.')
 
+/**
+ * An email is fixed once the user exists (v0.5): an administrator cannot
+ * change someone else's, because the email is where their reset links go —
+ * changing it to one's own and sending a reset would be setting their
+ * password with extra steps. The initial email is set at creation.
+ */
 export const PATCH = route<{ id: string }, z.infer<typeof updateUserSchema>>({
   schema: updateUserSchema,
   handler: async ({ actor, params, body }) => {
     const denied = requireUserAdministrator(actor)
     if (denied) return denied
+    if (body.email !== undefined && params.id !== actor.userId) {
+      return fail(
+        'forbidden',
+        "An administrator cannot change someone else's email: it is where their password reset links go.",
+      )
+    }
     try {
       return ok(await updateUser(params.id, body))
     } catch (error) {

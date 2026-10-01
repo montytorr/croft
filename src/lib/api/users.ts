@@ -235,6 +235,7 @@ export const deactivateUser = async (
     )
     await client.query('delete from app_sessions where user_id = $1', [id])
     await client.query('update api_keys set revoked_at = now() where user_id = $1 and revoked_at is null', [id])
+    await client.query('update password_reset_tokens set used_at = now() where user_id = $1 and used_at is null', [id])
   }
   return { ...await userById(client, id), reassignedTaskCount }
 })
@@ -249,19 +250,35 @@ export const restoreUser = async (id: string): Promise<AdminUser> => transaction
   return userById(client, id)
 })
 
-export const resetUserPassword = async (id: string, password: string): Promise<void> => {
+/**
+ * Sets a password inside the caller's transaction, with the effect every
+ * password change has had: the session epoch moves and every browser session
+ * is deleted, so whoever was signed in as this person is signed out. Agent
+ * keys live on the auth epoch and are untouched — a password is not a key.
+ * Any reset link still outstanding dies with the old password.
+ */
+export const setPasswordOn = async (client: PoolClient, userId: string, password: string): Promise<void> => {
   const encryptedPassword = await hash(password, 12)
+  await client.query(
+    `update app_users
+        set encrypted_password = $2,
+            session_epoch = session_epoch + 1,
+            updated_at = now()
+      where id = $1`,
+    [userId, encryptedPassword],
+  )
+  await client.query('delete from app_sessions where user_id = $1', [userId])
+  await client.query(
+    'update password_reset_tokens set used_at = now() where user_id = $1 and used_at is null',
+    [userId],
+  )
+}
+
+/** Your own password, from Settings. Nobody sets anyone else's: they are sent a reset link. */
+export const resetUserPassword = async (id: string, password: string): Promise<void> => {
   await transaction(async (client) => {
     await userById(client, id)
-    await client.query(
-      `update app_users
-          set encrypted_password = $2,
-              session_epoch = session_epoch + 1,
-              updated_at = now()
-        where id = $1`,
-      [id, encryptedPassword],
-    )
-    await client.query('delete from app_sessions where user_id = $1', [id])
+    await setPasswordOn(client, id, password)
   })
 }
 

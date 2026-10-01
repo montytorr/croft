@@ -1729,6 +1729,7 @@ export const openapiSpec = () => ({
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
       patch: {
         summary: 'Edit a user',
+        description: 'An administrator cannot change someone else\u2019s `email` (403 `forbidden`): it is where their reset links go.',
         requestBody: body({
           type: 'object',
           properties: {
@@ -1771,13 +1772,41 @@ export const openapiSpec = () => ({
     '/users/{id}/password': {
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
       post: {
-        summary: 'Reset a user password and revoke browser sessions',
+        summary: 'Set your own password and revoke your browser sessions (refused for anyone else, administrators included)',
+        description:
+          'An administrator cannot set someone else\u2019s password (403 `forbidden`): send them a reset link with ' +
+          '`POST /users/{id}/password-reset` instead.',
         requestBody: body({
           type: 'object',
           properties: { password: { type: 'string', minLength: 12 } },
           required: ['password'],
         }),
-        responses: { '200': okResponse('Password reset.'), '403': errorResponse },
+        responses: { '200': okResponse('Password set.'), '403': errorResponse },
+      },
+    },
+    '/users/{id}/password-reset': {
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+      post: {
+        summary: 'Email a user a single-use password reset link (administrator browser session only)',
+        description:
+          'The link goes to the user\u2019s email and works once, for an hour; the administrator never sees it. ' +
+          'A new link invalidates any earlier one. Answers `{ sent: true, to }` with the address masked. ' +
+          '503 `mail_not_configured` (nothing is created) when RESEND_API_KEY, CROFT_MAIL_FROM or CROFT_BASE_URL ' +
+          'is unset; 502 `mail_send_failed` when the mail provider refuses it (the link is invalidated); ' +
+          '409 for a disabled user; 429 after five in fifteen minutes for one user.',
+        responses: {
+          '200': okResponse('Sent.', {
+            type: 'object',
+            properties: { sent: { type: 'boolean', const: true }, to: { type: 'string' } },
+            required: ['sent', 'to'],
+          }),
+          '403': errorResponse,
+          '404': errorResponse,
+          '409': errorResponse,
+          '429': errorResponse,
+          '502': errorResponse,
+          '503': errorResponse,
+        },
       },
     },
     '/users/{id}/keys': {

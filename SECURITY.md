@@ -14,10 +14,12 @@ lands.
 Croft is **one trusted shared workspace**. Every active user and valid agent key can read
 and operate on the workspace's subjects, todos and projects — except subjects their owner
 has kept private or shared with named members (below). Human administrators alone can
-add, disable and restore users, change roles, reset passwords, and list or revoke other
-people's agent keys. **No one can mint a key for someone else**, administrators included: a
-key is its holder's identity and reads everything they can. A signed-in member pairs keys
-for their own agents (below), and lists or revokes their own — never anyone else's. There is no public sign-up page.
+add, disable and restore users, change roles, have a password reset link emailed to someone,
+and list or revoke other people's agent keys. **No administrator can obtain someone else's
+credentials**: nobody can mint a key for someone else, set their password, or change their
+email (see Passwords below). A key is its holder's identity and reads everything they can; so
+does a password. A signed-in member pairs keys for their own agents (below), and lists or
+revokes their own — never anyone else's. There is no public sign-up page.
 
 It is also, deliberately, a thing agents write to unattended. That shapes what matters:
 
@@ -42,10 +44,46 @@ It is also, deliberately, a thing agents write to unattended. That shapes what m
   existed. Like approval, it needs a person in a browser; an agent key gets 403, so a
   compromised key cannot list or revoke its siblings.
 - **Sessions for the UI are opaque and revocable**, held server-side, not JWTs.
+- **Passwords are reset by email only** (0.5.0). See below.
 - **The database is not public.** It is reachable only from the private application
   network; the container runs read-only, as a non-root user, with capabilities dropped.
 - **Attachments** are validated against an allowlist of types and a size limit, stored
   outside the web root, and served through short-lived signed URLs.
+
+## Passwords
+
+- **An administrator can only trigger a reset.** `POST /api/v1/users/{id}/password-reset`
+  (a human administrator's browser session) emails the person a single-use link; the
+  answer says only where it went, masked. The administrator never sees a password, a token
+  or the link. Setting someone else's password (`POST /api/v1/users/{id}/password` with any
+  id but your own) is refused with 403, and so is changing someone else's email
+  (`PATCH /api/v1/users/{id}` with `email`): the email is where the links go, so changing it
+  would be setting the password with extra steps. A user's initial email and password are
+  set when they are created. Your own password is changed in Settings.
+- **"Forgot your password?"** on the sign-in page (`POST /api/auth/forgot`) sends the same
+  link. It answers `{ ok: true }` whether or not the address belongs to anyone, and looks it
+  up after answering, so neither the answer nor its timing says which. It is limited per
+  client address (5 per 15 minutes, 429) and per email address (3 an hour, silently: the same
+  answer, nothing sent), so it cannot be used to flood an inbox.
+- **The link** is `CROFT_BASE_URL/reset/<token>`: 256 random bits, stored as a sha256 hash,
+  valid for one hour, redeemable once (`POST /api/auth/reset`, limited per address). A new
+  link, a password change, or disabling the user invalidates every earlier one; only active
+  users can redeem one. An unknown, used, expired or superseded link gets one answer, 400
+  `invalid_token`. Redeeming it signs the person out everywhere (the session epoch moves and
+  every browser session is deleted, as any password change does); agent keys are untouched.
+- **Links are built from `CROFT_BASE_URL`, never from the request's Host header**, so a
+  forged host cannot have someone's link point elsewhere (reset poisoning). Mail goes through
+  Resend (`RESEND_API_KEY`, `CROFT_MAIL_FROM`); the key is never logged or sent to the
+  browser. With any of the three unset, nothing is sent and nothing is created: the admin
+  route answers 503 `mail_not_configured` and the sign-in page offers no forgot form. A send
+  the provider refuses answers 502 `mail_send_failed`, and its link is invalidated.
+- **Break-glass is the host, not the web.** An operator with a shell on the host runs
+  `node scripts/reset-password.mjs <email>` (in the container:
+  `docker exec -it <container> node scripts/reset-password.mjs <email>`; needs
+  `DATABASE_URL` and `CROFT_BASE_URL`, or `--base-url`). It prints a one-time reset link —
+  the same kind of token — to that shell's stdout and nowhere else. `npm run operator:create`
+  still creates or updates an administrator from `CROFT_OPERATOR_*`. Both need what the
+  database already gives: the web administrator role alone can never set or see a credential.
 
 ## Private and members-only subjects
 
@@ -53,12 +91,13 @@ A lab subject is visible to everyone, as it always was, and it is the default. A
 can instead be **private** (its owner alone) or **members** (its owner and the people on
 its members list). The rule:
 
-- A viewer sees a subject when it is a lab subject, when they own it, when it is a members
-  subject and they are on its list, or — the one admin exception — when they are an
-  **active administrator and the owner is gone** (deactivated, deleted, or none). Otherwise
-  an administrator does not see someone's private subject: the role manages people and
-  keys, not other people's work (see Known limitations for what it can still do). An
-  agent key sees what its human sees.
+- A viewer sees a subject when it is a lab subject, when they own it, or when it is a
+  members subject and they are on its list. **There is no administrator exception** (removed
+  in 0.5.0): an administrator does not see someone's private subject, not even once its owner
+  is disabled — the role manages people and keys, not other people's work. While an owner is
+  deactivated their private subjects are invisible to everyone and their members subjects
+  stay visible to their members only, until the owner is restored. An agent key sees what
+  its human sees.
 - A todo inherits its subject's visibility, with everything hanging off it: notes,
   comments, attachments, activity (tombstones of deleted todos included), mentions it makes
   of other tasks, and dependencies. A task with no subject is visible to everyone.
@@ -69,8 +108,9 @@ its members list). The rule:
   and the live-update pulse count and rank only what the viewer can see; the pulse the
   event stream sends is a sha256 hash of that viewer's fingerprint, never the counts.
 - Writes on a non-lab subject and its todos are for those who can see it. Changing its
-  visibility, members or owner is for the owner (or an administrator under the exception).
-  A private or members subject must have an owner.
+  visibility, members or owner is for the owner alone, with no administrator standing in:
+  while the owner is gone nobody can change who sees it. A private or members subject must
+  have an owner.
 - **Publishing is one way.** `private` and `members` move freely between each other, and
   either can be published to the lab; a lab subject cannot be made private again (409
   `already_published`), because everyone may already have read it. Each change is written
@@ -79,7 +119,8 @@ its members list). The rule:
   unless forced (`croft push --force`): Cairn has its own audience, and Croft cannot take
   back what it sent.
 - The rule lives in the database, in one place: `croft_subject_visible(subject, viewer)`,
-  with `croft_task_visible` and `croft_visible_subjects` built on it (migration 076). The
+  with `croft_task_visible` and `croft_visible_subjects` built on it (migration 076; 077
+  removed the administrator branch). The
   search, activity, label and pulse functions filter through it inside their ranking,
   before any limit, so a filtered answer is never short and never tells an outsider how
   much was removed.
@@ -115,7 +156,8 @@ What this does **not** hide, by design:
 
 ## Running it safely
 
-- Keep `DATABASE_URL`, `CROFT_ATTACHMENT_SIGNING_KEY` and `CROFT_SECRET_KEY` server-side.
+- Keep `DATABASE_URL`, `CROFT_ATTACHMENT_SIGNING_KEY`, `CROFT_SECRET_KEY` and `RESEND_API_KEY`
+  server-side. A send-only (restricted) Resend key is enough: Croft only ever posts to `/emails`.
   `.env*` is gitignored except `.env.example`, and CI runs a secret scan on every push.
 - The Cairn API key an administrator stores for push and sync is sealed with AES-256-GCM
   under `CROFT_SECRET_KEY` (derived from the signing key when unset) and never returned by
@@ -141,15 +183,19 @@ What this does **not** hide, by design:
 
 ## Known limitations
 
-- Failed logins are limited per address and per account, in memory: several replicas each
-  keep their own count.
+- Failed logins, forgot-password requests and reset attempts are limited per address (and
+  per account or email address), in memory: several replicas each keep their own count.
 - Workspace isolation is not tenant isolation: a member who must not see another member's
   projects needs a separate Croft deployment.
-- Private subjects keep work from colleagues, not from an administrator set on reading
-  it. An administrator cannot mint a key for someone (refused since 0.4.2), but can still
-  reset their password and sign in as them, or disable them (which brings their private
-  subjects under the admin exception) and restore them afterwards. Each leaves a trace the
-  person can find (a sign-out, a disabled spell), but neither is refused.
+- **Orphaned private subjects stay hidden.** A private subject whose owner was hard-deleted
+  from the database has no owner and no members, and so no viewer: it stays hidden for good.
+  That is accepted. Disabling (the only removal the web offers) keeps the owner, so restoring
+  them brings it back; past that, the break-glass is the database itself — an operator can
+  give the subject a new owner (`update subjects set owner_user_id = ...`) or publish it.
+- The web administrator role cannot read someone's private work: it cannot mint their key
+  (since 0.4.2), set their password, change their email, or see their subjects once they are
+  disabled (since 0.5.0). Whoever holds the database or a shell on the host still can — they
+  can read the tables directly — so treat those as the higher privilege they are.
 - Lab subject write-ups, logs and todo bodies are rendered as markdown and shared with every
   workspace member. Do not admit identities that should not be trusted with that content.
   Private and members-only subjects narrow who can read a subject, not who can reach the

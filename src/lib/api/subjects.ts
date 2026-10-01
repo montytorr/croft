@@ -311,18 +311,13 @@ const setTags = async (client: PoolClient, subjectId: string, tags: Tag[]) => {
 
 /**
  * Who may change a non-lab subject's visibility, members or owner: its owner,
- * or — only once that owner is deactivated, deleted or gone — an active
- * administrator, so a departed colleague's private work is not stranded.
- * Nobody else, admins included.
+ * and nobody else — administrators included (v0.5). While the owner is
+ * deactivated nobody can change who sees it: a private subject stays hidden
+ * and a members subject stays with its members until the owner is restored.
  */
 export const canManageSubject = async (subjectId: string, viewerId: string, db: Db = pool()): Promise<boolean> => {
   const result = await db.query<{ can: boolean }>(
-    `select (s.owner_user_id = $2::uuid)
-             or (not croft_user_active(s.owner_user_id)
-                 and croft_user_active($2::uuid)
-                 and exists (select 1 from app_users a where a.id = $2::uuid and a.role = 'admin')) as can
-       from subjects s
-      where s.id = $1`,
+    'select (s.owner_user_id = $2::uuid) as can from subjects s where s.id = $1',
     [subjectId, viewerId],
   )
   return result.rows[0]?.can === true
@@ -726,9 +721,9 @@ export const addSubjectMember = async (actor: Actor, subject: Subject, userRef: 
 }
 
 /**
- * Stops sharing a subject with someone. The owner (or the admin exception)
- * removes anybody; a member may remove themselves. `userRef` is an id, `me`,
- * an email or a name — an id works for a deactivated member too.
+ * Stops sharing a subject with someone. The owner removes anybody; a member
+ * may remove themselves. `userRef` is an id, `me`, an email or a name — an id
+ * works for a deactivated member too.
  */
 export const removeSubjectMember = async (
   actor: Actor,

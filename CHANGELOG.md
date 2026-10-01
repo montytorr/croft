@@ -8,6 +8,16 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+### Security
+
+- **Password resets are email-only** (CROFT-19). An administrator can only send a reset link: it is emailed to the person through Resend, single-use and valid for an hour, and the admin never sees a password, a token or the link. Setting someone else's password is refused. "Forgot your password?" on the sign-in page sends the same email, and answers the same way whether or not the address exists. Without `RESEND_API_KEY` and `CROFT_MAIL_FROM`, resets are refused with an explanation and nothing is created. For operators with shell access, `scripts/reset-password.mjs <email>` prints a one-time link on the host.
+- **Administrators can no longer change someone else's email**, so a reset link cannot be redirected to them.
+- **No admin exception to visibility.** A private subject whose owner is deactivated or deleted stays invisible to everyone, administrators included, until the owner is restored. Disabling then restoring someone reveals nothing. Members still see a members subject, but no one can change its audience while the owner is gone.
+
+### Changed
+
+- **The visibility switch is visible.** The Access section shows a clear Private | Members toggle. It used to be an invisible select over the label.
+
 ## [0.4.2] — 2026-09-30
 
 ### Security

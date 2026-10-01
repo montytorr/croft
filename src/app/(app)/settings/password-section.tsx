@@ -53,8 +53,8 @@ export const PasswordSection = () => {
         footer={
           <>
             <p className="text-fg-subtle min-w-0 flex-1 basis-60 text-[0.6875rem] leading-relaxed">
-              There is no SMTP configured, so a forgotten password can only be reset from the host.
-              Keep this in a password manager.
+              Forgot it? Use “Forgot your password?” on the sign-in page, or ask an administrator to
+              send you a reset link. Either way the link goes to your email, never to them.
             </p>
             <Button type="submit" variant="primary" disabled={!canSubmit} className="w-auto px-4">
               {state === 'saving' ? 'Changing…' : 'Change password'}
@@ -96,7 +96,7 @@ export const PasswordSection = () => {
             )}
             {state === 'done' && (
               <p className="text-status-done enter-rise text-[0.6875rem]">
-                Changed. Store it somewhere safe — there is no email recovery on this instance.
+                Changed. Keep it in a password manager.
               </p>
             )}
           </div>

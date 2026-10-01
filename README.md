@@ -56,7 +56,9 @@ npm run dev
 | `CROFT_ATTACHMENT_SIGNING_KEY` | Signs the short-lived attachment URLs. Required. |
 | `CROFT_SECRET_KEY` | 32 bytes (64 hex characters, or base64). Encrypts the Cairn API key the server stores for push and sync. Unset, it is derived from the signing key, and rotating that key then makes the stored Cairn key unreadable. |
 | `CROFT_OPERATOR_EMAIL`, `_PASSWORD`, `_NAME` | The administrator `npm run operator:create` creates or updates. |
-| `CROFT_BASE_URL` | The instance's public URL. |
+| `CROFT_BASE_URL` | The instance's public URL. Builds the links in password reset emails. |
+| `RESEND_API_KEY`, `CROFT_MAIL_FROM` | Email through [Resend](https://resend.com), for password reset links (`CROFT_MAIL_FROM` e.g. `Croft <noreply@croft.example.com>`). Unset, nobody can be sent a reset link from the web; an operator on the host runs `node scripts/reset-password.mjs <email>`, which prints a one-time link. |
+| `CROFT_MAIL_REPLY_TO` | Optional reply-to address on those emails. |
 
 `.env.example` lists the rest (storage, proxy, bootstrap) with their defaults.
 

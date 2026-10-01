@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { currentUser } from '@/lib/data'
 import { listUsers } from '@/lib/api/users'
+import { mailConfigured } from '@/lib/mail'
 import { UsersManager } from './users-manager'
 
 export const dynamic = 'force-dynamic'
@@ -24,13 +25,14 @@ const UsersPage = async () => {
           <div>
             <h1 className="font-display headline text-2xl leading-none">Users</h1>
             <p className="text-fg-subtle mt-2 max-w-2xl text-[0.75rem] leading-relaxed">
-              Manage workspace access, roles, passwords, and each user&apos;s agent identities.
+              Manage workspace access, roles, password resets, and each user&apos;s agent identities.
               Disabling a user revokes their browser sessions and active agent keys immediately, and
-              hands their open tasks to someone you choose.
+              hands their open tasks to someone you choose. A password is never set from here: a reset
+              sends the person a single-use link, and only they choose what it becomes.
             </p>
           </div>
         </header>
-        <UsersManager users={users} currentUserId={user.id} />
+        <UsersManager users={users} currentUserId={user.id} mailReady={mailConfigured()} />
       </div>
     </div>
   )

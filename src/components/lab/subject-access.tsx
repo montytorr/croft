@@ -1,8 +1,8 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useCallback, useState } from 'react'
-import { Check, ChevronsUpDown, Globe, Lock, UserPlus, Users, X } from 'lucide-react'
+import { useCallback, useRef, useState } from 'react'
+import { Check, Globe, Lock, UserPlus, Users, X } from 'lucide-react'
 import { Avatar } from '@/components/icons'
 import { usePeople } from '@/components/people-context'
 import { Button } from '@/components/ui/control'
@@ -14,10 +14,6 @@ import { VISIBILITY_HINT, VISIBILITY_LABEL } from './visibility'
 
 const LABEL = 'pane-label'
 
-const ROW =
-  'row-hover group/edit relative -mx-2 flex min-h-[1.75rem] items-center gap-2 rounded-md px-2 ' +
-  'has-[:focus-visible]:bg-surface-hover has-[:focus-visible]:shadow-[inset_2px_0_0_var(--accent)]'
-
 const RowLabel = ({ children }: { children: React.ReactNode }) => (
   <span className="text-fg-subtle w-[4rem] shrink-0 text-[0.75rem]">{children}</span>
 )
@@ -25,23 +21,93 @@ const RowLabel = ({ children }: { children: React.ReactNode }) => (
 const ICON: Record<SubjectVisibility, typeof Lock> = { private: Lock, members: Users, lab: Globe }
 
 /**
- * Who may manage a subject's audience: its owner, or an administrator when
- * the owner is gone (removed, suspended, or never set) — the one case where
- * nobody else could.
+ * Who may manage a subject's audience: its owner, and nobody else. There is
+ * no administrator stand-in: a subject whose owner is gone keeps the audience
+ * it had until the owner is restored (the database refuses the change too).
  */
-export const canManageAccess = (
-  owner: Subject['owner'],
-  { currentUserId, isAdmin, activeIds }: { currentUserId: string; isAdmin: boolean; activeIds: ReadonlySet<string> },
-) => (owner ? owner.id === currentUserId || (isAdmin && !activeIds.has(owner.id)) : isAdmin)
+export const canManageAccess = (owner: Subject['owner'], { currentUserId }: { currentUserId: string }) =>
+  owner !== null && owner.id === currentUserId
+
+/** The two audiences an owner switches between; the lab is its own step. */
+const SWITCHABLE = ['private', 'members'] as const satisfies readonly SubjectVisibility[]
+
+/**
+ * Private | Members, as a visible switch. It used to be a transparent select
+ * laid over the label, which nobody could tell was a control.
+ */
+const VisibilitySwitch = ({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: (typeof SWITCHABLE)[number]
+  disabled: boolean
+  onChange: (next: SubjectVisibility) => void
+}) => {
+  const refs = useRef<Record<string, HTMLButtonElement | null>>({})
+
+  // Arrow keys move and choose, like any radio group.
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
+    event.preventDefault()
+    const step = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1
+    const next = SWITCHABLE[(SWITCHABLE.indexOf(value) + step + SWITCHABLE.length) % SWITCHABLE.length] ?? value
+    refs.current[next]?.focus()
+    onChange(next)
+  }
+
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Visibility"
+      onKeyDown={onKeyDown}
+      className="border-border bg-surface-raised/40 grid min-w-0 flex-1 grid-cols-2 gap-0.5 rounded-md border p-0.5"
+    >
+      {SWITCHABLE.map((option) => {
+        const Icon = ICON[option]
+        const on = option === value
+        return (
+          <button
+            key={option}
+            ref={(node) => {
+              refs.current[option] = node
+            }}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            tabIndex={on ? 0 : -1}
+            disabled={disabled}
+            title={VISIBILITY_HINT[option]}
+            onClick={() => onChange(option)}
+            className={cn(
+              'flex h-[1.5rem] min-w-0 items-center justify-center gap-1 rounded-[5px] px-1.5 text-[0.75rem] font-medium',
+              'transition-[background-color,color,box-shadow] duration-[var(--dur-1)]',
+              'focus-visible:ring-ring/40 focus-visible:outline-none focus-visible:ring-2',
+              'disabled:cursor-not-allowed disabled:opacity-60',
+              on
+                ? 'bg-surface text-fg shadow-[0_0_0_1px_var(--border-strong)]'
+                : 'text-fg-subtle hover:text-fg',
+            )}
+          >
+            <Icon size={12} aria-hidden className={on ? 'text-fg-muted' : undefined} />
+            {VISIBILITY_LABEL[option]}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 /**
  * Who sees the subject, and the way out to the lab. Private and Members
  * switch freely; publishing is a separate, confirmed step because it is the
- * one change that cannot be taken back. Only the owner (or an administrator
- * standing in for a departed one) gets the controls; everyone else who can
- * see the subject reads the same facts without them.
+ * one change that cannot be taken back. Only the owner gets the controls;
+ * everyone else who can see the subject reads the same facts without them.
+ *
+ * `isAdmin` is accepted and ignored: being an administrator grants nothing
+ * here.
  */
-export const SubjectAccess = ({ subject, isAdmin }: { subject: Subject; isAdmin: boolean }) => {
+export const SubjectAccess = ({ subject }: { subject: Subject; isAdmin?: boolean }) => {
   const router = useRouter()
   const request = useMutate()
   const { people, currentUserId } = usePeople()
@@ -52,7 +118,7 @@ export const SubjectAccess = ({ subject, isAdmin }: { subject: Subject; isAdmin:
 
   const { visibility, members } = subject
   const memberIds = new Set(members.map((m) => m.id))
-  const manage = canManageAccess(subject.owner, { currentUserId, isAdmin, activeIds: new Set(people.map((p) => p.id)) })
+  const manage = canManageAccess(subject.owner, { currentUserId })
   const Icon = ICON[visibility]
 
   const send = async (url: string, init: Parameters<typeof request>[1]) => {
@@ -90,38 +156,23 @@ export const SubjectAccess = ({ subject, isAdmin }: { subject: Subject; isAdmin:
         Access
       </h2>
 
-      <div className={manage && visibility !== 'lab' ? ROW : '-mx-2 flex min-h-[1.75rem] items-center gap-2 px-2'}>
+      <div className="-mx-2 flex min-h-[1.75rem] items-center gap-2 px-2">
         <RowLabel>Visibility</RowLabel>
-        <span className="flex min-w-0 flex-1 items-center gap-1.5" title={VISIBILITY_HINT[visibility]}>
-          <Icon size={13} aria-hidden className="text-fg-muted shrink-0" />
-          <span className="text-fg truncate text-[0.8125rem]">{VISIBILITY_LABEL[visibility]}</span>
-        </span>
         {manage && visibility !== 'lab' ? (
-          <>
-            <ChevronsUpDown
-              size={11}
-              aria-hidden
-              className="text-fg-subtle ml-auto shrink-0 opacity-0 transition-opacity group-hover/edit:opacity-100 group-has-[:focus-visible]/edit:opacity-100"
-            />
-            {/* The lab is not an option here: publishing is its own confirmed step below. */}
-            <select
-              value={visibility}
-              aria-label="Visibility"
-              disabled={busy}
-              onChange={(e) => setVisibility(e.target.value as SubjectVisibility)}
-              className="absolute inset-0 cursor-pointer opacity-0"
-            >
-              <option value="private">Private — only the owner</option>
-              <option value="members">Members — the owner and the people added</option>
-            </select>
-          </>
-        ) : null}
+          // The lab is not an option here: publishing is its own confirmed step below.
+          <VisibilitySwitch value={visibility} disabled={busy} onChange={setVisibility} />
+        ) : (
+          <span className="flex min-w-0 flex-1 items-center gap-1.5" title={VISIBILITY_HINT[visibility]}>
+            <Icon size={13} aria-hidden className="text-fg-muted shrink-0" />
+            <span className="text-fg truncate text-[0.8125rem]">{VISIBILITY_LABEL[visibility]}</span>
+          </span>
+        )}
       </div>
 
       {visibility === 'private' ? (
         <p className="text-fg-subtle py-1 text-[0.75rem] leading-relaxed">
           {ownerIsMe ? 'Only you see it' : `Only ${subject.owner?.name ?? 'its owner'} sees it`}, its todos and its log.
-          {manage ? ' Choose Members to share it with a few people.' : ''}
+          {manage ? ' Switch to Members to share it with a few people.' : ''}
         </p>
       ) : null}
 

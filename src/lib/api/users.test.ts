@@ -55,7 +55,7 @@ describe('user credential administration', () => {
     )
   })
 
-  it('resets a password and revokes browser sessions without invalidating agent keys', async () => {
+  it('sets a password, revokes browser sessions and outstanding reset links, and leaves agent keys alone', async () => {
     mocks.query
       .mockResolvedValueOnce({ rows: [activeUser] })
       .mockResolvedValueOnce({ rows: [] })
@@ -68,6 +68,7 @@ describe('user credential administration', () => {
     expect(statements[1]).not.toContain('auth_epoch')
     expect(statements[2]).toContain('delete from app_sessions')
     expect(statements.join('\n')).not.toContain('update api_keys')
+    expect(statements[3]).toContain('update password_reset_tokens set used_at = now()')
   })
 
   it('locks an active user while creating an agent key at the current authentication epoch', async () => {
@@ -125,6 +126,7 @@ describe('user credential administration', () => {
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [disabledUser] })
 
     await expect(deactivateUser(activeUser.id, { by: admin }))
@@ -137,6 +139,7 @@ describe('user credential administration', () => {
     expect(statements[4]).toContain('session_epoch = session_epoch + 1')
     expect(statements[5]).toContain('delete from app_sessions')
     expect(statements[6]).toContain('update api_keys set revoked_at = now()')
+    expect(statements[7]).toContain('update password_reset_tokens set used_at = now()')
   })
 
   describe('open tasks on deactivation (CROFT-310)', () => {
@@ -176,6 +179,7 @@ describe('user credential administration', () => {
         .mockResolvedValueOnce({ rows: [owner] })
         .mockResolvedValueOnce({ rows: [successor] })
         .mockResolvedValueOnce({ rows: [], rowCount: 3 })
+        .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [] })
