@@ -1,7 +1,7 @@
 name: notify
 
-# Announces pushes (every branch) and published releases in the team's Discord
-# channel. Deploys announce themselves from deploy.yml. The webhook is the
+# Announces pushes (every branch), published releases, new issues and new PRs
+# in #croft. Deploys announce themselves from deploy.yml. The webhook is the
 # CROFT_DISCORD_WEBHOOK repository secret: never in the repo, and never given to
 # a fork's workflow runs (a fork's pushes do not trigger this in this repo).
 on:
@@ -9,9 +9,12 @@ on:
     branches: ['**']
   release:
     types: [published]
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened]
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   notify:
@@ -27,7 +30,11 @@ jobs:
           if [ -z "${DISCORD_WEBHOOK:-}" ]; then echo "::warning::CROFT_DISCORD_WEBHOOK is not set"; exit 0; fi
           ev="$GITHUB_EVENT_PATH"
           repo_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
-          if [ "$GITHUB_EVENT_NAME" = release ]; then
+          if [ "$GITHUB_EVENT_NAME" = issues ]; then
+            message=$(jq -r '"🆕 **Croft issue #\(.issue.number)** by \(.issue.user.login)\n" + (.issue.title | gsub("[\\r\\n\\t]+"; " ") | .[0:180]) + "\n<\(.issue.html_url)>"' "$ev")
+          elif [ "$GITHUB_EVENT_NAME" = pull_request_target ]; then
+            message=$(jq -r '"🆕 **Croft PR #\(.pull_request.number)** by \(.pull_request.user.login)\n" + (.pull_request.title | gsub("[\\r\\n\\t]+"; " ") | .[0:180]) + "\n<\(.pull_request.html_url)>"' "$ev")
+          elif [ "$GITHUB_EVENT_NAME" = release ]; then
             message=$(jq -r '"🏷️ **Croft \(.release.tag_name) released**" + (if (.release.name // "") != "" and .release.name != .release.tag_name then " · " + .release.name else "" end) + " · by \(.release.author.login)\n<\(.release.html_url)>"' "$ev")
           else
             branch="${GITHUB_REF#refs/heads/}"
