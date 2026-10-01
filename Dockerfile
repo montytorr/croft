@@ -59,10 +59,11 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # Next 16 standalone still reads this metadata from the root .next at runtime.
 COPY --from=builder --chown=nextjs:nodejs /app/.next/required-server-files.json ./.next/
 # Migrations and the first administrator, for a platform that cannot run the
-# `migrator` target as a one-off (scripts/start.mjs; off unless asked for).
+# `migrator` target as a one-off (scripts/start.mjs; off unless asked for), and
+# the operator's break-glass reset link (scripts/reset-password.mjs).
 # pg and bcryptjs are already in the standalone node_modules: the server uses both.
 COPY --from=builder --chown=nextjs:nodejs /app/migrations ./migrations
-COPY --from=builder --chown=nextjs:nodejs /app/scripts/start.mjs /app/scripts/migrate.mjs /app/scripts/create-operator.mjs ./scripts/
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/start.mjs /app/scripts/migrate.mjs /app/scripts/create-operator.mjs /app/scripts/reset-password.mjs ./scripts/
 
 # Amazon RDS's certificate authorities, so a verified TLS connection to a
 # managed database needs only NODE_EXTRA_CA_CERTS pointing here and

@@ -70,16 +70,36 @@ describe('who can see a subject', () => {
     document.body.innerHTML = ''
   })
 
-  it('gives the owner private and members to switch between, never the lab', async () => {
-    await render(<SubjectAccess subject={subject()} isAdmin={false} />)
-    const select = container.querySelector<HTMLSelectElement>('select[aria-label="Visibility"]')!
-    expect([...select.options].map((o) => o.value)).toEqual(['private', 'members'])
+  const visibilitySwitch = () => container.querySelector<HTMLElement>('[role="radiogroup"][aria-label="Visibility"]')
+  const radios = () => [...(visibilitySwitch()?.querySelectorAll<HTMLButtonElement>('[role="radio"]') ?? [])]
 
+  it('gives the owner a visible Private | Members switch, never the lab', async () => {
+    await render(<SubjectAccess subject={subject()} isAdmin={false} />)
+    // A real control, not a transparent select laid over the label.
+    expect(container.querySelector('select')).toBeNull()
+    expect(radios().map((r) => r.textContent)).toEqual(['Private', 'Members'])
+    expect(radios().map((r) => r.getAttribute('aria-checked'))).toEqual(['true', 'false'])
+    // One tab stop: the chosen option.
+    expect(radios().map((r) => r.tabIndex)).toEqual([0, -1])
+
+    await act(async () => radios()[1]!.click())
+    expect(mutateMock).toHaveBeenCalledWith('/api/v1/subjects/S-12', { method: 'PATCH', body: { visibility: 'members' } })
+  })
+
+  it('does not write when the owner picks the audience it already has', async () => {
+    await render(<SubjectAccess subject={subject({ visibility: 'members' })} isAdmin={false} />)
+    expect(radios().map((r) => r.getAttribute('aria-checked'))).toEqual(['false', 'true'])
+    await act(async () => radios()[1]!.click())
+    expect(mutateMock).not.toHaveBeenCalled()
+  })
+
+  it('moves and chooses with the arrow keys', async () => {
+    await render(<SubjectAccess subject={subject()} isAdmin={false} />)
     await act(async () => {
-      select.value = 'members'
-      select.dispatchEvent(new Event('change', { bubbles: true }))
+      radios()[0]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
     })
     expect(mutateMock).toHaveBeenCalledWith('/api/v1/subjects/S-12', { method: 'PATCH', body: { visibility: 'members' } })
+    expect(document.activeElement?.textContent).toBe('Members')
   })
 
   it('publishes only after a confirmation that says it cannot be undone', async () => {
@@ -119,7 +139,8 @@ describe('who can see a subject', () => {
       MAEL.id,
     )
     expect(container.textContent).toContain('Mael (you)')
-    expect(container.querySelector('select[aria-label="Visibility"]')).toBeNull()
+    expect(visibilitySwitch()).toBeNull()
+    expect(container.textContent).toContain('Members')
     expect(container.querySelector('button[aria-label^="Remove"]')).toBeNull()
     expect(button('Add people')).toBeUndefined()
     expect(button('Publish to the lab')).toBeUndefined()
@@ -129,17 +150,38 @@ describe('who can see a subject', () => {
     await render(<SubjectAccess subject={subject({ visibility: 'lab' })} isAdmin />)
     expect(container.textContent).toContain('Lab')
     expect(container.querySelector('select')).toBeNull()
+    expect(visibilitySwitch()).toBeNull()
     expect(button('Publish to the lab')).toBeUndefined()
   })
 
-  it('lets an administrator stand in only for an owner who is gone', () => {
-    const activeIds = new Set([CAL.id, MAEL.id])
-    const admin = { currentUserId: MAEL.id, isAdmin: true, activeIds }
-    expect(canManageAccess({ id: CAL.id, name: 'Cal' }, admin)).toBe(false)
-    expect(canManageAccess({ id: 'u-gone', name: 'Gone' }, admin)).toBe(true)
-    expect(canManageAccess(null, admin)).toBe(true)
-    expect(canManageAccess({ id: 'u-gone', name: 'Gone' }, { ...admin, isAdmin: false })).toBe(false)
-    expect(canManageAccess({ id: CAL.id, name: 'Cal' }, { ...admin, currentUserId: CAL.id, isAdmin: false })).toBe(true)
+  it('lets the owner, and only the owner, manage the audience — no administrator stand-in', () => {
+    expect(canManageAccess({ id: CAL.id, name: 'Cal' }, { currentUserId: CAL.id })).toBe(true)
+    expect(canManageAccess({ id: CAL.id, name: 'Cal' }, { currentUserId: MAEL.id })).toBe(false)
+    // An owner who is gone, or none at all: nobody, administrators included.
+    expect(canManageAccess({ id: 'u-gone', name: 'Gone' }, { currentUserId: MAEL.id })).toBe(false)
+    expect(canManageAccess(null, { currentUserId: MAEL.id })).toBe(false)
+  })
+
+  it('gives an administrator no controls on a members subject whose owner is gone', async () => {
+    await render(
+      <SubjectAccess
+        subject={subject({ visibility: 'members', owner: { id: 'u-gone', name: 'Gone' }, members: [{ id: MAEL.id, name: MAEL.name }] })}
+        isAdmin
+      />,
+      MAEL.id,
+      [CAL, MAEL, SAM],
+    )
+    expect(container.textContent).toContain('Mael (you)')
+    expect(visibilitySwitch()).toBeNull()
+    expect(container.querySelector('button[aria-label^="Remove"]')).toBeNull()
+    expect(button('Add people')).toBeUndefined()
+    expect(button('Publish to the lab')).toBeUndefined()
+  })
+
+  it('gives an administrator no controls on a subject with no owner', async () => {
+    await render(<SubjectAccess subject={subject({ owner: null })} isAdmin />, MAEL.id)
+    expect(visibilitySwitch()).toBeNull()
+    expect(button('Publish to the lab')).toBeUndefined()
   })
 
   it('marks a card only when the subject is not in the lab, and names the audience in the header', async () => {

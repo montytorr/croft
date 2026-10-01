@@ -2,25 +2,33 @@
 
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useTransition } from 'react'
-import { CircleAlert, Eye, EyeOff, FlaskConical, ListChecks, NotebookPen, Signpost } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, MailCheck } from 'lucide-react'
 import { Button, Input } from '@/components/ui/control'
 import { Spinner } from '@/components/spinner'
-import { BrandMark, useBrand } from '@/components/brand'
-import { CroftIllustration } from './croft-illustration'
+import { useBrand } from '@/components/brand'
+import { mutate, NETWORK_ERROR } from '@/lib/api/mutate'
+import { AuthError, AuthShell } from './auth-shell'
 // `?redirect=` comes from the URL bar, so it is attacker-controlled; this
 // honours a same-site path only.
 import { safeRedirect } from '@/lib/auth/login-redirect'
 
-/** What a subject carries, for someone signing in for the first time. */
-const PILLARS = [
-  { icon: FlaskConical, title: 'Subjects', body: 'A technology, a proof of concept, an idea worth building.' },
-  { icon: NotebookPen, title: 'Write-ups', body: 'What it is, what we found, written to be read.' },
-  { icon: ListChecks, title: 'Todos', body: 'The work each subject needs, claimed by people and agents.' },
-  { icon: Signpost, title: 'Stages', body: 'Explored, developed, matured — or dropped, with a reason.' },
-]
+type Mode = 'sign-in' | 'forgot' | 'sent'
 
-export const LoginForm = () => {
+/** Refusals that are about the request, never about the address. */
+const SHOWN_FORGOT_FAILURES = new Set(['rate_limited', 'validation_failed', 'mail_not_configured', 'forbidden'])
+
+const LINK =
+  'text-fg-subtle hover:text-fg rounded-sm text-[0.75rem] transition-colors ' +
+  'focus-visible:ring-ring/40 focus-visible:outline-none focus-visible:ring-2'
+
+/**
+ * `canReset` is the server's answer to "is email set up here?" — never the
+ * key itself. Without email there is no way to deliver a reset link, so the
+ * offer is not made at all rather than made and then broken.
+ */
+export const LoginForm = ({ canReset = false }: { canReset?: boolean }) => {
   const { name } = useBrand()
+  const [mode, setMode] = useState<Mode>('sign-in')
   const [reveal, setReveal] = useState(false)
   const router = useRouter()
   const params = useSearchParams()
@@ -33,6 +41,12 @@ export const LoginForm = () => {
   // nothing moved for a second or two, which reads exactly as broken.
   const [navigating, startNavigation] = useTransition()
   const busy = pending || navigating
+
+  const switchTo = (next: Mode) => {
+    setMode(next)
+    setError(null)
+    setPending(false)
+  }
 
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -68,123 +82,159 @@ export const LoginForm = () => {
     }
   }
 
+  // The answer is the same whether or not the address has an account: the
+  // server says `ok` either way, and so does this page. Only a failure that
+  // says nothing about whether the address exists is shown.
+  const onForgot = async (event: React.FormEvent) => {
+    event.preventDefault()
+    setPending(true)
+    setError(null)
+    const result = await mutate('/api/auth/forgot', { method: 'POST', body: { email: email.trim() } })
+    setPending(false)
+    if (!result.ok && (result.error === NETWORK_ERROR || SHOWN_FORGOT_FAILURES.has(result.code ?? ''))) {
+      setError(result.error)
+      return
+    }
+    setMode('sent')
+  }
+
+  if (mode === 'sent') {
+    return (
+      <AuthShell>
+        <MailCheck size={22} className="text-fg-muted mb-4" aria-hidden />
+        <h1 className="font-display headline text-fg text-[1.75rem] leading-tight">Check your email</h1>
+        <p className="text-fg-muted mt-3 text-[0.8125rem] leading-relaxed" role="status">
+          If <span className="text-fg font-medium break-all">{email.trim()}</span> belongs to an account on {name},
+          a link to choose a new password is on its way. It works once, within the hour.
+        </p>
+        <p className="text-fg-subtle mt-3 text-[0.75rem] leading-relaxed">
+          Nothing arrived? Check the spam folder, or ask an administrator of this Croft to send you a reset link.
+        </p>
+        <button type="button" onClick={() => switchTo('sign-in')} className={`${LINK} mt-8 inline-flex items-center gap-1.5`}>
+          <ArrowLeft size={13} aria-hidden /> Back to sign in
+        </button>
+      </AuthShell>
+    )
+  }
+
+  if (mode === 'forgot') {
+    return (
+      <AuthShell>
+        <h1 className="font-display headline text-fg text-[1.75rem] leading-tight">Forgot your password?</h1>
+        <p className="text-fg-muted mt-2 text-[0.8125rem] leading-relaxed">
+          Enter the email you sign in with. We’ll send a link to choose a new one.
+        </p>
+
+        <form onSubmit={onForgot} className="mt-8 flex flex-col gap-4">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-fg-muted text-xs font-medium">Email</span>
+            <Input
+              type="email"
+              required
+              autoFocus
+              autoComplete="username"
+              disabled={pending}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="h-9"
+            />
+          </label>
+
+          {error ? <AuthError>{error}</AuthError> : null}
+
+          <Button type="submit" variant="primary" disabled={pending} className="mt-2 h-9">
+            {pending ? (
+              <span className="inline-flex items-center gap-2">
+                <Spinner />
+                Sending…
+              </span>
+            ) : (
+              'Send reset link'
+            )}
+          </Button>
+        </form>
+
+        <button type="button" onClick={() => switchTo('sign-in')} className={`${LINK} mt-6 inline-flex items-center gap-1.5`}>
+          <ArrowLeft size={13} aria-hidden /> Back to sign in
+        </button>
+      </AuthShell>
+    )
+  }
+
   return (
-    <main className="bg-bg grid min-h-dvh lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-      {/* The story, on a screen wide enough to tell it. */}
-      <section className="border-border bg-bg-elevated relative hidden flex-col justify-between overflow-hidden border-r p-12 lg:flex">
-        <div className="relative flex items-center gap-2.5 text-[0.9375rem] font-semibold tracking-tight">
-          <BrandMark size={26} className="rounded-[6px]" />
-          <span>{name}</span>
-        </div>
+    <AuthShell>
+      <h1 className="font-display headline text-fg text-[1.75rem] leading-tight">Welcome back</h1>
+      <p className="text-fg-muted mt-2 text-[0.8125rem]">Sign in to {name}.</p>
 
-        <div className="relative flex max-w-[34rem] flex-col gap-8">
-          <CroftIllustration className="w-[13rem]" />
-          <div>
-            {/* The grotesk for the claim, the reading serif for the second
-                half: the two voices of the product in one line. */}
-            <h2 className="font-display headline headline-xl text-fg text-[2.5rem] leading-[1.08]">
-              The farm{' '}
-              <span className="text-fg-muted font-serif font-normal italic tracking-normal">where your ideas grow.</span>
-            </h2>
-            <p className="text-fg-muted mt-4 max-w-[28rem] font-serif text-[1.0625rem] leading-relaxed">
-              Where your team, people and agents, explores its subjects, develops them and brings
-              them to maturity — and says why when one is dropped.
-            </p>
-          </div>
-        </div>
+      <form onSubmit={onSubmit} className="mt-8 flex flex-col gap-4">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-fg-muted text-xs font-medium">Email</span>
+          <Input
+            type="email"
+            required
+            autoFocus
+            autoComplete="username"
+            disabled={busy}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="h-9"
+          />
+        </label>
 
-        <ul className="relative grid max-w-[34rem] grid-cols-2 gap-x-8 gap-y-4">
-          {PILLARS.map(({ icon: Icon, title, body }) => (
-            <li key={title} className="flex gap-2.5">
-              <Icon size={15} className="text-fg-muted mt-0.5 shrink-0" aria-hidden />
-              <span className="text-[0.75rem] leading-snug">
-                <span className="text-fg font-medium">{title}</span>
-                <span className="text-fg-subtle block">{body}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="relative flex items-center justify-center px-6 py-12">
-        <div className="relative w-full max-w-[21rem]">
-          <div className="mb-10 flex items-center gap-2.5 text-[0.9375rem] font-semibold tracking-tight lg:hidden">
-            <BrandMark size={26} className="rounded-[6px]" />
-            <span>{name}</span>
-          </div>
-
-          <h1 className="font-display headline text-fg text-[1.75rem] leading-tight">Welcome back</h1>
-          <p className="text-fg-muted mt-2 text-[0.8125rem]">Sign in to {name}.</p>
-
-          <form onSubmit={onSubmit} className="mt-8 flex flex-col gap-4">
-            <label className="flex flex-col gap-1.5">
-              <span className="text-fg-muted text-xs font-medium">Email</span>
+        <div className="flex flex-col gap-1.5">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-fg-muted text-xs font-medium">Password</span>
+            <span className="relative flex">
               <Input
-                type="email"
+                type={reveal ? 'text' : 'password'}
                 required
-                autoFocus
-                autoComplete="username"
+                autoComplete="current-password"
                 disabled={busy}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="h-9"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="h-9 pr-9"
               />
-            </label>
-
-            <label className="flex flex-col gap-1.5">
-              <span className="text-fg-muted text-xs font-medium">Password</span>
-              <span className="relative flex">
-                <Input
-                  type={reveal ? 'text' : 'password'}
-                  required
-                  autoComplete="current-password"
-                  disabled={busy}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="h-9 pr-9"
-                />
-                <button
-                  type="button"
-                  onClick={() => setReveal((shown) => !shown)}
-                  aria-label={reveal ? 'Hide password' : 'Show password'}
-                  aria-pressed={reveal}
-                  className="text-fg-subtle hover:text-fg absolute inset-y-0 right-0 grid w-9 place-items-center transition-colors"
-                >
-                  {reveal ? <EyeOff size={14} aria-hidden /> : <Eye size={14} aria-hidden />}
-                </button>
-              </span>
-            </label>
-
-            {error ? (
-              <p className="text-danger bg-danger-subtle flex items-start gap-2 rounded-md px-3 py-2 text-xs" role="alert">
-                <CircleAlert size={14} className="mt-px shrink-0" aria-hidden />
-                {error}
-              </p>
-            ) : null}
-
-            <Button type="submit" variant="primary" disabled={busy} className="mt-2 h-9">
-              {busy ? (
-                <span className="inline-flex items-center gap-2">
-                  <Spinner />
-                  {navigating ? 'Opening the lab…' : 'Signing in…'}
-                </span>
-              ) : (
-                'Sign in'
-              )}
-            </Button>
-          </form>
-
-          {/* Who can come in, and how agents do: the two questions the old
-              "single-user" line answered wrongly once admins could add people. */}
-          <div className="border-border text-fg-subtle mt-10 flex flex-col gap-2 border-t pt-5 text-[0.75rem] leading-relaxed">
-            <p>No account yet? An administrator of this Croft can add you.</p>
-            <p>
-              Agents don’t sign in here. They connect with an API key, which{' '}
-              <code className="font-mono">croft setup</code> pairs from your machine.
-            </p>
-          </div>
+              <button
+                type="button"
+                onClick={() => setReveal((shown) => !shown)}
+                aria-label={reveal ? 'Hide password' : 'Show password'}
+                aria-pressed={reveal}
+                className="text-fg-subtle hover:text-fg absolute inset-y-0 right-0 grid w-9 place-items-center transition-colors"
+              >
+                {reveal ? <EyeOff size={14} aria-hidden /> : <Eye size={14} aria-hidden />}
+              </button>
+            </span>
+          </label>
+          {canReset ? (
+            <button type="button" onClick={() => switchTo('forgot')} disabled={busy} className={`${LINK} self-end`}>
+              Forgot your password?
+            </button>
+          ) : null}
         </div>
-      </section>
-    </main>
+
+        {error ? <AuthError>{error}</AuthError> : null}
+
+        <Button type="submit" variant="primary" disabled={busy} className="mt-2 h-9">
+          {busy ? (
+            <span className="inline-flex items-center gap-2">
+              <Spinner />
+              {navigating ? 'Opening the lab…' : 'Signing in…'}
+            </span>
+          ) : (
+            'Sign in'
+          )}
+        </Button>
+      </form>
+
+      {/* Who can come in, and how agents do: the two questions the old
+          "single-user" line answered wrongly once admins could add people. */}
+      <div className="border-border text-fg-subtle mt-10 flex flex-col gap-2 border-t pt-5 text-[0.75rem] leading-relaxed">
+        <p>No account yet? An administrator of this Croft can add you.</p>
+        <p>
+          Agents don’t sign in here. They connect with an API key, which{' '}
+          <code className="font-mono">croft setup</code> pairs from your machine.
+        </p>
+      </div>
+    </AuthShell>
   )
 }

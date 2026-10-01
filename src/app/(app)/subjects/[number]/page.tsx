@@ -216,7 +216,6 @@ const SubjectPage = async ({
               tags={tags}
               projects={projects}
               canCreateTags={isAdmin}
-              isAdmin={isAdmin}
             />
           }
         />

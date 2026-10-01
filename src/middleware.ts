@@ -21,9 +21,11 @@ export const middleware = async (req: NextRequest) => {
   // The app layout and API handlers resolve the opaque token against Postgres
   // before they read any data.
   const hasSession = Boolean(req.cookies.get(SESSION_COOKIE)?.value)
-  const isLoginRoute = req.nextUrl.pathname.startsWith('/login')
+  // /reset/<token> is for someone who cannot sign in: it must open signed out,
+  // and must never be bounced to /login with the token copied into ?redirect=.
+  const isPublicRoute = req.nextUrl.pathname.startsWith('/login') || req.nextUrl.pathname.startsWith('/reset/')
 
-  if (!hasSession && !isLoginRoute) {
+  if (!hasSession && !isPublicRoute) {
     const url = req.nextUrl.clone()
     // Carry the whole destination, query included, and clear the rest: keeping
     // the original params meant /search?q=x came back as a bare /search, and

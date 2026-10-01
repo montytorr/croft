@@ -48,6 +48,9 @@ export type ApiError =
   | 'subject_not_published'
   | 'owner_required'
   | 'rate_limited'
+  | 'mail_not_configured'
+  | 'mail_send_failed'
+  | 'invalid_token'
   | 'internal_error'
 
 const STATUS: Record<ApiError, number> = {
@@ -69,6 +72,10 @@ const STATUS: Record<ApiError, number> = {
   subject_not_published: 409,
   owner_required: 400,
   rate_limited: 429,
+  // v0.5 email-only password resets.
+  mail_not_configured: 503,
+  mail_send_failed: 502,
+  invalid_token: 400,
   internal_error: 500,
 }
 

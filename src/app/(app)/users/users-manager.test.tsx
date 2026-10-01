@@ -214,3 +214,102 @@ describe('UsersManager handing over open tasks (CROFT-310)', () => {
     })
   })
 })
+
+describe('UsersManager password reset and email (v0.5)', () => {
+  let container: HTMLDivElement
+  let root: ReturnType<typeof createRoot>
+
+  const admin = user({ id: 'admin', email: 'admin@example.test', displayName: 'Admin', role: 'admin' })
+  const other = user({ id: 'other', email: 'other@example.test', displayName: 'Other' })
+
+  const render = async (mailReady: boolean, users: AdminUser[] = [admin, other]) => {
+    await act(async () => {
+      root.render(<UsersManager users={users} currentUserId="admin" mailReady={mailReady} />)
+    })
+  }
+
+  const cardOf = (email: string) => [...container.querySelectorAll('article')]
+    .find((article) => article.querySelector<HTMLInputElement>('input[name="email"]')?.defaultValue === email)!
+
+  beforeEach(() => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+    container = document.createElement('div')
+    document.body.append(container)
+    root = createRoot(container)
+    mutateMock.mockReset().mockResolvedValue({ ok: true, data: {} })
+    refreshMock.mockReset()
+  })
+
+  afterEach(async () => {
+    await act(async () => root.unmount())
+    container.remove()
+    vi.unstubAllGlobals()
+  })
+
+  it('has no way to type someone else’s password', async () => {
+    await render(true)
+    const card = cardOf('other@example.test')
+    expect(card.querySelector('input[type="password"]')).toBeNull()
+    expect(card.textContent).not.toContain('Reset password')
+  })
+
+  it('emails a reset link and shows only the masked address it went to', async () => {
+    mutateMock.mockResolvedValue({ ok: true, data: { sent: true, to: 'o•••@example.test' } })
+    await render(true)
+    const card = cardOf('other@example.test')
+    await click(buttonNamed(card, 'Send a reset link'))
+
+    expect(mutateMock).toHaveBeenCalledTimes(1)
+    expect(mutateMock).toHaveBeenCalledWith(`/api/v1/users/${other.id}/password-reset`, { method: 'POST' })
+    expect(card.querySelector('[role="status"]')?.textContent).toBe('Sent to o•••@example.test')
+  })
+
+  it('disables the button and says why when email is not set up', async () => {
+    await render(false)
+    const card = cardOf('other@example.test')
+    expect(buttonNamed(card, 'Send a reset link').disabled).toBe(true)
+    expect(card.textContent).toContain('Email is not set up on this Croft: set RESEND_API_KEY and CROFT_MAIL_FROM.')
+  })
+
+  it('explains a refusal from the server next to the button', async () => {
+    mutateMock.mockResolvedValue({ ok: false, error: 'Service unavailable', code: 'mail_not_configured' })
+    await render(true)
+    const card = cardOf('other@example.test')
+    await click(buttonNamed(card, 'Send a reset link'))
+    expect(card.querySelector('[role="alert"]')?.textContent).toContain('Email is not set up on this Croft')
+
+    mutateMock.mockResolvedValue({ ok: false, error: 'The email could not be sent.', code: 'mail_send_failed' })
+    await click(buttonNamed(card, 'Send a reset link'))
+    expect(card.querySelector('[role="alert"]')?.textContent).toBe('The email could not be sent.')
+    expect(card.querySelector('[role="status"]')).toBeNull()
+  })
+
+  it('shows another user’s email read-only and never sends it', async () => {
+    await render(true)
+    const card = cardOf('other@example.test')
+    const email = card.querySelector<HTMLInputElement>('input[name="email"]')!
+    expect(email.readOnly).toBe(true)
+
+    await click(buttonNamed(card, 'Save changes'))
+    expect(mutateMock).toHaveBeenCalledTimes(1)
+    const [url, init] = mutateMock.mock.calls[0]!
+    expect(url).toBe('/api/v1/users/other')
+    expect(init.method).toBe('PATCH')
+    expect(init.body).not.toHaveProperty('email')
+    expect(init.body).toEqual({ displayName: 'Other', role: 'member' })
+  })
+
+  it('keeps your own email editable, and sends it only when it changed', async () => {
+    await render(true)
+    const card = cardOf('admin@example.test')
+    const email = card.querySelector<HTMLInputElement>('input[name="email"]')!
+    expect(email.readOnly).toBe(false)
+
+    await click(buttonNamed(card, 'Save changes'))
+    expect(mutateMock.mock.calls[0]![1].body).not.toHaveProperty('email')
+
+    email.value = 'me@example.test'
+    await click(buttonNamed(card, 'Save changes'))
+    expect(mutateMock.mock.calls[1]![1].body).toEqual({ email: 'me@example.test', displayName: 'Admin', role: 'admin' })
+  })
+})

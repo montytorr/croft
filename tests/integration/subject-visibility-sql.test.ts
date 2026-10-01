@@ -8,7 +8,8 @@ import { pool } from '@/lib/db/client'
  * covered by subject-visibility.test.ts; this file pins what the database
  * promises on its own, because every one of those paths leans on it.
  *
- * A (owner), B (member of the members subject), C (outsider), D (admin).
+ * A (owner), B (member of the members subject), C (outsider), D (admin, who
+ * sees no more than C: there is no administrator exception since 077).
  */
 
 const databaseUrl = process.env.DATABASE_URL
@@ -139,28 +140,34 @@ describe('croft_subject_visible', () => {
     }
   })
 
-  it('lets an active admin in only once the owner is gone', async () => {
+  it('has no administrator exception: an owner gone hides a private subject from everyone', async () => {
+    // 077 removed it. Disabling the owner used to let an active admin in.
     await q('update app_users set deleted_at = now() where id = $1', [users.a])
     try {
-      expect(await visible(subjects.priv, users.d)).toBe(true)
-      expect(await visible(subjects.members, users.d)).toBe(true)
+      expect(await visible(subjects.priv, users.d), 'an active admin').toBe(false)
+      expect(await visible(subjects.members, users.d), 'an active admin, members subject').toBe(false)
       expect(await visible(subjects.priv, users.c)).toBe(false)
-
-      await q(`update app_users set banned_until = now() + interval '1 day' where id = $1`, [users.d])
-      expect(await visible(subjects.priv, users.d), 'a deactivated admin').toBe(false)
+      expect(await visible(subjects.members, users.b), 'a member still sees a members subject').toBe(true)
+      expect(await visible(subjects.lab, users.d)).toBe(true)
     } finally {
-      await q('update app_users set deleted_at = null, banned_until = null where id = any($1::uuid[])', [
-        [users.a, users.d],
-      ])
+      await q('update app_users set deleted_at = null where id = $1', [users.a])
     }
-    expect(await visible(subjects.priv, users.d)).toBe(false)
 
     await q(`update app_users set banned_until = now() + interval '1 day' where id = $1`, [users.a])
     try {
-      expect(await visible(subjects.priv, users.d), 'a banned owner is gone too').toBe(true)
+      expect(await visible(subjects.priv, users.d), 'a banned owner changes nothing either').toBe(false)
     } finally {
       await q('update app_users set banned_until = null where id = $1', [users.a])
     }
+    expect(await visible(subjects.priv, users.a), 'restored, the owner sees it again').toBe(true)
+  })
+
+  it('installs a rule that no longer mentions administrators', async () => {
+    const { rows } = await q(`select pg_get_functiondef('croft_subject_visible(uuid, uuid)'::regprocedure) as def`)
+    expect(rows[0].def).not.toMatch(/'admin'|croft_user_active|app_users/)
+    expect(rows[0].def).toMatch(/SECURITY DEFINER/)
+    // croft_user_active stays: other code still asks whether someone is active.
+    expect((await q('select croft_user_active($1) as active', [users.a])).rows[0].active).toBe(true)
   })
 
   it('answers false for a subject that does not exist, and true for a task with none', async () => {
@@ -195,14 +202,16 @@ describe('schema', () => {
       .rejects.toThrow(/must have an owner/)
   })
 
-  it('still lets a user be hard-deleted, leaving the subject to the admin exception', async () => {
+  it('still lets a user be hard-deleted, leaving their private subject hidden from everyone', async () => {
     const orphan = randomUUID()
     await addSubject(orphan, 'private', `Orphan ${RUN}`, users.e)
     try {
       await q('delete from app_users where id = $1', [users.e])
       const { rows } = await q('select owner_user_id from subjects where id = $1', [orphan])
       expect(rows[0].owner_user_id).toBeNull()
-      expect(await visible(orphan, users.d)).toBe(true)
+      // Accepted in SECURITY.md: with no owner and no administrator exception,
+      // nobody sees it; the database is the break-glass.
+      expect(await visible(orphan, users.d)).toBe(false)
       expect(await visible(orphan, users.c)).toBe(false)
     } finally {
       await q('delete from subjects where id = $1', [orphan])

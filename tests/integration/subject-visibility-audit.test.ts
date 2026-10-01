@@ -9,7 +9,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
  * the proof that it is closed.
  *
  * A owns the private subject P (todo TP) and the lab subject L (todos TL,
- * TL2). C is an outsider, D an administrator. Neither may see P.
+ * TL2). C is an outsider, D an administrator. Neither may see P — not even
+ * once A is disabled: there is no administrator exception (077).
  */
 
 const auth = vi.hoisted(() => ({ actor: null as null | Record<string, unknown> }))
@@ -238,6 +239,31 @@ describe('changing who sees a subject from a stale read', () => {
     expect(members.rows).toEqual([])
     as(C)
     expect((await call(showSubjectRoute, 'GET', `/subjects/${S.ref}`, { ref: S.ref })).status).toBe(404)
+  })
+})
+
+describe('disabling the owner', () => {
+  it('opens nothing to an administrator: no read, and no say in who sees it', async () => {
+    as(A)
+    const S = await fileSubject(`Left behind ${RUN} ${WORD}`, 'private')
+    const asRead = (await resolveSubject(S.ref, A))!
+    await q('update app_users set deleted_at = now() where id = $1', [A])
+    try {
+      expect(await resolveSubject(S.ref, D)).toBeNull()
+      as(D)
+      const shown = await call(showSubjectRoute, 'GET', `/subjects/${S.ref}`, { ref: S.ref })
+      expect(shown.status).toBe(404)
+      expect(JSON.stringify(shown.json)).not.toContain(WORD)
+      // Even handed a read of it, the administrator cannot share or publish it.
+      expect((await addSubjectMember(actorFor(D) as Actor, asRead, D)).ok).toBe(false)
+      expect((await updateSubject(actorFor(D) as Actor, asRead, { visibility: 'lab' })).ok).toBe(false)
+      expect((await updateSubject(actorFor(D) as Actor, asRead, { owner: D })).ok).toBe(false)
+    } finally {
+      await q('update app_users set deleted_at = null where id = $1', [A])
+    }
+    const after = await q('select visibility, owner_user_id from subjects where id = $1', [S.id])
+    expect(after.rows[0]).toEqual({ visibility: 'private', owner_user_id: A })
+    expect((await q('select count(*)::int as n from subject_members where subject_id = $1', [S.id])).rows[0].n).toBe(0)
   })
 })
 

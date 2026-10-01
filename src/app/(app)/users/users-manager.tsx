@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronRight, KeyRound, RotateCcw, UserRoundCog, UserRoundPlus } from 'lucide-react'
+import { ChevronRight, KeyRound, MailCheck, RotateCcw, Send, UserRoundCog, UserRoundPlus } from 'lucide-react'
 import { mutate } from '@/lib/api/mutate'
 import { Button, Field, Input, Select } from '@/components/ui/control'
 import type { AdminUser } from '@/lib/api/users'
@@ -17,7 +17,35 @@ const errorMessage = (value: unknown) => value instanceof Error ? value.message 
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
 
-export const UsersManager = ({ users, currentUserId }: { users: AdminUser[]; currentUserId: string }) => {
+export const MAIL_NOT_CONFIGURED = 'Email is not set up on this Croft: set RESEND_API_KEY and CROFT_MAIL_FROM.'
+
+type ResetNotice = { ok: true; to: string } | { ok: false; error: string }
+
+const ResetOutcome = ({ notice }: { notice: ResetNotice | undefined }) =>
+  notice === undefined ? null : notice.ok ? (
+    <p role="status" className="text-status-in-review inline-flex items-center gap-1.5 text-[0.6875rem]">
+      <MailCheck size={12} aria-hidden />
+      Sent to <span className="font-mono">{notice.to}</span>
+    </p>
+  ) : (
+    <p role="alert" className="text-danger text-[0.6875rem] leading-relaxed">{notice.error}</p>
+  )
+
+/**
+ * `mailReady` is the server's answer to "can this Croft send email?". An
+ * administrator never sets or sees anyone's password: the most they can do is
+ * have a single-use link mailed to the person, and without email there is no
+ * way to do even that.
+ */
+export const UsersManager = ({
+  users,
+  currentUserId,
+  mailReady = false,
+}: {
+  users: AdminUser[]
+  currentUserId: string
+  mailReady?: boolean
+}) => {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -26,6 +54,7 @@ export const UsersManager = ({ users, currentUserId }: { users: AdminUser[]; cur
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [keys, setKeys] = useState<Record<string, UserKey[]>>({})
+  const [resets, setResets] = useState<Record<string, ResetNotice | undefined>>({})
   // Whose open tasks are being handed over, and to whom (CROFT-310).
   const [handover, setHandover] = useState<{ userId: string; to: string } | null>(null)
 
@@ -58,10 +87,13 @@ export const UsersManager = ({ users, currentUserId }: { users: AdminUser[]; cur
 
   const update = (user: AdminUser, form: HTMLFormElement) => run(`user:${user.id}`, async () => {
     const data = new FormData(form)
+    // Someone else's address is theirs: it is where their reset links go, so
+    // it is never sent from here. Only your own, and only when it changed.
+    const email = String(data.get('email') ?? '').trim()
     const result = await mutate(`/api/v1/users/${user.id}`, {
       method: 'PATCH',
       body: {
-        email: String(data.get('email') ?? ''),
+        ...(user.id === currentUserId && email && email !== user.email ? { email } : {}),
         displayName: String(data.get('displayName') ?? ''),
         role: String(data.get('role') ?? 'member'),
       },
@@ -109,14 +141,19 @@ export const UsersManager = ({ users, currentUserId }: { users: AdminUser[]; cur
     router.refresh()
   })
 
-  const resetPassword = (user: AdminUser, value: string) => run(`password:${user.id}`, async () => {
-    const result = await mutate(`/api/v1/users/${user.id}/password`, {
-      method: 'POST',
-      body: { password: value },
-    })
-    if (!result.ok) throw new Error(result.error)
-    alert(`Password reset for ${user.displayName}. Existing browser sessions were revoked.`)
-  })
+  const sendReset = async (user: AdminUser) => {
+    const key = `reset:${user.id}`
+    setBusy(key)
+    setResets((current) => ({ ...current, [user.id]: undefined }))
+    const result = await mutate<{ sent: boolean; to: string }>(`/api/v1/users/${user.id}/password-reset`, { method: 'POST' })
+    setResets((current) => ({
+      ...current,
+      [user.id]: result.ok
+        ? { ok: true, to: result.data?.to ?? 'their email' }
+        : { ok: false, error: result.code === 'mail_not_configured' ? MAIL_NOT_CONFIGURED : result.error },
+    }))
+    setBusy(null)
+  }
 
   const loadKeys = (userId: string) => run(`keys:${userId}`, async () => {
     const response = await fetch(`/api/v1/users/${userId}/keys`)
@@ -206,7 +243,22 @@ export const UsersManager = ({ users, currentUserId }: { users: AdminUser[]; cur
               <form onSubmit={(event) => { event.preventDefault(); void update(user, event.currentTarget) }}>
                 <div className="grid gap-3 sm:grid-cols-[1fr_1fr_9rem]">
                   <Field label="Display name"><Input name="displayName" defaultValue={user.displayName} disabled={!user.active} /></Field>
-                  <Field label="Email"><Input name="email" type="email" defaultValue={user.email} disabled={!user.active} /></Field>
+                  <Field label="Email">
+                    {user.id === currentUserId ? (
+                      <Input name="email" type="email" defaultValue={user.email} disabled={!user.active} />
+                    ) : (
+                      <Input
+                        name="email"
+                        type="email"
+                        defaultValue={user.email}
+                        readOnly
+                        aria-readonly
+                        disabled={!user.active}
+                        title="Only the person can change their own email"
+                        className="text-fg-muted hover:border-border cursor-default hover:bg-transparent focus:border-border focus:shadow-none bg-transparent"
+                      />
+                    )}
+                  </Field>
                   <Field label="Role">
                     <Select name="role" defaultValue={user.role} disabled={!user.active}>
                       <option value="member">Member</option>
@@ -288,18 +340,27 @@ export const UsersManager = ({ users, currentUserId }: { users: AdminUser[]; cur
                   <details className="group">
                     <summary className="text-fg-muted hover:text-fg flex w-fit cursor-pointer list-none items-center gap-1.5 text-[0.75rem] font-medium transition-colors duration-[var(--dur-1)] [&::-webkit-details-marker]:hidden">
                       <ChevronRight size={12} aria-hidden className="transition-transform duration-[var(--dur-2)] ease-[var(--ease-out)] group-open:rotate-90" />
-                      Password and agent keys
+                      Password reset and agent keys
                     </summary>
                     <div className="enter-rise">
-                      <form className="mt-3 flex flex-wrap items-end gap-2" onSubmit={(event) => {
-                        event.preventDefault()
-                        const value = String(new FormData(event.currentTarget).get('password') ?? '')
-                        void resetPassword(user, value)
-                        event.currentTarget.reset()
-                      }}>
-                        <Field label="New password"><Input name="password" type="password" minLength={12} required autoComplete="new-password" className="w-64" /></Field>
-                        <Button size="sm" type="submit" disabled={busy === `password:${user.id}`}>Reset password</Button>
-                      </form>
+                      <div className="mt-3 flex flex-col gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => void sendReset(user)}
+                            disabled={!mailReady || busy === `reset:${user.id}`}
+                          >
+                            <Send size={12} aria-hidden /> {busy === `reset:${user.id}` ? 'Sending…' : 'Send a reset link'}
+                          </Button>
+                          <ResetOutcome notice={resets[user.id]} />
+                        </div>
+                        <p className="text-fg-subtle text-[0.6875rem] leading-relaxed">
+                          {mailReady
+                            ? `Emails ${user.displayName} a link to choose a new password. It works once, within the hour; their current password keeps working until they use it, and then every session they have is signed out. You never see the link.`
+                            : MAIL_NOT_CONFIGURED}
+                        </p>
+                      </div>
 
                       <div className="mt-5">
                         {keys[user.id] === undefined ? (

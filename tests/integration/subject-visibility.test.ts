@@ -15,7 +15,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
  * human note, a subject file and a log. B is added as a member later. C is an
  * outsider. D is an administrator.
  *
- * For C and D — until A is deactivated — every route in the inventory
+ * For C and D — even while A is deactivated — every route in the inventory
  * answers `not_found` exactly as for a ref that names nothing, lists
  * nothing, and reports the same counts as before P existed. B sees it once
  * added. Publishing is one-way; pushing a non-lab todo needs `force`.
@@ -841,28 +841,48 @@ describe('sharing with a member (B)', () => {
   })
 })
 
-describe('the administrator exception', () => {
-  it('shows D the subject only while its owner is deactivated, and lets D manage it then', async () => {
+describe('no administrator exception', () => {
+  it('hides the subject from D even while its owner is deactivated, and lets nobody change who sees it', async () => {
     await q(`update app_users set banned_until = now() + interval '1 day' where id = $1`, [A])
     try {
       as(D)
+      expect((await call(showSubjectRoute, 'GET', `/subjects/${P.ref}`, { ref: P.ref })).status).toBe(404)
+      expect((await call(showTaskRoute, 'GET', `/tasks/${TP.ref}`, { ref: TP.ref })).status).toBe(404)
+      const made = await call(patchSubjectRoute, 'PATCH', `/subjects/${P.ref}`, { ref: P.ref }, { visibility: 'private' })
+      expect(made.status).toBe(404)
+      expect((await call(publishRoute, 'POST', `/subjects/${P.ref}/publish`, { ref: P.ref })).status).toBe(404)
+      expect((await call(addMemberRoute, 'POST', `/subjects/${P.ref}/members`, { ref: P.ref }, { user: D })).status).toBe(404)
+
+      // B is a member: the members subject stays visible to its members…
+      as(B)
       const shown = await call(showSubjectRoute, 'GET', `/subjects/${P.ref}`, { ref: P.ref })
       expect(shown.status).toBe(200)
-      expect((await call(showTaskRoute, 'GET', `/tasks/${TP.ref}`, { ref: TP.ref })).status).toBe(200)
-      const made = await call(patchSubjectRoute, 'PATCH', `/subjects/${P.ref}`, { ref: P.ref }, { visibility: 'private' })
-      expect(made.status).toBe(200)
-      expect(made.json.data.visibility).toBe('private')
-      const shared = await call(patchSubjectRoute, 'PATCH', `/subjects/${P.ref}`, { ref: P.ref }, { visibility: 'members' })
-      expect(shared.status).toBe(200)
+      expect(shown.json.data.visibility).toBe('members')
+      // …and nobody can change its audience while the owner is gone.
+      for (const visibility of ['private', 'lab']) {
+        const changed = await call(patchSubjectRoute, 'PATCH', `/subjects/${P.ref}`, { ref: P.ref }, { visibility })
+        expect(changed.status).toBe(403)
+        expect(changed.json.code).toBe('forbidden')
+      }
+      expect((await call(publishRoute, 'POST', `/subjects/${P.ref}/publish`, { ref: P.ref })).status).toBe(403)
+      expect((await call(addMemberRoute, 'POST', `/subjects/${P.ref}/members`, { ref: P.ref }, { user: C })).status).toBe(403)
 
-      // Not a member: the exception is for admins only.
       as(C)
       expect((await call(showSubjectRoute, 'GET', `/subjects/${P.ref}`, { ref: P.ref })).status).toBe(404)
     } finally {
       await q('update app_users set banned_until = null where id = $1', [A])
     }
+    expect((await q('select visibility from subjects where id = $1', [P.id])).rows[0].visibility).toBe('members')
     as(D)
     expect((await call(showSubjectRoute, 'GET', `/subjects/${P.ref}`, { ref: P.ref })).status).toBe(404)
+
+    // Restored, the owner decides again.
+    as(A)
+    const made = await call(patchSubjectRoute, 'PATCH', `/subjects/${P.ref}`, { ref: P.ref }, { visibility: 'private' })
+    expect(made.status).toBe(200)
+    expect(made.json.data.visibility).toBe('private')
+    const shared = await call(patchSubjectRoute, 'PATCH', `/subjects/${P.ref}`, { ref: P.ref }, { visibility: 'members' })
+    expect(shared.status).toBe(200)
   })
 })
 
