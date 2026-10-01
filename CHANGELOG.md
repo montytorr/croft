@@ -8,6 +8,8 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-10-01
+
 ### Security
 
 - **Password resets are email-only** (CROFT-19). An administrator can only send a reset link: it is emailed to the person through Resend, single-use and valid for an hour, and the admin never sees a password, a token or the link. Setting someone else's password is refused. "Forgot your password?" on the sign-in page sends the same email, and answers the same way whether or not the address exists. Without `RESEND_API_KEY` and `CROFT_MAIL_FROM`, resets are refused with an explanation and nothing is created. For operators with shell access, `scripts/reset-password.mjs <email>` prints a one-time link on the host.
@@ -213,7 +215,8 @@ Forked from Cairn v0.12.1 (1ef3556).
 
 - A field notebook: paper and peat grounds, a heather accent, Schibsted Grotesk and Newsreader, and runrig strips for a mark.
 
-[Unreleased]: https://github.com/montytorr/croft/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/montytorr/croft/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/montytorr/croft/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/montytorr/croft/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/montytorr/croft/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/montytorr/croft/compare/v0.3.2...v0.4.0
