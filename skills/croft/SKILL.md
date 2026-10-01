@@ -1,6 +1,6 @@
 ---
 name: croft
-description: "Lab board for exploring and proving ideas: new tech to evaluate, POCs, things to build before they become real work. Use BEFORE evaluating or prototyping anything to check what the lab already concluded; to file a subject, move it through stages, log findings, add todos, and record the conclusion. Triggers on 'should we use X', 'evaluate', 'try out', 'POC', 'spike on', 'what did we conclude about', 'lab', 'croft', 'subject'. Not for: committed work on a repo tracked in Cairn — push the todo to Cairn instead."
+description: "Lab board for exploring and proving ideas: new tech to evaluate, POCs, things to build before they become real work. Use BEFORE evaluating or prototyping anything to check what the lab already concluded; to file a subject, move it through stages, log findings, add todos, and record the conclusion. Triggers on 'should we use X', 'evaluate', 'try out', 'POC', 'spike on', 'what did we conclude about', 'lab', 'croft', 'subject'. Not for: committed work on a repo tracked in Cairn — push the todo to Cairn instead; nor for the agent tooling itself (Cairn's session summariser, hooks, setup, sync) — file that straight in Cairn."
 ---
 
 # Croft
@@ -40,6 +40,7 @@ the rest without claiming them: note, stage, close what you can.
 
 **When not to file.**
 - **It is committed work on a real repo** — that is Cairn's. Push the todo (below).
+- **It is the agent tooling itself** — Cairn's session summariser, hooks, setup, sync. Not a lab subject, even as an idea: file it straight in Cairn, in the tool's project.
 - **A subject already covers it** — add a todo or a note to that one.
 - **Reading a file answers it** — no subject needed.
 - **A fact that expires** ("the beta API is down today") — a note, or nothing.

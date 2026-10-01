@@ -7,7 +7,8 @@ lab project, **todos** (`T-41`), a **stage**, and in the end a **conclusion**: t
 the next agent finds when it asks the same question.
 
 > Exploring or proving an idea → `croft check` first. Changing a repo for real → a Cairn
-> task (`croft push`).
+> task (`croft push`). The agent tooling itself (summariser, hooks, setup, sync) is never a
+> subject: it goes straight to Cairn.
 
 Read this whole file. It is short on purpose.
 
