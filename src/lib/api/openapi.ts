@@ -1234,12 +1234,28 @@ export const openapiSpec = () => ({
           'the move) is refused with `conclusion_required`. Every stage change appends a `stage` note ' +
           '(`to explore → exploring`). `tags` replaces the whole set. `project` is a lab project\'s name or id; ' +
           '`null` takes the subject out of its project. `archived: true` takes it off the board. ' +
-          '`visibility` and, on a non-lab subject, `owner` are the owner\'s to change (`forbidden` otherwise; an ' +
-          'active admin may once the owner is deactivated): `private ↔ members` freely, either → `lab` for good; ' +
+          '`visibility` and, on a non-lab subject, `owner` are the owner\'s to change (`forbidden` otherwise, ' +
+          'administrators included): `private ↔ members` freely, either → `lab` for good; ' +
           '`lab →` anything else is `already_published`. Each change appends a `visibility` note.',
         requestBody: body(json(updateSubjectSchema)),
         responses: {
           '200': okResponse('The subject.', subjectSchema),
+          '400': errorResponse,
+          '403': errorResponse,
+          '404': errorResponse,
+          '409': errorResponse,
+        },
+      },
+      delete: {
+        summary: 'Delete a subject for good',
+        description:
+          'Removes the subject with its todos (and their sub-todos), work log, human notes, files, tags and ' +
+          'members; Cairn tasks pushed from its todos stay in Cairn. The owner may; an administrator only for a ' +
+          'subject in the lab (`forbidden` otherwise, checked first). Requires `?confirm=<REF>`; without it the ' +
+          'call fails with `validation_failed` and `requiresConfirmation`.',
+        parameters: [{ name: 'confirm', in: 'query', schema: { type: 'string', example: 'S-12' } }],
+        responses: {
+          '200': okResponse('`{deleted: true, ref, id, todosDeleted, attachmentsRemoved}`'),
           '400': errorResponse,
           '403': errorResponse,
           '404': errorResponse,

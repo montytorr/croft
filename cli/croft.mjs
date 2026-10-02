@@ -2758,6 +2758,9 @@ const HELP = `croft — the lab board: subjects to explore and prove, their todo
     croft subject publish S-12 --confirm S-12
                                    into the lab, for everyone. ONE-WAY: it
                                    cannot be made private again
+    croft subject delete S-12 --confirm S-12
+                                   for good, with its todos, log and files;
+                                   owner only (or an admin, in the lab)
     croft subject stage S-12 "<stage>" [--conclusion -|"<text>"]
                                    done, rejected, rolled out (any completed or
                                    dropped stage) need a --conclusion
@@ -3942,7 +3945,7 @@ const commands = {
    */
   async subject() {
     const verb = positional[0]
-    const usage = 'usage: croft subject add|list|show|edit|share|publish|stage|note|notes|attach|files|tag|todo …  (croft help)'
+    const usage = 'usage: croft subject add|list|show|edit|share|publish|delete|stage|note|notes|attach|files|tag|todo …  (croft help)'
 
     if (verb === 'add') {
       const title = need(positional[1], 'usage: croft subject add "<title>" [--stage S] [--tag t] [--project P] [--owner me] [--body -]')
@@ -4081,6 +4084,23 @@ const commands = {
       if (FORMAT !== 'tsv') return emit(published)
       emitSubjects([published])
       process.stderr.write(`${ref} is in the lab: everyone sees it now, and that cannot be undone\n`)
+      return
+    }
+
+    if (verb === 'delete') {
+      const ref = subjectArg(positional[1], 'usage: croft subject delete S-12 --confirm S-12')
+      // Permanent, so the ref is typed twice, as for publish and project delete.
+      if (String(flags.confirm ?? '').toUpperCase() !== ref) {
+        const current = await request('GET', `/api/v1/subjects/${ref}`)
+        const todos = (current.todos?.open ?? 0) + (current.todos?.done ?? 0)
+        die(
+          `This permanently deletes ${ref} "${current.title}", its ${todos} todo(s), its log, notes and files. ` +
+            `Cairn tasks pushed from its todos stay in Cairn.\nRe-run with --confirm ${ref} if that is what you want.`,
+        )
+      }
+      const deleted = await request('DELETE', `/api/v1/subjects/${ref}?confirm=${encodeURIComponent(ref)}`)
+      if (FORMAT !== 'tsv') return emit(deleted)
+      process.stderr.write(`deleted ${ref}: ${deleted.todosDeleted} todo(s), ${deleted.attachmentsRemoved} file(s)\n`)
       return
     }
 

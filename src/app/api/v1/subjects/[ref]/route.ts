@@ -1,7 +1,7 @@
 import type { z } from 'zod'
 import { route } from '@/lib/api/handler'
-import { ok } from '@/lib/api/response'
-import { noSuchSubject, resolveSubject, updateSubject } from '@/lib/api/subjects'
+import { fail, ok } from '@/lib/api/response'
+import { deleteSubject, noSuchSubject, refuseSubjectDelete, resolveSubject, updateSubject } from '@/lib/api/subjects'
 import { updateSubjectSchema } from '@/schemas/subject'
 
 export const dynamic = 'force-dynamic'
@@ -33,5 +33,30 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateSubjectSchema>>
     const updated = await updateSubject(actor, subject, body)
     if (!updated.ok) return updated.response
     return ok(updated.value)
+  },
+})
+
+/**
+ * Deletes a subject for good, with its todos, log, notes and files. The owner
+ * may; an administrator may only for a subject in the lab. The ref is
+ * repeated to confirm (`?confirm=S-12`), as for a task: nothing comes back.
+ */
+export const DELETE = route<{ ref: string }>({
+  handler: async ({ actor, params, url }) => {
+    const subject = await resolveSubject(params.ref, actor.userId)
+    if (!subject) return noSuchSubject(params.ref)
+    // A caller who may not delete it is refused before being asked to confirm.
+    const refused = refuseSubjectDelete(subject, actor)
+    if (refused) return refused
+    if ((url.searchParams.get('confirm') ?? '').toUpperCase() !== subject.ref) {
+      return fail(
+        'validation_failed',
+        `This permanently deletes ${subject.ref}, its todos, its log and its files, and cannot be undone. ` +
+          `Repeat the ref to confirm: ?confirm=${subject.ref}`,
+        { requiresConfirmation: subject.ref },
+      )
+    }
+    const deleted = await deleteSubject(actor, subject)
+    return deleted.ok ? ok(deleted.value) : deleted.response
   },
 })

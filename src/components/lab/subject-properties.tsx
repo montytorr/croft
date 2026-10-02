@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
-import { Archive, ArchiveRestore, Check, ChevronsUpDown, Plus, Tags } from 'lucide-react'
+import { Archive, ArchiveRestore, Check, ChevronsUpDown, Plus, Tags, Trash2 } from 'lucide-react'
 import { Avatar } from '@/components/icons'
 import { usePeople } from '@/components/people-context'
 import { RelativeTime } from '@/components/relative-time'
@@ -10,8 +10,10 @@ import { Button } from '@/components/ui/control'
 import { useMutate } from '@/lib/api/use-mutate'
 import type { LabProject, Stage, Subject, Tag } from '@/lib/lab/types'
 import { nextPreset } from '@/lib/lab/ui-colours'
+import { canDeleteSubject } from '@/lib/lab/ui-subject-delete'
 import { filterTags, tagToCreate } from '@/lib/lab/ui-tag-picker'
 import { cn } from '@/lib/utils'
+import { DeleteSubjectDialog } from './delete-subject-dialog'
 import { ProjectLabel } from './project-label'
 import { StageGlyph } from './stage'
 import { SubjectAccess } from './subject-access'
@@ -48,6 +50,7 @@ export const SubjectProperties = ({
   tags,
   projects,
   canCreateTags,
+  isAdmin = false,
 }: {
   subject: Subject
   stages: Stage[]
@@ -55,6 +58,8 @@ export const SubjectProperties = ({
   projects: LabProject[]
   /** An administrator: typing a tag that does not exist offers to create it. */
   canCreateTags?: boolean
+  /** Part of who may delete: an administrator can clear a lab subject. */
+  isAdmin?: boolean
 }) => {
   const router = useRouter()
   const request = useMutate()
@@ -62,9 +67,20 @@ export const SubjectProperties = ({
   const [pickingTags, setPickingTags] = useState(false)
   const [tagQuery, setTagQuery] = useState('')
   const [busy, setBusy] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const onMoved = useCallback(() => router.refresh(), [router])
   const { move, dialog } = useStageMove(onMoved)
+
+  const canDelete = canDeleteSubject(subject, { userId: currentUserId, role: isAdmin ? 'admin' : 'member' })
+  const closeDelete = useCallback(() => setDeleting(false), [])
+  const destroy = useCallback(async () => {
+    const result = await request(`/api/v1/subjects/${subject.ref}?confirm=${encodeURIComponent(subject.ref)}`, { method: 'DELETE' })
+    if (!result.ok) return false
+    router.push('/')
+    router.refresh()
+    return true
+  }, [request, router, subject.ref])
 
   const patch = async (body: Record<string, unknown>) => {
     setBusy(true)
@@ -337,6 +353,24 @@ export const SubjectProperties = ({
           </Button>
         )}
       </section>
+
+      {canDelete ? (
+        <section>
+          <Button size="sm" variant="danger" disabled={busy} onClick={() => setDeleting(true)} className="-ml-2 px-2 font-normal">
+            <Trash2 size={13} aria-hidden /> Delete subject
+          </Button>
+        </section>
+      ) : null}
+
+      {deleting ? (
+        <DeleteSubjectDialog
+          subjectRef={subject.ref}
+          subjectTitle={subject.title}
+          todos={subject.todos.open + subject.todos.done}
+          onCancel={closeDelete}
+          onConfirm={destroy}
+        />
+      ) : null}
 
       {dialog}
     </div>

@@ -50,6 +50,9 @@ croft subject stage S-12 rejected --conclusion -                 # 5. conclude i
 keeps it to its owner (and `--member`s) until `croft subject publish S-n --confirm S-n` — **one-way**.
 Never push such a subject's todo to Cairn (`push` refuses without `--force`).
 
+**Delete** (`croft subject delete S-n --confirm S-n`) is for a subject that should never have
+been filed. One that was explored and dropped keeps its record: a dropped stage and a conclusion.
+
 Bodies, notes and conclusions are markdown — `##` headings, `-` lists, code and paths in
 backticks. A wall of text is refused, naming what to fix. So is anything that looks like a
 secret: write `$ENV_VAR` or a vault path.

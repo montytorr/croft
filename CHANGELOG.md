@@ -8,6 +8,14 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+### Added
+
+- Delete a subject: `DELETE /api/v1/subjects/{ref}?confirm=S-n`, `croft subject delete S-n --confirm S-n`, and a "Delete subject" action on the subject page that asks for the ref to be typed. It removes the subject with its todos, sub-todos, log, notes and stored files; Cairn tasks pushed from its todos stay in Cairn. The owner may delete their subject; an administrator only one in the lab.
+
+### Fixed
+
+- The API reference no longer says an administrator can change a subject's visibility once its owner is deactivated (removed in 0.5.0).
+
 ## [0.5.1] — 2026-10-01
 
 ### Changed
