@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useCallback, useContext, useRef, useState } from 'react'
+import { BookOpen, CheckSquare, History, MessageSquare, Paperclip, SlidersHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 import { SUBJECT_TABS, isSubjectTab, type SubjectTab } from '@/lib/lab/ui-subject-tabs'
@@ -15,6 +16,8 @@ const LABELS: Record<SubjectTab, string> = {
   files: 'Files',
   details: 'Details',
 }
+
+const ICONS = { writeup: BookOpen, todos: CheckSquare, notes: MessageSquare, log: History, files: Paperclip, details: SlidersHorizontal }
 
 const TabContext = createContext<(tab: SubjectTab) => void>(() => {})
 
@@ -79,15 +82,17 @@ export const SubjectWorkspace = ({
     <TabContext.Provider value={open}>
       <div
         ref={bar}
-        className="bg-bg border-border sticky top-0 z-20 border-b"
+        className="bg-bg/95 border-border sticky top-0 z-20 border-b backdrop-blur-sm"
       >
         <div
           role="tablist"
           aria-label="Sections"
           onKeyDown={onKeyDown}
-          className="flex items-center gap-4 overflow-x-auto px-4 [scrollbar-width:none] md:gap-5 md:px-6"
+          className="flex items-center gap-1 overflow-x-auto px-4 py-2 [scrollbar-width:none] md:px-7"
         >
-          {SUBJECT_TABS.map((t) => (
+          {SUBJECT_TABS.map((t) => {
+            const Icon = ICONS[t]
+            return (
             <button
               key={t}
               type="button"
@@ -97,12 +102,13 @@ export const SubjectWorkspace = ({
               aria-controls={t === 'details' ? 'subject-rail' : `panel-${t}`}
               tabIndex={tab === t ? 0 : -1}
               onClick={() => open(t)}
-              className={cn('section-tab', t === 'details' && 'lg:hidden!')}
+              className={cn('subject-tab', t === 'details' && 'lg:hidden!')}
             >
+              <Icon size={14} aria-hidden className="shrink-0" />
               {LABELS[t]}
               {counts[t] !== undefined && counts[t] !== 0 && counts[t] !== '' ? <span className="count">{counts[t]}</span> : null}
             </button>
-          ))}
+          )})}
         </div>
       </div>
 
@@ -115,7 +121,7 @@ export const SubjectWorkspace = ({
               role="tabpanel"
               aria-labelledby={`tab-${key}`}
               hidden={main !== key}
-              className="px-4 pt-5 pb-16 md:px-6"
+              className="px-4 pt-6 pb-16 md:px-7 md:pt-7"
             >
               {panels[key]}
             </section>
@@ -125,8 +131,8 @@ export const SubjectWorkspace = ({
           id="subject-rail"
           aria-label="Details"
           className={cn(
-            'border-border shrink-0 px-4 pt-5 pb-10 md:px-6',
-            'lg:sticky lg:top-[2.5625rem] lg:max-h-[calc(100dvh-5.5rem)] lg:w-[16rem] lg:overflow-y-auto lg:border-l lg:px-5 lg:pb-8',
+            'border-border shrink-0 px-4 pt-6 pb-10 md:px-6',
+            'lg:sticky lg:top-[3.25rem] lg:max-h-[calc(100dvh-6.5rem)] lg:w-[17rem] lg:overflow-y-auto lg:px-5 lg:pb-8 lg:pt-7',
             tab === 'details' ? 'block' : 'hidden lg:block',
           )}
         >

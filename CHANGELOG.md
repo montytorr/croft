@@ -8,6 +8,11 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+### Changed
+
+- Subject pages have a larger editorial heading, a todo progress summary, icon tabs and paper panels for the write-up, outline, open work and properties. The layout adapts to phones and both themes.
+- The split write-up editor always edits raw Markdown on the left, with the rendered preview on the right. Text is saved verbatim, including tables, code and HTML; pasted and dropped images still upload to the subject. Saving waits for uploads to finish.
+
 ## [0.6.1] — 2026-10-02
 
 ### Fixed
