@@ -178,6 +178,15 @@ describe('deleting a subject', () => {
     expect(await count('select count(*) from subjects where id = $1', [subject.id])).toBe(0)
   })
 
+  it("never hands a deleted subject's number to the next one", async () => {
+    as(ownerId)
+    const newest = await file({ title: `Newest ${RUN}`, visibility: 'lab' })
+    expect((await remove(newest.ref, newest.ref)).status).toBe(200)
+    const next = await file({ title: `After ${RUN}`, visibility: 'lab' })
+    const number = (ref: string) => Number(ref.replace(/^S-/, ''))
+    expect(number(next.ref)).toBeGreaterThan(number(newest.ref))
+  })
+
   it('does not let an administrator delete a subject outside the lab', async () => {
     as(ownerId)
     const hidden = await file({ title: `Mine alone ${RUN}`, visibility: 'private' })
