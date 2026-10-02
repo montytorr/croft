@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { cache } from 'react'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { ChevronRight } from 'lucide-react'
+import { CheckSquare, ChevronRight, MessageSquare, Paperclip } from 'lucide-react'
 import { currentUser } from '@/lib/data'
 import {
   getCairnConnection,
@@ -124,9 +124,9 @@ const SubjectPage = async ({
       </header>
 
       <div data-scroll-root className="relative min-h-0 flex-1 overflow-y-auto">
-        <div className="px-4 pt-5 pb-4 md:px-6 md:pt-6">
-          <div className="text-fg-subtle mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.75rem]">
-            <span className="font-mono">{subject.ref}</span>
+        <div className="subject-hero px-4 pt-7 pb-6 md:px-7 md:pt-9 md:pb-7">
+          <div className="text-fg-subtle mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.75rem]">
+            <span className="border-border bg-surface rounded-md border px-2 py-1 font-mono text-[0.6875rem]">{subject.ref}</span>
             <span aria-hidden>·</span>
             <StageBadge stage={subject.stage} className="text-fg-muted" />
             {subject.project ? (
@@ -141,25 +141,28 @@ const SubjectPage = async ({
                 </Link>
               </>
             ) : null}
-            <span aria-hidden className="hidden sm:inline">·</span>
-            <span className="hidden sm:inline">
-              Opened <RelativeTime iso={subject.created_at} /> by <span className="text-fg-muted">{subject.actor_id}</span>
-            </span>
-            <span aria-hidden className="hidden md:inline">·</span>
-            <span className="hidden md:inline">
-              updated <RelativeTime iso={subject.updated_at} />
-            </span>
           </div>
 
-          <div className="max-w-[64rem]">
-            <SubjectTitle subjectRef={subject.ref} initial={subject.title} />
+          <div className="flex items-center gap-8">
+            <div className="min-w-0 max-w-[58rem] flex-1">
+              <SubjectTitle subjectRef={subject.ref} initial={subject.title} />
+            </div>
+            {tally.open + tally.done > 0 ? (
+              <div className="border-border bg-surface/70 hidden w-44 shrink-0 rounded-xl border p-4 xl:block">
+                <p className="pane-label">Todo progress</p>
+                <p className="text-fg mt-2 font-serif text-[1.875rem] leading-none tabular-nums">{tally.done}<span className="text-fg-subtle font-sans text-[0.8125rem]"> / {tally.open + tally.done} done</span></p>
+                <div role="progressbar" aria-label="Completed todos" aria-valuenow={tally.done} aria-valuemin={0} aria-valuemax={tally.open + tally.done} className="bg-surface-raised mt-3 h-1 overflow-hidden rounded-full">
+                  <div className="bg-status-done h-full rounded-full" style={{ width: `${tally.done / (tally.open + tally.done) * 100}%` }} />
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {subject.owner || subject.tags.length > 0 ? (
-            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+            <div className="mt-4 flex flex-wrap items-center gap-2">
               {subject.owner ? (
                 <span className="text-fg-muted mr-1 flex items-center gap-1.5 text-[0.75rem]">
-                  <Avatar name={subject.owner.name} size={16} />
+                  <Avatar name={subject.owner.name} size={20} />
                   {subject.owner.name}
                 </span>
               ) : null}
@@ -168,6 +171,13 @@ const SubjectPage = async ({
               ))}
             </div>
           ) : null}
+
+          <div className="text-fg-subtle mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[0.71875rem]">
+            <span className="flex items-center gap-1.5"><CheckSquare size={13} aria-hidden />{tally.open} open {tally.open === 1 ? 'todo' : 'todos'}</span>
+            <span className="flex items-center gap-1.5"><MessageSquare size={13} aria-hidden />{humanNotes.length} {humanNotes.length === 1 ? 'note' : 'notes'}</span>
+            <span className="flex items-center gap-1.5"><Paperclip size={13} aria-hidden />{files.length} {files.length === 1 ? 'file' : 'files'}</span>
+            <span className="sm:ml-auto">Updated <RelativeTime iso={subject.updated_at} /></span>
+          </div>
 
           {subject.conclusion ? (
             <div className="mt-4 max-w-[64rem]">
@@ -186,9 +196,9 @@ const SubjectPage = async ({
           counts={{ todos: tally.open || todos.length, notes: humanNotes.length, log: log.length, files: files.length }}
           panels={{
             writeup: (
-              <div className="grid gap-8 xl:grid-cols-[minmax(0,48rem)_minmax(15rem,20rem)] xl:justify-between 2xl:gap-12">
+              <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_14rem] 2xl:grid-cols-[minmax(0,1fr)_17rem] 2xl:gap-6">
                 <WriteUp subjectRef={subject.ref} title={subject.title} body={subject.body} />
-                <aside aria-label="At a glance" className="xl:sticky xl:top-[3.5rem] xl:self-start">
+                <aside aria-label="At a glance" className="xl:sticky xl:top-[4.75rem] xl:self-start">
                   <WriteUpAside body={subject.body} todos={todos} notes={humanNotes} />
                 </aside>
               </div>

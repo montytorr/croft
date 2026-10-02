@@ -1,21 +1,16 @@
 'use client'
 
-import { EditorContent, useEditor } from '@tiptap/react'
-import Placeholder from '@tiptap/extension-placeholder'
-import type { EditorView } from '@tiptap/pm/view'
 import { useRouter } from 'next/navigation'
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Eye, ImagePlus, PenLine, X } from 'lucide-react'
+import { BookOpen, Code2, Eye, ImagePlus, PenLine, X } from 'lucide-react'
 import { MarkdownView } from '@/components/markdown'
 import { Button } from '@/components/ui/control'
 import { Spinner } from '@/components/spinner'
-import { editorExtensions, richEditLoss } from '@/lib/editor/markdown'
 import { imageFiles, imageMarkdown, insertAt, settlePlaceholder, uploadPlaceholder, uploadSubjectFile } from '@/lib/editor/upload'
 import { mutate } from '@/lib/api/mutate'
 import { cn } from '@/lib/utils'
 
-type Mode = 'rich' | 'source'
 type SaveState = 'idle' | 'saving' | 'error'
 
 const PLACEHOLDER =
@@ -23,38 +18,7 @@ const PLACEHOLDER =
 
 type UploadReport = { start: () => void; end: (error: string | null) => void }
 
-/**
- * Images pasted or dropped into the rich editor: each uploaded to the subject,
- * then placed as an image node where it was dropped (or at the caret, when
- * the text moved meanwhile). The node serialises to `![name](content_url)`,
- * the stable URL, so the write-up never embeds a signed link that expires.
- */
-const uploadIntoView = async (view: EditorView, files: File[], pos: number, subjectRef: string, report: UploadReport) => {
-  let at = pos
-  for (const file of files) {
-    const before = view.state.doc
-    report.start()
-    const result = await uploadSubjectFile(subjectRef, file)
-    report.end(result.ok ? null : `${file.name}: ${result.error}`)
-    if (!result.ok || view.isDestroyed) continue
-    const node = view.state.schema.nodes.image?.create({ src: result.data.content_url, alt: result.data.filename })
-    if (!node) continue
-    const target = view.state.doc === before ? Math.min(at, view.state.doc.content.size) : view.state.selection.to
-    const tr = view.state.tr.replaceRangeWith(target, target, node)
-    view.dispatch(tr)
-    at = tr.mapping.map(target)
-  }
-}
-
-/**
- * The editor, full width, with the page it will become beside it.
- *
- * Two ways to write: rich (Tiptap, the same GFM-constrained editor as a
- * todo's description) and source (the markdown itself, which never rewrites
- * a line an agent wrote). The preview on the right is the real renderer —
- * refs linked, code highlighted, set in the write-up's serif — and follows
- * either one as you type.
- */
+/** Raw Markdown is the source of truth. Only the preview is rendered. */
 const Editor = ({
   subjectRef,
   title,
@@ -66,23 +30,16 @@ const Editor = ({
   initial: string
   onClose: (saved: boolean) => void
 }) => {
-  const [mode, setMode] = useState<Mode>(() => (richEditLoss(initial) ? 'source' : 'rich'))
   const [markdown, setMarkdown] = useState(initial)
-  // A body with a table is checked by round-tripping it, which is too much to
-  // repeat on every keystroke; the tab's state can trail the text slightly,
-  // and switchMode checks the text as it is.
-  const deferred = useDeferredValue(markdown)
-  const richLoss = useMemo(() => (mode === 'source' ? richEditLoss(deferred) : null), [mode, deferred])
+  const preview = useDeferredValue(markdown)
   const [state, setState] = useState<SaveState>('idle')
   const [error, setError] = useState<string | null>(null)
   const [pane, setPane] = useState<'edit' | 'preview'>('edit')
   const [uploads, setUploads] = useState(0)
   const baseline = useRef(initial)
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const source = useRef<HTMLTextAreaElement>(null)
 
-  // Setters only, so the editor's paste and drop handlers can hold it for
-  // the editor's whole life without going stale.
+  // Uploads may finish while the author continues typing.
   const report = useMemo<UploadReport>(
     () => ({
       start: () => setUploads((n) => n + 1),
@@ -94,42 +51,7 @@ const Editor = ({
     [],
   )
 
-  const editor = useEditor({
-    extensions: [...editorExtensions(), Placeholder.configure({ placeholder: PLACEHOLDER })],
-    content: initial,
-    immediatelyRender: false,
-    editorProps: {
-      attributes: { class: 'min-h-[60vh] pb-24' },
-      handlePaste: (view, event) => {
-        const files = imageFiles(event.clipboardData)
-        if (!files.length) return false
-        event.preventDefault()
-        void uploadIntoView(view, files, view.state.selection.to, subjectRef, report)
-        return true
-      },
-      handleDrop: (view, event, _slice, moved) => {
-        const files = moved ? [] : imageFiles(event.dataTransfer)
-        if (!files.length) return false
-        event.preventDefault()
-        const pos = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? view.state.selection.to
-        void uploadIntoView(view, files, pos, subjectRef, report)
-        return true
-      },
-    },
-    // Serialising on every keystroke is wasted work on a long write-up; the
-    // preview only has to keep up with a reader's eye.
-    onUpdate: ({ editor: e }) => {
-      clearTimeout(timer.current)
-      timer.current = setTimeout(() => setMarkdown(e.storage.markdown.getMarkdown()), 140)
-    },
-  })
-
-  useEffect(() => () => clearTimeout(timer.current), [])
-
-  const current = useCallback(
-    () => (mode === 'rich' && editor ? editor.storage.markdown.getMarkdown() : markdown),
-    [editor, markdown, mode],
-  )
+  const current = useCallback(() => markdown, [markdown])
 
   /** The markdown side of paste and drop: a placeholder at the caret at once, the image in its place when it lands. */
   const uploadIntoSource = async (files: File[]) => {
@@ -148,18 +70,8 @@ const Editor = ({
     }
   }
 
-  const switchMode = (next: Mode) => {
-    if (next === mode) return
-    if (next === 'rich' && richEditLoss(markdown)) return
-    if (next === 'source' && editor) {
-      clearTimeout(timer.current)
-      setMarkdown(editor.storage.markdown.getMarkdown())
-    }
-    if (next === 'rich' && editor) editor.commands.setContent(markdown)
-    setMode(next)
-  }
-
   const save = useCallback(async () => {
+    if (uploads || state === 'saving') return
     const body = current()
     if (body === baseline.current) {
       onClose(false)
@@ -175,7 +87,7 @@ const Editor = ({
     }
     baseline.current = body
     onClose(true)
-  }, [current, onClose, subjectRef])
+  }, [current, onClose, state, subjectRef, uploads])
 
   const dirty = useCallback(() => current() !== baseline.current, [current])
 
@@ -203,26 +115,10 @@ const Editor = ({
   }, [])
 
   const cancel = () => {
+    if (state === 'saving') return
     if (dirty() && !window.confirm('Discard the changes to this write-up?')) return
     onClose(false)
   }
-
-  const tab = (value: Mode, label: string) => (
-    <button
-      type="button"
-      aria-pressed={mode === value}
-      disabled={value === 'rich' && !!richLoss}
-      title={value === 'rich' && richLoss ? `${richLoss} Edit it as markdown.` : undefined}
-      onClick={() => switchMode(value)}
-      className={cn(
-        'h-[1.625rem] rounded-md px-2.5 text-[0.75rem] transition-colors duration-[var(--dur-1)]',
-        'disabled:cursor-not-allowed disabled:opacity-45',
-        mode === value ? 'bg-surface text-fg ring-border ring-1' : 'text-fg-muted hover:text-fg',
-      )}
-    >
-      {label}
-    </button>
-  )
 
   return createPortal(
     <div
@@ -235,19 +131,15 @@ const Editor = ({
       onDragOver={(e) => e.dataTransfer.types.includes('Files') && e.preventDefault()}
       onDrop={(e) => e.dataTransfer.types.includes('Files') && e.preventDefault()}
     >
-      <header className="border-border flex h-[3.25rem] shrink-0 items-center gap-3 border-b px-3 md:px-6">
-        <button type="button" onClick={cancel} aria-label="Close the editor" className="text-fg-subtle hover:text-fg hover:bg-surface-hover grid size-8 place-items-center rounded-md transition-colors">
+      <header className="bg-surface border-border flex min-h-16 shrink-0 items-center gap-2 border-b px-3 py-2 md:gap-3 md:px-6">
+        <button type="button" onClick={cancel} disabled={state === 'saving'} aria-label="Close the editor" className="text-fg-subtle hover:text-fg hover:bg-surface-hover grid size-8 place-items-center rounded-md transition-colors">
           <X size={16} aria-hidden />
         </button>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-fg-subtle text-[0.6875rem]">
             Write-up · <span className="font-mono">{subjectRef}</span>
           </p>
           <p className="text-fg truncate text-[0.875rem] font-medium">{title}</p>
-        </div>
-        <div className="bg-surface-raised ml-auto hidden items-center gap-0.5 rounded-lg p-0.5 sm:flex" role="group" aria-label="Editor">
-          {tab('rich', 'Rich')}
-          {tab('source', 'Markdown')}
         </div>
         <button
           type="button"
@@ -267,10 +159,10 @@ const Editor = ({
           </span>
         )}
         <span className="text-fg-subtle hidden text-[0.6875rem] md:block">⌘↵ save</span>
-        <Button variant="ghost" size="sm" onClick={cancel} className="px-3 font-normal">
+        <Button variant="ghost" size="sm" onClick={cancel} disabled={state === 'saving'} className="hidden px-3 font-normal sm:inline-flex">
           Cancel
         </Button>
-        <Button variant="primary" size="sm" onClick={() => void save()} disabled={state === 'saving'} className="px-3.5">
+        <Button variant="primary" size="sm" onClick={() => void save()} disabled={state === 'saving' || uploads > 0} className="shrink-0 px-3.5">
           {state === 'saving' ? <Spinner /> : 'Save write-up'}
         </Button>
       </header>
@@ -283,16 +175,16 @@ const Editor = ({
 
       <div className="grid min-h-0 flex-1 lg:grid-cols-2">
         <section
-          aria-label="Edit"
+          aria-label="Markdown source"
           className={cn('border-border min-h-0 overflow-y-auto lg:block lg:border-r', pane === 'edit' ? 'block' : 'hidden')}
         >
-          <div className="mx-auto max-w-[44rem] px-5 py-8 md:px-10">
-            {/* Kept mounted in source mode, only hidden, so the rich editor's
-                view is never torn down and re-attached mid-session. */}
-            <EditorContent editor={editor} className={cn('prose-editor writeup', mode !== 'rich' && 'hidden')} />
-            {mode === 'source' ? (
-              <textarea
+          <div className="editor-pane-heading"><Code2 size={14} aria-hidden /> Markdown <span className="ml-auto font-normal normal-case tracking-normal">Plain text</span></div>
+          <div className="px-5 py-6 md:px-8 md:py-8">
+            <textarea
                 ref={source}
+                autoFocus
+                aria-label="Write-up Markdown"
+                disabled={state === 'saving'}
                 value={markdown}
                 onChange={(e) => setMarkdown(e.target.value)}
                 onPaste={(e) => {
@@ -307,24 +199,25 @@ const Editor = ({
                   e.preventDefault()
                   void uploadIntoSource(files)
                 }}
-                spellCheck
+                spellCheck={false}
                 placeholder={PLACEHOLDER}
-                className="text-fg placeholder:text-fg-subtle block min-h-[70vh] w-full resize-none bg-transparent font-mono text-[0.8125rem] leading-[1.7] outline-none"
-              />
-            ) : null}
+                className="text-fg placeholder:text-fg-subtle block min-h-[70vh] w-full resize-none bg-transparent font-mono text-[0.8125rem] leading-[1.85] outline-none [field-sizing:content]"
+            />
           </div>
         </section>
         <section
           aria-label="Preview"
-          className={cn('bg-bg-elevated/60 min-h-0 overflow-y-auto lg:block', pane === 'preview' ? 'block' : 'hidden')}
+          className={cn('bg-bg-elevated/40 min-h-0 overflow-y-auto lg:block', pane === 'preview' ? 'block' : 'hidden')}
         >
-          <div className="mx-auto max-w-[44rem] px-5 py-8 md:px-10">
-            <p className="text-fg-subtle mb-4 text-[0.625rem] font-medium tracking-[0.08em] uppercase">Preview</p>
-            {markdown.trim() ? (
-              <MarkdownView prose="writeup">{markdown}</MarkdownView>
-            ) : (
-              <p className="writeup text-fg-subtle italic">Nothing written yet.</p>
-            )}
+          <div className="editor-pane-heading"><Eye size={14} aria-hidden /> Preview <span className="ml-auto font-normal normal-case tracking-normal">Updates as you type</span></div>
+          <div className="px-4 py-6 md:px-8 md:py-8">
+            <div className="subject-paper mx-auto min-h-[70vh] max-w-[48rem] p-5 md:p-8">
+              {preview.trim() ? (
+                <MarkdownView prose="writeup">{preview}</MarkdownView>
+              ) : (
+                <p className="writeup text-fg-subtle italic">Your write-up will appear here.</p>
+              )}
+            </div>
           </div>
         </section>
       </div>
@@ -342,8 +235,8 @@ const readingLength = (text: string) => {
 
 /**
  * A subject's write-up: the long-form account of it, set as something to be
- * read — Newsreader, a book measure, a margin rule down the left like a
- * notebook page. "Edit" is always visible rather than a hover affordance,
+ * read — Newsreader, a comfortable measure and its own paper face.
+ * "Edit" is always visible rather than a hover affordance,
  * because writing this is the point of the page.
  */
 export const WriteUp = ({
@@ -377,12 +270,13 @@ export const WriteUp = ({
   const length = readingLength(text)
 
   return (
-    <section aria-labelledby="writeup-heading">
-      <div className="mb-3 flex h-7 items-center gap-3">
-        <h2 id="writeup-heading" className="pane-label">
+    <section aria-labelledby="writeup-heading" className="subject-paper overflow-hidden">
+      <div className="border-border flex min-h-16 items-center gap-3 border-b px-5 py-3 md:px-7">
+        <BookOpen size={16} aria-hidden className="text-accent shrink-0" />
+        <h2 id="writeup-heading" className="text-fg text-[0.8125rem] font-medium">
           Write-up
         </h2>
-        {length ? <span className="text-fg-subtle text-[0.6875rem] tabular-nums">{length}</span> : null}
+        {length ? <span className="text-fg-subtle hidden text-[0.6875rem] tabular-nums sm:inline">{length}</span> : null}
         {savedAt ? <span className="enter-rise text-status-done text-[0.6875rem]">saved</span> : null}
         <Button
           variant={text.trim() ? 'secondary' : 'primary'}
@@ -394,11 +288,11 @@ export const WriteUp = ({
           className="ml-auto px-3"
         >
           <PenLine size={13} aria-hidden />
-          {text.trim() ? 'Edit' : 'Start the write-up'}
+          {text.trim() ? 'Edit write-up' : 'Start writing'}
         </Button>
       </div>
 
-      <div id="writeup-body" className="border-border border-l pl-4 md:pl-6">
+      <div id="writeup-body" className="px-5 py-6 md:px-7 md:py-8">
         {text.trim() ? (
           <MarkdownView prose="writeup">{text}</MarkdownView>
         ) : (
@@ -408,9 +302,12 @@ export const WriteUp = ({
               setSeed('')
               setEditing(true)
             }}
-            className="writeup text-fg-subtle hover:text-fg-muted block w-full py-6 text-left italic transition-colors"
+            className="group flex min-h-56 w-full flex-col items-center justify-center gap-3 text-center"
           >
-            Nothing written yet. What is it, why does it matter, and what have we found?
+            <span className="bg-accent-subtle text-accent grid size-12 place-items-center rounded-2xl"><PenLine size={22} aria-hidden /></span>
+            <span className="text-fg font-serif text-[1.375rem]">Every idea starts with a question.</span>
+            <span className="text-fg-muted max-w-[32ch] text-[0.8125rem] leading-relaxed">What is it, why does it matter, and what would settle it?</span>
+            <span className="text-accent mt-1 text-[0.75rem] font-medium group-hover:underline">Start your write-up →</span>
           </button>
         )}
       </div>

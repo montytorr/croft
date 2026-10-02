@@ -826,6 +826,63 @@
    sections with the reading voice between them.
    --------------------------------------------------------------------------- */
 
+/* The subject is a notebook spread: a generous title and separate paper faces. */
+.subject-hero {
+  position: relative;
+  isolation: isolate;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(115deg, var(--surface), var(--bg) 75%);
+}
+.subject-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 0 auto;
+  z-index: -1;
+  width: min(40%, 30rem);
+  pointer-events: none;
+  background: repeating-linear-gradient(115deg, transparent 0 36px, color-mix(in oklab, var(--accent) 5%, transparent) 36px 37px);
+  mask-image: linear-gradient(to right, transparent, black);
+}
+.subject-paper {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.subject-tab {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.25rem;
+  padding: 0 0.75rem;
+  border-radius: 7px;
+  color: var(--fg-muted);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+  transition: background-color var(--dur-1), color var(--dur-1);
+}
+.subject-tab:hover { background: var(--surface-hover); color: var(--fg); }
+.subject-tab[aria-selected='true'] { background: var(--accent-subtle); color: var(--accent); font-weight: 500; }
+.subject-tab[aria-selected='true'] .count { background: color-mix(in oklab, var(--accent) 10%, transparent); color: var(--accent); }
+.editor-pane-heading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0 1.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--fg-subtle);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .writeup {
   font-family: var(--font-serif);
   font-size: 1.0625rem;
@@ -857,6 +914,7 @@
 .writeup h1 { font-size: 1.4rem; margin-top: 1.6em; }
 .writeup h2 { font-size: 1.15rem; margin-top: 1.5em; }
 .writeup h3 { font-size: 0.95rem; margin-top: 1.3em; }
+.writeup > :first-child { margin-top: 0; }
 .writeup code,
 .writeup pre { font-family: var(--font-mono); letter-spacing: 0; }
 .writeup :where(p, li) code { font-size: 0.82em; }

@@ -27,7 +27,7 @@ const ROW =
   'has-[:focus-visible]:bg-surface-hover has-[:focus-visible]:shadow-[inset_2px_0_0_var(--accent)]'
 
 const RowLabel = ({ children }: { children: React.ReactNode }) => (
-  <span className="text-fg-subtle w-[4rem] shrink-0 text-[0.75rem]">{children}</span>
+  <span className="text-fg-subtle w-[3.5rem] shrink-0 text-[0.75rem]">{children}</span>
 )
 
 const Affordance = () => (
@@ -133,7 +133,7 @@ export const SubjectProperties = ({
   const ownerKnown = subject.owner && people.some((p) => p.id === subject.owner?.id)
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="subject-paper flex flex-col gap-5 p-4">
       <section className="flex flex-col gap-px">
         <h2 className={cn(LABEL, 'mb-2')}>Properties</h2>
 

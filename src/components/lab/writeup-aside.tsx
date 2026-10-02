@@ -14,7 +14,7 @@ import { laneOf, type PageTodo } from './todo-lanes'
 const OPEN_ORDER = ['doing', 'in-review', 'todo', 'backlog'] as const
 
 const Heading = ({ children, onMore, more }: { children: React.ReactNode; onMore?: () => void; more?: string }) => (
-  <div className="mb-1.5 flex h-6 items-center gap-2">
+  <div className="mb-3 flex min-h-6 items-center gap-2">
     <h3 className="pane-label">{children}</h3>
     {onMore ? (
       <button type="button" onClick={onMore} className="text-fg-subtle hover:text-fg ml-auto flex items-center gap-1 text-[0.6875rem] transition-colors">
@@ -65,9 +65,9 @@ export const WriteUpAside = ({
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       {outline.length >= 2 ? (
-        <nav aria-label="Outline">
+        <nav aria-label="Outline" className="subject-paper p-4">
           <Heading>Outline</Heading>
           <ol className="border-border flex flex-col border-l">
             {outline.map((entry, i) => (
@@ -88,7 +88,7 @@ export const WriteUpAside = ({
         </nav>
       ) : null}
 
-      <section aria-label="Open todos">
+      <section aria-label="Open todos" className="subject-paper p-4">
         <Heading onMore={() => openTab('todos')} more={todos.length ? `All ${todos.length}` : 'Add one'}>
           Open todos
         </Heading>
@@ -100,10 +100,10 @@ export const WriteUpAside = ({
               <li key={todo.id}>
                 <Link
                   href={`/projects/${TODO_PROJECT_KEY}/tasks/${todo.number}`}
-                  className="row-hover -mx-1.5 flex h-7 items-center gap-2 rounded-md px-1.5"
+                  className="row-hover -mx-1.5 flex min-h-8 items-center gap-2 rounded-md px-1.5 py-1"
                 >
                   <StatusIcon status={laneOf(todo)} size={12} />
-                  <span className="text-fg min-w-0 flex-1 truncate text-[0.75rem]">{todo.title}</span>
+                  <span className="text-fg min-w-0 flex-1 line-clamp-2 text-[0.75rem] leading-snug">{todo.title}</span>
                   {todo.cairn_ref ? <span className="text-fg-subtle font-mono text-[0.625rem]">{todo.cairn_ref}</span> : null}
                 </Link>
               </li>
@@ -115,7 +115,7 @@ export const WriteUpAside = ({
         )}
       </section>
 
-      <section aria-label="Latest notes">
+      <section aria-label="Latest notes" className="subject-paper p-4">
         <Heading onMore={() => openTab('notes')} more={notes.length ? `All ${notes.length}` : 'Write one'}>
           Notes
         </Heading>
