@@ -1,8 +1,8 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
-import { CheckCircle2, CircleDashed, RefreshCw } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { CheckCircle2, CircleDashed, ExternalLink, RefreshCw } from 'lucide-react'
 import { Button, Input } from '@/components/ui/control'
 import { RelativeTime } from '@/components/relative-time'
 import { Spinner } from '@/components/spinner'
@@ -16,8 +16,13 @@ const describeSync = (data: unknown): string => {
   const counts = Object.entries(data as Record<string, unknown>)
     .filter(([, v]) => typeof v === 'number')
     .map(([k, v]) => `${v} ${k.replace(/_/g, ' ')}`)
-  return counts.length ? `Synced — ${counts.join(', ')}.` : 'Synced.'
+  const failures = (data as { failed?: unknown[] }).failed?.length ?? 0
+  return (counts.length ? `Synced — ${counts.join(', ')}.` : 'Synced.') +
+    (failures ? ` ${failures} linked ${failures === 1 ? 'task could' : 'tasks could'} not be read; try again.` : '')
 }
+
+type Pairing = { token: string; verificationUrl: string; interval: number; expiresAt: number }
+type PairingPoll = { status: 'pending' | 'denied' | 'expired' | 'approved'; slowDown?: boolean; connection?: CairnConnection }
 
 /**
  * The link to a Cairn instance, where todos pushed with `croft push` are
@@ -33,9 +38,59 @@ export const CairnSection = ({ connection }: { connection: CairnConnection }) =>
   const [apiKey, setApiKey] = useState('')
   const [saving, setSaving] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [connecting, setConnecting] = useState(false)
+  const [pairing, setPairing] = useState<Pairing | null>(null)
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
 
   const dirty = url.trim() !== (connection.url ?? '') || apiKey.trim() !== ''
+
+  useEffect(() => {
+    if (!pairing) return
+    let stopped = false
+    let timer: ReturnType<typeof setTimeout>
+    let interval = pairing.interval
+    const poll = async () => {
+      if (Date.now() >= pairing.expiresAt) {
+        setPairing(null)
+        setMessage({ tone: 'error', text: 'Pairing expired. Connect again to get a new approval link.' })
+        return
+      }
+      const result = await mutate<PairingPoll>('/api/v1/integrations/cairn/connect/poll', {
+        method: 'POST', body: { token: pairing.token },
+      })
+      if (stopped) return
+      if (!result.ok) {
+        setPairing(null)
+        setMessage({ tone: 'error', text: result.error })
+      } else if (result.data.status === 'pending') {
+        if (result.data.slowDown) interval += 2
+        timer = setTimeout(() => void poll(), interval * 1000)
+      } else {
+        setPairing(null)
+        if (result.data.status === 'approved') {
+          setUrl(result.data.connection?.url ?? url)
+          setApiKey('')
+          setMessage({ tone: 'ok', text: 'Cairn connected. The approved key is stored securely on the server.' })
+          router.refresh()
+        } else {
+          setMessage({ tone: 'error', text: result.data.status === 'denied' ? 'Pairing was declined in Cairn.' : 'Pairing expired. Connect again.' })
+        }
+      }
+    }
+    timer = setTimeout(() => void poll(), interval * 1000)
+    return () => { stopped = true; clearTimeout(timer) }
+  }, [pairing, router, url])
+
+  const connect = async () => {
+    setConnecting(true)
+    setMessage(null)
+    const result = await mutate<Pairing>('/api/v1/integrations/cairn/connect', {
+      method: 'POST', body: { url: url.trim() },
+    })
+    setConnecting(false)
+    if (!result.ok) { setMessage({ tone: 'error', text: result.error }); return }
+    setPairing(result.data)
+  }
 
   const save = async () => {
     setSaving(true)
@@ -63,7 +118,8 @@ export const CairnSection = ({ connection }: { connection: CairnConnection }) =>
       setMessage({ tone: 'error', text: result.error })
       return
     }
-    setMessage({ tone: 'ok', text: describeSync(result.data) })
+    const failures = (result.data as { failed?: unknown[] } | null)?.failed?.length ?? 0
+    setMessage({ tone: failures ? 'error' : 'ok', text: describeSync(result.data) })
     router.refresh()
   }
 
@@ -89,7 +145,7 @@ export const CairnSection = ({ connection }: { connection: CairnConnection }) =>
               {message.text}
             </p>
           ) : null}
-          <Button size="sm" variant="secondary" onClick={() => void sync()} disabled={!ready || syncing || dirty} className="ml-auto px-3" title={dirty ? 'Save the connection first' : undefined}>
+          <Button size="sm" variant="secondary" onClick={() => void sync()} disabled={!ready || syncing || dirty || saving || connecting || Boolean(pairing)} className="ml-auto px-3" title={dirty ? 'Save the connection first' : undefined}>
             {syncing ? <Spinner /> : <RefreshCw size={13} aria-hidden />}
             Sync now
           </Button>
@@ -106,11 +162,26 @@ export const CairnSection = ({ connection }: { connection: CairnConnection }) =>
             placeholder="https://cairn.example.com"
             autoComplete="off"
             spellCheck={false}
+            disabled={saving || connecting || Boolean(pairing)}
           />
         </label>
+        <div className="flex flex-col items-start gap-2">
+          <Button size="sm" variant="primary" onClick={() => void connect()} disabled={!url.trim() || saving || syncing || connecting || Boolean(pairing)} className="px-3">
+            {connecting ? <Spinner /> : <ExternalLink size={13} aria-hidden />}
+            Connect with Cairn
+          </Button>
+          <p className="text-fg-subtle text-[0.75rem]">Approve a Croft key in your Cairn browser session. No copying keys.</p>
+          {pairing ? (
+            <div className="border-border bg-surface-raised flex flex-wrap items-center gap-3 rounded-lg border p-3 text-[0.8125rem]" role="status">
+              <Spinner /> Waiting for your approval.
+              <a href={pairing.verificationUrl} target="_blank" rel="noopener noreferrer" className="text-accent underline underline-offset-4">Approve in Cairn <ExternalLink size={12} className="inline" aria-hidden /></a>
+              <Button size="sm" variant="ghost" onClick={() => setPairing(null)}>Stop waiting</Button>
+            </div>
+          ) : null}
+        </div>
         <label className="flex flex-col gap-1.5">
           <span className="text-fg-muted flex items-center gap-2 text-[0.75rem] font-medium">
-            API key
+            API key (manual alternative)
             {connection.key_set ? (
               <span className="text-status-done inline-flex items-center gap-1 font-normal">
                 <CheckCircle2 size={12} aria-hidden /> a key is set
@@ -128,10 +199,11 @@ export const CairnSection = ({ connection }: { connection: CairnConnection }) =>
             placeholder={connection.key_set ? 'Leave empty to keep the current key' : 'A Cairn API key'}
             autoComplete="new-password"
             spellCheck={false}
+            disabled={saving || connecting || Boolean(pairing)}
           />
         </label>
         <div>
-          <Button size="sm" variant="primary" onClick={() => void save()} disabled={!dirty || saving || !url.trim()} className="px-3">
+          <Button size="sm" variant="secondary" onClick={() => void save()} disabled={!dirty || saving || syncing || connecting || Boolean(pairing) || !url.trim()} className="px-3">
             {saving ? <Spinner /> : 'Save connection'}
           </Button>
         </div>

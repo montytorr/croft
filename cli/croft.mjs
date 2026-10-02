@@ -1054,7 +1054,7 @@ const KNOWN_FLAGS = new Set([
   'file', 'folder', 'force', 'force-empty', 'full', 'help', 'instance', 'json', 'key', 'kind', 'kinds',
   'label', 'limit', 'link', 'maintenance', 'member', 'message', 'mine', 'name', 'no-hooks', 'no-jobs', 'no-parent',
   'no-skill', 'no-start', 'older', 'output', 'owner', 'parent', 'pretty', 'priority', 'project', 'reason',
-  'remote', 'repo', 'resolution', 'runtimes', 'scope', 'session', 'stage', 'start', 'status', 'summary', 'tag',
+  'remote', 'repo', 'resolution', 'runtimes', 'scope', 'server-only', 'session', 'stage', 'start', 'status', 'summary', 'tag',
   'tasks', 'title', 'to', 'type', 'url', 'version', 'visibility',
 ])
 
@@ -2814,6 +2814,7 @@ const HELP = `croft — the lab board: subjects to explore and prove, their todo
     croft push T-41 <sha> [--repo PATH] [--branch NAME] [--remote NAME] [--url URL]
                                    with a sha: records a git push, as commit does
     croft sync                     pull the status of every paired todo back from Cairn
+      --server-only                require the server connection; exit 1 if any task is unread
 
   briefing
     croft context --brief [--cwd D]        the lab in five lines; silent when there is
@@ -4320,6 +4321,7 @@ const commands = {
    * the cairn CLI and its own keys.
    */
   async sync() {
+    const serverOnly = Boolean(flags['server-only'])
     let refusal = null
     let status = 0
     const data = await request('POST', '/api/v1/integrations/cairn/sync', {}, {
@@ -4330,23 +4332,29 @@ const commands = {
       },
     })
     if (data) {
-      if (FORMAT !== 'tsv' || !Array.isArray(data.results)) return emit(data)
+      const unread = Array.isArray(data.failed) ? data.failed.length : 0
+      if (FORMAT !== 'tsv' || !Array.isArray(data.results)) {
+        emit(data)
+        if (unread) process.exitCode = 1
+        return
+      }
       emit(data.results, {
         rows: (d) => d.map((r) => ({ ref: r.ref ?? '', cairn: r.cairnRef ?? r.cairn_ref ?? '', status: r.cairnStatus ?? r.cairn_status ?? '', result: r.result ?? '' })),
         columns: ['ref', 'cairn', 'status', 'result'],
       })
       if (typeof data.checked === 'number') {
-        const unread = Array.isArray(data.failed) ? data.failed.length : 0
         process.stderr.write(
           `${data.checked} checked, ${data.updated ?? 0} changed, ${data.concluded ?? 0} noted, ${data.closed ?? 0} closed` +
             `${unread ? `, ${unread} unread` : ''}\n`,
         )
       }
+      if (unread) process.exitCode = 1
       return
     }
     const notConfigured =
       status === 404 || CAIRN_NOT_CONFIGURED.has(refusal?.code) || /not configured|no cairn connection/i.test(refusal?.error ?? '')
     if (!notConfigured) die(`croft sync: ${refusal?.error ?? 'the server did not answer'}`)
+    if (serverOnly) die(`croft sync: ${refusal?.error ?? 'Cairn is not connected on the server.'}`)
 
     const bin = resolveCairn()
     if (!bin) {

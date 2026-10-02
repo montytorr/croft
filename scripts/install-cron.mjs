@@ -235,6 +235,14 @@ const JOBS = [
     command: [CLI, 'reconcile', ...ALL_INSTANCES],
   },
   {
+    name: 'sync',
+    why: 'Reads linked Cairn statuses back without depending on this machine\'s Cairn CLI.',
+    requires: [CLI],
+    every: 15,
+    env: { CROFT_AGENT: 'maintenance' },
+    command: [CLI, 'sync', '--server-only', ...ALL_INSTANCES],
+  },
+  {
     name: 'agent-files',
     why: 'Repairs the skill, CLI and hooks wherever a runtime reads a stale copy.',
     requires: [SYNC, NODE],
@@ -665,6 +673,10 @@ if (INSTALL && SYNC === DEFAULT_SYNC) place(join(HERE, 'install-cron.mjs'), join
 
 const applicable = JOBS.filter((job) => {
   if (only && !only.includes(job.name)) return false
+  if (job.name === 'sync' && existsSync(CLI) && !readFileSync(CLI, 'utf8').includes("'server-only'")) {
+    console.error(`# skipping sync: ${CLI} predates --server-only; update the CLI first`)
+    return false
+  }
   // An empty requirement is one the environment never named — a job that was
   // not configured rather than one whose file is missing. Reported as itself,
   // because "no  on this machine" reads like a bug in the installer.
