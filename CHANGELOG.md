@@ -8,6 +8,8 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-10-02
+
 ### Fixed
 
 - A deleted subject's number is never handed out again. A new subject took `max(number) + 1`, so deleting the newest subject freed its number and the next one reused it (S-15 was filed twice). Migration 078 numbers subjects from a counter that only goes up, as tasks already are.
@@ -235,7 +237,8 @@ Forked from Cairn v0.12.1 (1ef3556).
 
 - A field notebook: paper and peat grounds, a heather accent, Schibsted Grotesk and Newsreader, and runrig strips for a mark.
 
-[Unreleased]: https://github.com/montytorr/croft/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/montytorr/croft/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/montytorr/croft/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/montytorr/croft/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/montytorr/croft/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/montytorr/croft/compare/v0.4.2...v0.5.0
