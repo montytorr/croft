@@ -1524,6 +1524,22 @@ export const openapiSpec = () => ({
         responses: { '200': okResponse('CairnConnection', cairnConnectionShape), '400': errorResponse, '403': errorResponse },
       },
     },
+    '/integrations/cairn/connect': {
+      post: {
+        summary: 'Start Cairn browser pairing (signed-in administrator only)',
+        description: 'Requests a Croft key from Cairn. Returns a verification URL on that Cairn origin and an encrypted, expiring token bound to the caller. The redeemable device code stays encrypted.',
+        requestBody: body({ type: 'object', required: ['url'], properties: { url: { type: 'string', format: 'uri' } } }),
+        responses: { '200': okResponse('Pairing token, verificationUrl, interval and expiresAt.'), '400': errorResponse, '403': errorResponse, '409': errorResponse },
+      },
+    },
+    '/integrations/cairn/connect/poll': {
+      post: {
+        summary: 'Finish Cairn browser pairing (the initiating signed-in administrator only)',
+        description: 'Polls Cairn using the encrypted token. Pending, denied and expired requests leave the current connection untouched. Approval saves the Croft key sealed at rest and returns only the connection description, never the key.',
+        requestBody: body({ type: 'object', required: ['token'], properties: { token: { type: 'string', maxLength: 5000 } } }),
+        responses: { '200': okResponse('Pairing status and, when approved, CairnConnection.'), '400': errorResponse, '403': errorResponse, '409': errorResponse },
+      },
+    },
     '/integrations/cairn/sync': {
       post: {
         summary: "Pull every pushed todo's status from Cairn",

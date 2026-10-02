@@ -713,7 +713,7 @@ describe('croft sync', () => {
     }
     const base = await serve(() => report, seen)
     const { code, stdout, stderr } = await run(['sync'], base)
-    expect(code).toBe(0)
+    expect(code).toBe(1)
     expect(seen[0]).toMatchObject({ method: 'POST', path: '/api/v1/integrations/cairn/sync' })
     const lines = stdout.trim().split('\n')
     expect(lines[0]).toBe('#3')
@@ -721,6 +721,24 @@ describe('croft sync', () => {
     expect(lines[2]).toBe('T-41\tCAIRN-331\tdone\twas doing · noted · closed')
     expect(lines[4]).toBe('T-43\tCAIRN-333\ttodo\tunread: No task CAIRN-333.')
     expect(stderr).toContain('3 checked, 1 changed, 1 noted, 1 closed, 1 unread')
+  })
+
+  it('reports failed reads in JSON and exits nonzero for scheduled monitoring', async () => {
+    const report = { checked: 1, failed: [{ ref: 'T-1', error: 'unreachable' }], results: [] }
+    const base = await serve(() => report)
+    const result = await run(['sync', '--server-only', '--json'], base)
+    expect(result.code).toBe(1)
+    expect(JSON.parse(result.stdout)).toEqual(report)
+  })
+
+  it('a server-only run never uses local Cairn credentials when disconnected', async () => {
+    const seen: Seen[] = []
+    const base = await serve(() => ({ status: 409, payload: { success: false, error: 'Cairn is not connected.', code: 'cairn_not_configured' } }), seen)
+    const result = await run(['sync', '--server-only'], base)
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain('Cairn is not connected.')
+    expect(result.stderr).not.toContain('syncing through this machine')
+    expect(seen).toHaveLength(1)
   })
 
   it('does not fall back on a refusal that is not "not configured"', async () => {

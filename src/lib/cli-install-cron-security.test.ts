@@ -69,7 +69,7 @@ if [ "$1" = "-l" ]; then cat "$FAKE_CRONTAB"; else cat > "$FAKE_CRONTAB"; fi
   // reconcile requires only the CLI to exist; agent-files requires its sync
   // script and node.
   const cli = join(directory, 'croft')
-  await writeFile(cli, "#!/usr/bin/env node\nconsole.log('all-instances')\n")
+  await writeFile(cli, "#!/usr/bin/env node\nconsole.log('all-instances', 'server-only')\n")
 
   const recorder = join(directory, 'recorder.mjs')
   await writeFile(recorder, RECORDER)
@@ -147,6 +147,38 @@ describe('install-cron.mjs — crontab quoting (F2)', () => {
 })
 
 describe('install-cron.mjs — --only keeps other jobs (F3)', () => {
+  it('installs server sync as maintenance and preserves it across later scoped installs', async () => {
+    const { crontabFile, environment, recorded } = await setUp()
+    await writeFile(environment.CROFT_CLI_PATH, `#!/usr/bin/env node
+// 'all-instances', 'server-only'
+import { writeFileSync } from 'node:fs'
+writeFileSync(process.env.RECORD, JSON.stringify({ args: process.argv.slice(2), agent: process.env.CROFT_AGENT }))
+`)
+    await chmod(environment.CROFT_CLI_PATH, 0o755)
+    expect((await run(['--install', '--only', 'reconcile,sync', '--cron'], environment)).code).toBe(0)
+    const before = await readFile(crontabFile, 'utf8')
+    expect(before).toContain("*/15 * * * * CROFT_AGENT='maintenance'")
+    expect(before).toContain("'sync' '--server-only' '--all-instances'")
+    expect((await run(['--install', '--only', 'agent-files', '--cron'], environment)).code).toBe(0)
+    const after = await readFile(crontabFile, 'utf8')
+    expect(after.match(/# sync:/g)).toHaveLength(1)
+    expect(after).toContain('someone-elses-backup')
+    expect((await run(['--run', 'sync', '--cron'], environment)).code).toBe(0)
+    expect(JSON.parse(await readFile(recorded, 'utf8'))).toEqual({ args: ['sync', '--server-only', '--all-instances'], agent: 'maintenance' })
+    expect((await run(['--remove', '--only', 'sync', '--cron'], environment)).code).toBe(0)
+    const removed = await readFile(crontabFile, 'utf8')
+    expect(removed).not.toContain('# sync:')
+    expect(removed).toContain('# reconcile:')
+  })
+
+  it('does not schedule sync against a CLI that predates server-only', async () => {
+    const { environment, crontabFile } = await setUp()
+    await writeFile(environment.CROFT_CLI_PATH, "#!/usr/bin/env node\nconsole.log('all-instances')\n")
+    const result = await run(['--install', '--only', 'sync', '--cron'], environment)
+    expect(result.stderr).toContain('predates --server-only')
+    expect(await readFile(crontabFile, 'utf8')).not.toContain('# sync:')
+  })
+
   it('keeps reconcile when a later --only agent-files run re-renders just that job', async () => {
     const { crontabFile, environment } = await setUp()
 
