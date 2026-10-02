@@ -8,6 +8,10 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+### Fixed
+
+- A deleted subject's number is never handed out again. A new subject took `max(number) + 1`, so deleting the newest subject freed its number and the next one reused it (S-15 was filed twice). Migration 078 numbers subjects from a counter that only goes up, as tasks already are.
+
 ## [0.6.0] — 2026-10-02
 
 ### Added
