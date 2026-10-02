@@ -8,6 +8,8 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-10-02
+
 ### Added
 
 - Delete a subject: `DELETE /api/v1/subjects/{ref}?confirm=S-n`, `croft subject delete S-n --confirm S-n`, and a "Delete subject" action on the subject page that asks for the ref to be typed. It removes the subject with its todos, sub-todos, log, notes and stored files; Cairn tasks pushed from its todos stay in Cairn. The owner may delete their subject; an administrator only one in the lab.
@@ -229,7 +231,8 @@ Forked from Cairn v0.12.1 (1ef3556).
 
 - A field notebook: paper and peat grounds, a heather accent, Schibsted Grotesk and Newsreader, and runrig strips for a mark.
 
-[Unreleased]: https://github.com/montytorr/croft/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/montytorr/croft/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/montytorr/croft/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/montytorr/croft/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/montytorr/croft/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/montytorr/croft/compare/v0.4.1...v0.4.2
