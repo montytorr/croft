@@ -16,6 +16,8 @@ import {
   type SubjectVisibility,
   type Tag,
 } from '@/lib/lab/types'
+import { removeAttachments } from '@/lib/attachments'
+import { canDeleteSubject } from '@/lib/lab/ui-subject-delete'
 import { createTaskSchema } from '@/schemas/task'
 import type { Actor } from './auth'
 import {
@@ -683,6 +685,73 @@ export const publishSubject = async (actor: Actor, subject: Subject): Promise<Ou
   subject.visibility === 'lab'
     ? { ok: false, response: alreadyPublished(subject) }
     : updateSubject(actor, subject, { visibility: 'lab' })
+
+export type DeletedSubject = {
+  deleted: true
+  ref: string
+  id: string
+  todosDeleted: number
+  attachmentsRemoved: number
+}
+
+/** The refusal for a caller who may not delete `subject`, or null. */
+export const refuseSubjectDelete = (subject: Subject, viewer: { userId: string; role: string }) =>
+  canDeleteSubject(subject, viewer)
+    ? null
+    : fail(
+        'forbidden',
+        subject.visibility === 'lab'
+          ? `Only the owner of ${subject.ref} or an administrator can delete it.`
+          : `Only the owner of ${subject.ref} can delete it (it is ${subject.visibility}).`,
+      )
+
+/**
+ * Deletes a subject for good: its todos (and their sub-todos), work log,
+ * human notes, files, tags and members. A Cairn task pushed from one of its
+ * todos is Cairn's, and stays.
+ *
+ * Every todo goes with it, never detached: a todo without a subject is
+ * visible to everyone (076), so detaching would publish a private subject's
+ * todos. Stored objects go before the rows, as for a single file, and under
+ * the row locks so no new file can land on a todo meanwhile. Activity events
+ * stay, stamped with a subject that no longer exists: the feed hides them.
+ */
+export const deleteSubject = async (actor: Actor, subject: Subject): Promise<Outcome<DeletedSubject>> => {
+  const refused = refuseSubjectDelete(subject, actor)
+  if (refused) return { ok: false, response: refused }
+
+  return transaction(async (client) => {
+    if (!(await stillAsRead(client, subject))) return { ok: false as const, response: changedMeanwhile(subject) }
+
+    const { rows: todos } = await client.query<{ id: string }>(
+      `with recursive tree as (
+         select id from tasks where subject_id = $1
+         union
+         select t.id from tasks t join tree on t.parent_id = tree.id
+       )
+       select t.id from tasks t join tree using (id) for update of t`,
+      [subject.id],
+    )
+    const todoIds = todos.map((t) => t.id)
+
+    const { rows: files } = await client.query<{ storage_path: string }>(
+      `select storage_path from subject_attachments where subject_id = $1
+       union all
+       select storage_path from task_attachments where task_id = any($2::uuid[])`,
+      [subject.id, todoIds],
+    )
+    const paths = files.map((f) => f.storage_path)
+    if (paths.length > 0) await removeAttachments(paths)
+
+    await client.query('delete from tasks where id = any($1::uuid[])', [todoIds])
+    await client.query('delete from subjects where id = $1', [subject.id])
+
+    return {
+      ok: true as const,
+      value: { deleted: true as const, ref: subject.ref, id: subject.id, todosDeleted: todoIds.length, attachmentsRemoved: paths.length },
+    }
+  })
+}
 
 /**
  * Shares a subject with one more person. Sharing a private subject makes it a

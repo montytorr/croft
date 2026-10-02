@@ -46,6 +46,8 @@ the rest without claiming them: note, stage, close what you can.
 - **A fact that expires** ("the beta API is down today") — a note, or nothing.
 - **Narrating your bookkeeping** — the log is for the next person, not a progress bar.
 
+A subject filed by mistake is deleted (`croft subject delete S-n --confirm S-n`). One that was explored and dropped is not: it keeps its record in a dropped stage with a conclusion, which is the answer the next agent needs.
+
 ---
 
 ## Refs
@@ -66,6 +68,7 @@ croft subject add "<title>" [--stage S] [--tag a,b] [--project P] [--owner me] [
 croft subject edit S-12 [--title "T"] [--body -] [--project P|none]
 croft subject share S-12 +mael -sam [--visibility members|private]
 croft subject publish S-12 --confirm S-12   # private/members -> lab, ONE-WAY
+croft subject delete S-12 --confirm S-12    # for good, with its todos and files (owner; admin in the lab)
 croft subject stage S-12 "<stage>" [--conclusion -|"text"]
 croft subject note S-12 "<text>"|- [--kind finding|decision|attempt|note|handoff]
 croft subject tag S-12 +vector -later     # add and remove tags
