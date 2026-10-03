@@ -47,13 +47,6 @@ export const needsResolution = (from: string, to: TaskStatus) => isTerminal(to) 
 /** A pushed todo lives in Cairn: its status is Cairn's, and nothing here moves it. */
 export const isPushed = (todo: Pick<SubjectTodo, 'cairn_ref'>) => Boolean(todo.cairn_ref)
 
-/** `CAIRN-331` at `https://cairn.example.com` → its task page there, or null when either is unknown. */
-export const cairnTaskUrl = (base: string | null | undefined, ref: string | null | undefined) => {
-  const match = ref ? /^([A-Za-z][A-Za-z0-9]*)-(\d+)$/.exec(ref) : null
-  if (!base || !match) return null
-  return `${base.replace(/\/+$/, '')}/projects/${match[1]!.toUpperCase()}/tasks/${match[2]}`
-}
-
 export const counts = (todos: Pick<SubjectTodo, 'status'>[]) => {
   const done = todos.filter((t) => t.status === 'done').length
   const cancelled = todos.filter((t) => t.status === 'cancelled').length

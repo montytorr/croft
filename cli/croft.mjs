@@ -1054,7 +1054,7 @@ const KNOWN_FLAGS = new Set([
   'file', 'folder', 'force', 'force-empty', 'full', 'help', 'instance', 'json', 'key', 'kind', 'kinds',
   'label', 'limit', 'link', 'maintenance', 'member', 'message', 'mine', 'name', 'no-hooks', 'no-jobs', 'no-parent',
   'no-skill', 'no-start', 'older', 'output', 'owner', 'parent', 'pretty', 'priority', 'project', 'reason',
-  'remote', 'repo', 'resolution', 'runtimes', 'scope', 'server-only', 'session', 'stage', 'start', 'status', 'summary', 'tag',
+  'remote', 'repo', 'resolution', 'runtimes', 'scope', 'session', 'stage', 'start', 'status', 'summary', 'tag',
   'tasks', 'title', 'to', 'type', 'url', 'version', 'visibility',
 ])
 
@@ -2662,8 +2662,6 @@ const linkedTodos = async () => {
   return todos.flatMap((list) => asList(list, 'todos')).filter((t) => t.cairn_ref)
 }
 
-/** The server's code for "no Cairn connection": `croft sync` then goes through this machine's cairn CLI. */
-const CAIRN_NOT_CONFIGURED = new Set(['cairn_not_configured'])
 /** Done and cancelled, in Croft and in Cairn alike. */
 const TERMINAL = new Set(['done', 'cancelled'])
 
@@ -2814,7 +2812,6 @@ const HELP = `croft — the lab board: subjects to explore and prove, their todo
     croft push T-41 <sha> [--repo PATH] [--branch NAME] [--remote NAME] [--url URL]
                                    with a sha: records a git push, as commit does
     croft sync                     pull the status of every paired todo back from Cairn
-      --server-only                require the server connection; exit 1 if any task is unread
 
   briefing
     croft context --brief [--cwd D]        the lab in five lines; silent when there is
@@ -4315,52 +4312,10 @@ const commands = {
     )
   },
 
-  /**
-   * Pull the status of every paired todo back from Cairn. The server does it
-   * when an admin has connected Cairn; otherwise this machine does, through
-   * the cairn CLI and its own keys.
-   */
+  /** Pull linked todo statuses through this machine's Cairn CLI and credentials. */
   async sync() {
-    const serverOnly = Boolean(flags['server-only'])
-    let refusal = null
-    let status = 0
-    const data = await request('POST', '/api/v1/integrations/cairn/sync', {}, {
-      soft: true,
-      onError: (payload, code) => {
-        refusal = payload
-        status = code
-      },
-    })
-    if (data) {
-      const unread = Array.isArray(data.failed) ? data.failed.length : 0
-      if (FORMAT !== 'tsv' || !Array.isArray(data.results)) {
-        emit(data)
-        if (unread) process.exitCode = 1
-        return
-      }
-      emit(data.results, {
-        rows: (d) => d.map((r) => ({ ref: r.ref ?? '', cairn: r.cairnRef ?? r.cairn_ref ?? '', status: r.cairnStatus ?? r.cairn_status ?? '', result: r.result ?? '' })),
-        columns: ['ref', 'cairn', 'status', 'result'],
-      })
-      if (typeof data.checked === 'number') {
-        process.stderr.write(
-          `${data.checked} checked, ${data.updated ?? 0} changed, ${data.concluded ?? 0} noted, ${data.closed ?? 0} closed` +
-            `${unread ? `, ${unread} unread` : ''}\n`,
-        )
-      }
-      if (unread) process.exitCode = 1
-      return
-    }
-    const notConfigured =
-      status === 404 || CAIRN_NOT_CONFIGURED.has(refusal?.code) || /not configured|no cairn connection/i.test(refusal?.error ?? '')
-    if (!notConfigured) die(`croft sync: ${refusal?.error ?? 'the server did not answer'}`)
-    if (serverOnly) die(`croft sync: ${refusal?.error ?? 'Cairn is not connected on the server.'}`)
-
     const bin = resolveCairn()
-    if (!bin) {
-      die('the server has no Cairn connection (an admin can add one in Settings), and this machine has no cairn CLI to sync through')
-    }
-    process.stderr.write('the server has no Cairn connection; syncing through this machine\'s cairn CLI\n')
+    if (!bin) die("croft sync needs this machine's Cairn CLI. Install it with `cairn setup --url <your Cairn>`, or set CROFT_CAIRN_BIN.")
     const rows = []
     for (const todo of await linkedTodos()) {
       const run = runCairn(bin, ['show', todo.cairn_ref, '--json'])
@@ -4385,7 +4340,7 @@ const commands = {
         continue
       }
       const link = { cairnRef: todo.cairn_ref, cairnStatus }
-      // What the server's sync would have written: `CAIRN-331 done: <resolution>`.
+      // The subject's outcome note: `CAIRN-331 done: <resolution>`.
       if (ended && cairnTask.resolution) link.cairnResolution = String(cairnTask.resolution)
       if (ended && (cairnTask.resolution_kind ?? cairnTask.resolutionKind)) {
         link.cairnResolutionKind = String(cairnTask.resolution_kind ?? cairnTask.resolutionKind)

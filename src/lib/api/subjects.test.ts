@@ -5,7 +5,6 @@ import {
   cairnOutcomeNote,
   closedInCairnKind,
   closedInCairnResolution,
-  describeConnection,
 } from './cairn-link'
 import { parseRef } from './tasks'
 import { parseSubjectRef, subjectRef, isConcluding } from '@/lib/lab/types'
@@ -128,10 +127,5 @@ describe('cairn', () => {
     expect(closedInCairnKind(null)).toBe('verified')
   })
 
-  it('never describes the key, only whether one is set', () => {
-    const described = describeConnection({ url: 'https://cairn.example', api_key: 'sk_live_secret', last_synced_at: null })
-    expect(described).toEqual({ url: 'https://cairn.example', key_set: true, last_synced_at: null })
-    expect(JSON.stringify(described)).not.toContain('sk_live_secret')
-    expect(describeConnection(null)).toEqual({ url: null, key_set: false, last_synced_at: null })
-  })
+
 })

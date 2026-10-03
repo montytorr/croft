@@ -156,12 +156,12 @@ What this does **not** hide, by design:
 
 ## Running it safely
 
-- Keep `DATABASE_URL`, `CROFT_ATTACHMENT_SIGNING_KEY`, `CROFT_SECRET_KEY` and `RESEND_API_KEY`
+- Keep `DATABASE_URL`, `CROFT_ATTACHMENT_SIGNING_KEY` and `RESEND_API_KEY`
   server-side. A send-only (restricted) Resend key is enough: Croft only ever posts to `/emails`.
   `.env*` is gitignored except `.env.example`, and CI runs a secret scan on every push.
-- The Cairn API key an administrator stores for push and sync is sealed with AES-256-GCM
-  under `CROFT_SECRET_KEY` (derived from the signing key when unset) and never returned by
-  the API. Rotating whichever key seals it makes it unreadable: store it again afterwards.
+- Cairn handoff and sync use the agent machine's Cairn CLI and credentials. Croft stores
+  no shared Cairn key and makes no server-side requests to Cairn. The agent reports linked
+  task statuses through the same Croft visibility checks as other todo writes.
 - The session briefing (`croft context --brief`) sends no working directory: the server
   never used it. `croft context` sends the working directory and the git remote, and every
   request carries the hostname, so a shared instance learns how every member's machine is

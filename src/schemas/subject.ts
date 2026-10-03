@@ -197,19 +197,6 @@ export const updateLabProjectSchema = z
   .partial()
   .refine((value) => Object.keys(value).length > 0, 'Send at least one field to change.')
 
-export const cairnConnectionSchema = z.object({
-  /** Where the Cairn instance is served. `null` disconnects. */
-  url: z
-    .string()
-    .trim()
-    .url()
-    .regex(/^https?:\/\//, 'Use an http(s) URL.')
-    .transform((v) => v.replace(/\/+$/, ''))
-    .nullable(),
-  /** Omitted keeps the stored key; `null` clears it. */
-  apiKey: z.string().trim().min(8).max(500).nullable().optional(),
-})
-
 /** Cairn's own ref shape: a key of two to ten characters. */
 export const CAIRN_REF = /^[A-Z][A-Z0-9]{1,9}-\d{1,6}$/
 

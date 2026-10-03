@@ -34,7 +34,8 @@ Croft works on its own. When the same machine also runs Cairn, the two pair:
   Croft. Changing a repository for real goes in Cairn.
 - **Todos move across.** `croft push T-41 --to KEY` creates the Cairn task, labelled
   `croft:T-41`. From then on Cairn owns its status and Croft mirrors it read-only. When the Cairn
-  task closes, its resolution is written into the subject's log.
+  task closes, running `croft sync` through the agent machine's Cairn CLI writes its resolution
+  into the subject's log. Croft stores no shared Cairn credential.
 
 ## Running it locally
 
@@ -54,7 +55,6 @@ npm run dev
 | --- | --- |
 | `DATABASE_URL` | PostgreSQL connection string, for the app and `npm run db:migrate`. Required. |
 | `CROFT_ATTACHMENT_SIGNING_KEY` | Signs the short-lived attachment URLs. Required. |
-| `CROFT_SECRET_KEY` | 32 bytes (64 hex characters, or base64). Encrypts the Cairn API key the server stores for push and sync. Unset, it is derived from the signing key, and rotating that key then makes the stored Cairn key unreadable. |
 | `CROFT_OPERATOR_EMAIL`, `_PASSWORD`, `_NAME` | The administrator `npm run operator:create` creates or updates. |
 | `CROFT_BASE_URL` | The instance's public URL. Builds the links in password reset emails. |
 | `RESEND_API_KEY`, `CROFT_MAIL_FROM` | Email through [Resend](https://resend.com), for password reset links (`CROFT_MAIL_FROM` e.g. `Croft <noreply@croft.example.com>`). Unset, nobody can be sent a reset link from the web; an operator on the host runs `node scripts/reset-password.mjs <email>`, which prints a one-time link. |
@@ -107,34 +107,6 @@ croft context --brief                           # the lab in five lines
 
 `croft --help` lists every verb; [`AGENTS.md`](./AGENTS.md) is how agents are expected to
 use them, and [`docs/openclaw.md`](./docs/openclaw.md) covers OpenClaw.
-
-### Cairn connection and scheduled maintenance
-
-An administrator connects the server in **Settings → Cairn connection**: enter the Cairn
-URL, choose **Connect with Cairn**, then open **Approve in Cairn**. Approve the `croft`
-key there and leave the Croft settings tab open until it confirms the connection.
-The key stays on the server, encrypted at rest. A manually issued key can still be entered
-instead. **Sync now** checks the linked todos the caller can see; completed Cairn tasks
-close their Croft todos and leave one outcome in the subject log. Private subjects keep
-their existing visibility restrictions.
-
-For an unattended server, pair an administrator's `maintenance` key through
-`croft setup --maintenance` before installing jobs. The installer can schedule reconciliation every
-30 minutes and server sync every 15 minutes:
-
-```bash
-node scripts/install-cron.mjs --only reconcile,sync             # review the schedule
-node scripts/install-cron.mjs --install --only reconcile,sync   # activate it
-node scripts/install-cron.mjs --run sync                        # run the installed job now
-node scripts/install-cron.mjs --remove --only reconcile,sync    # undo
-```
-
-On Linux, jobs live in the user's managed crontab and write to `/var/log/croft-reconcile.log`
-and `/var/log/croft-sync.log`; use `CROFT_LOG_DIR` for a user-writable location. Existing
-backup and agent-file jobs are preserved. `sync` requires a current CLI and uses
-`--server-only`, so a missing server connection fails without using machine-local Cairn
-credentials. Any unread linked task in a server sync makes the CLI exit nonzero while retaining the full
-report. Ordinary `croft sync` still supports the local CLI fallback.
 
 ## Licence
 

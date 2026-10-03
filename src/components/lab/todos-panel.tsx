@@ -17,7 +17,7 @@ import { TODO_PROJECT_KEY, type SubjectTodo } from '@/lib/lab/types'
 import { TASK_STATUSES, type ResolutionKind, type TaskStatus } from '@/schemas/task'
 import { cn } from '@/lib/utils'
 import {
-  STATUS_LABEL, boardLanes, cairnTaskUrl, counts, isPushed, laneOf, listGroups, needsResolution, type PageTodo,
+  STATUS_LABEL, boardLanes, counts, isPushed, laneOf, listGroups, needsResolution, type PageTodo,
 } from './todo-lanes'
 
 export type TodoView = 'list' | 'board'
@@ -25,14 +25,12 @@ export type TodoView = 'list' | 'board'
 const todoHref = (todo: PageTodo) => `/projects/${TODO_PROJECT_KEY}/tasks/${todo.number}`
 
 /**
- * Where a pushed todo's work is being done: `↗ CAIRN-331 · doing`, linked to
- * it in Cairn when the connection is known. The status is as of the last
- * sync, which is why it stays in the subtle ink rather than borrowing a
+ * Where a pushed todo's work is being done: `↗ CAIRN-331 · doing`, shown as
+ * a reference. The status is as of the last sync, which is why it stays in the subtle ink rather than borrowing a
  * status colour it may no longer have.
  */
-const CairnBadge = ({ todo, cairnUrl }: { todo: PageTodo; cairnUrl: string | null }) => {
+const CairnBadge = ({ todo }: { todo: PageTodo }) => {
   if (!todo.cairn_ref) return null
-  const href = cairnTaskUrl(cairnUrl, todo.cairn_ref)
   const body = (
     <>
       <ArrowUpRight size={10} aria-hidden />
@@ -43,11 +41,7 @@ const CairnBadge = ({ todo, cairnUrl }: { todo: PageTodo; cairnUrl: string | nul
   const className =
     'border-border text-fg-muted relative z-10 inline-flex h-[1.125rem] shrink-0 items-center gap-1 rounded border px-1.5 font-mono text-[0.625rem]'
   const title = `In Cairn as ${todo.cairn_ref}${todo.cairn_status ? `, ${todo.cairn_status} at the last sync` : ''}. It moves there, not here.`
-  return href ? (
-    <a href={href} target="_blank" rel="noreferrer" title={title} className={cn(className, 'hover:border-border-strong hover:text-fg transition-colors')}>
-      {body}
-    </a>
-  ) : (
+  return (
     <span title={title} className={className}>
       {body}
     </span>
@@ -93,14 +87,14 @@ const StatusControl = ({ todo, onChange }: { todo: PageTodo; onChange: (status: 
 const closedTitle = (status: string) =>
   status === 'done' || status === 'cancelled' ? 'text-fg-subtle line-through decoration-fg-subtle/40' : 'text-fg'
 
-const TodoRow = ({ todo, cairnUrl, onStatus }: { todo: PageTodo; cairnUrl: string | null; onStatus: (todo: PageTodo, s: TaskStatus) => void }) => (
+const TodoRow = ({ todo, onStatus }: { todo: PageTodo; onStatus: (todo: PageTodo, s: TaskStatus) => void }) => (
   <li className="group/row row-hover relative flex h-[1.875rem] items-center gap-2 rounded-md px-2">
     <StatusControl todo={todo} onChange={(s) => onStatus(todo, s)} />
     <Link href={todoHref(todo)} className="min-w-0 flex-1 truncate text-[0.8125rem] after:absolute after:inset-0">
       <span className={closedTitle(todo.status)}>{todo.title}</span>
     </Link>
     {todo.claimed_by ? <span className="hidden max-w-[10rem] sm:flex"><HeldBy agent={todo.claimed_by} /></span> : null}
-    <CairnBadge todo={todo} cairnUrl={cairnUrl} />
+    <CairnBadge todo={todo} />
     {todo.assignee ? (
       <span title={todo.assignee.name} className="hidden shrink-0 sm:block">
         <Avatar name={todo.assignee.name} size={16} />
@@ -111,7 +105,7 @@ const TodoRow = ({ todo, cairnUrl, onStatus }: { todo: PageTodo; cairnUrl: strin
   </li>
 )
 
-const TodoCard = ({ todo, cairnUrl, lifted }: { todo: PageTodo; cairnUrl: string | null; lifted?: boolean }) => (
+const TodoCard = ({ todo, lifted }: { todo: PageTodo; lifted?: boolean }) => (
   <div
     className={cn(
       'bg-surface border-border group/card relative flex flex-col gap-1.5 rounded-md border px-2.5 py-2',
@@ -126,7 +120,7 @@ const TodoCard = ({ todo, cairnUrl, lifted }: { todo: PageTodo; cairnUrl: string
     <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
       <span className="text-fg-subtle font-mono text-[0.625rem]">{todo.ref}</span>
       {todo.claimed_by ? <HeldBy agent={todo.claimed_by} /> : null}
-      <CairnBadge todo={todo} cairnUrl={cairnUrl} />
+      <CairnBadge todo={todo} />
       {todo.assignee ? (
         <span title={todo.assignee.name} className="ml-auto shrink-0">
           <Avatar name={todo.assignee.name} size={16} />
@@ -136,7 +130,7 @@ const TodoCard = ({ todo, cairnUrl, lifted }: { todo: PageTodo; cairnUrl: string
   </div>
 )
 
-const DraggableCard = ({ todo, cairnUrl }: { todo: PageTodo; cairnUrl: string | null }) => {
+const DraggableCard = ({ todo }: { todo: PageTodo }) => {
   const pushed = isPushed(todo)
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: todo.id, disabled: pushed })
   return (
@@ -147,12 +141,12 @@ const DraggableCard = ({ todo, cairnUrl }: { todo: PageTodo; cairnUrl: string | 
       className={cn('rounded-md', !pushed && 'cursor-grab', isDragging && 'opacity-40')}
       title={pushed ? 'Pushed to Cairn: its status moves there.' : undefined}
     >
-      <TodoCard todo={todo} cairnUrl={cairnUrl} />
+      <TodoCard todo={todo} />
     </div>
   )
 }
 
-const Lane = ({ status, todos, cairnUrl }: { status: TaskStatus; todos: PageTodo[]; cairnUrl: string | null }) => {
+const Lane = ({ status, todos }: { status: TaskStatus; todos: PageTodo[] }) => {
   const { setNodeRef, isOver } = useDroppable({ id: status })
   return (
     <section
@@ -177,7 +171,7 @@ const Lane = ({ status, todos, cairnUrl }: { status: TaskStatus; todos: PageTodo
             {isOver ? 'Drop here' : 'Nothing here'}
           </p>
         ) : (
-          todos.map((todo) => <DraggableCard key={todo.id} todo={todo} cairnUrl={cairnUrl} />)
+          todos.map((todo) => <DraggableCard key={todo.id} todo={todo} />)
         )}
       </div>
     </section>
@@ -203,12 +197,10 @@ const laneUnderPointer: CollisionDetection = (args) => {
 export const TodosPanel = ({
   subjectRef,
   todos: initial,
-  cairnUrl = null,
   initialView = 'list',
 }: {
   subjectRef: string
   todos: PageTodo[]
-  cairnUrl?: string | null
   initialView?: TodoView
 }) => {
   const router = useRouter()
@@ -382,7 +374,7 @@ export const TodosPanel = ({
                 </h3>
                 <ul className="flex flex-col">
                   {group.todos.map((todo) => (
-                    <TodoRow key={todo.id} todo={todo} cairnUrl={cairnUrl} onStatus={changeStatus} />
+                    <TodoRow key={todo.id} todo={todo} onStatus={changeStatus} />
                   ))}
                 </ul>
               </section>
@@ -404,11 +396,11 @@ export const TodosPanel = ({
               style={{ gridTemplateColumns: `repeat(${lanes.length}, minmax(13.5rem, 1fr))` }}
             >
               {lanes.map((status) => (
-                <Lane key={status} status={status} todos={todos.filter((t) => laneOf(t) === status)} cairnUrl={cairnUrl} />
+                <Lane key={status} status={status} todos={todos.filter((t) => laneOf(t) === status)} />
               ))}
             </div>
           </div>
-          <DragOverlay>{dragging ? <TodoCard todo={dragging} cairnUrl={cairnUrl} lifted /> : null}</DragOverlay>
+          <DragOverlay>{dragging ? <TodoCard todo={dragging} lifted /> : null}</DragOverlay>
         </DndContext>
       )}
 

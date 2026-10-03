@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
@@ -24,8 +24,6 @@ import { GET as briefRoute } from '@/app/api/v1/subjects/brief/route'
 import { POST as createStageRoute } from '@/app/api/v1/stages/route'
 import { DELETE as deleteStageRoute } from '@/app/api/v1/stages/[id]/route'
 import { POST as createTagRoute } from '@/app/api/v1/tags/route'
-import { GET as cairnGetRoute, PUT as cairnPutRoute } from '@/app/api/v1/integrations/cairn/route'
-import { POST as cairnSyncRoute } from '@/app/api/v1/integrations/cairn/sync/route'
 import { POST as cairnLinkRoute } from '@/app/api/v1/tasks/[ref]/cairn-link/route'
 import { GET as showTaskRoute } from '@/app/api/v1/tasks/[ref]/route'
 import { GET as searchRoute } from '@/app/api/v1/search/route'
@@ -39,8 +37,6 @@ import { listLabProjects } from '@/lib/lab/data'
 import { getTask } from '@/lib/data'
 
 const databaseUrl = process.env.DATABASE_URL
-// The Cairn key is sealed at rest; any 32-byte key will do for a run.
-process.env.CROFT_SECRET_KEY ??= randomBytes(32).toString('hex')
 if (!databaseUrl) throw new Error('DATABASE_URL is required for integration tests')
 
 const ORIGIN = 'https://croft.example.test'
@@ -80,7 +76,6 @@ const call = async <P extends Record<string, string>>(
 }
 
 let todoProjectExisted = false
-let savedConnection: Record<string, unknown> | null = null
 const subjectIds: string[] = []
 const tagIds: string[] = []
 const stageIds: string[] = []
@@ -96,7 +91,6 @@ beforeAll(async () => {
     ])
   }
   todoProjectExisted = (await pool().query(`select 1 from projects where key = 'T'`)).rowCount === 1
-  savedConnection = (await pool().query('select * from cairn_connection where id')).rows[0] ?? null
 })
 
 afterAll(async () => {
@@ -113,15 +107,6 @@ afterAll(async () => {
   if (stageIds.length) await pool().query('delete from subject_stages where id = any($1::uuid[])', [stageIds])
   if (!todoProjectExisted) {
     await pool().query(`delete from projects where key = 'T' and owner_user_id = any($1::uuid[])`, [[adminId, memberId]])
-  }
-  await pool().query('delete from cairn_connection where id')
-  if (savedConnection) {
-    const c = savedConnection
-    await pool().query(
-      `insert into cairn_connection (id, url, api_key, api_key_plaintext, last_synced_at, updated_at, updated_by)
-       values (true,$1,$2,$3,$4,$5,$6)`,
-      [c.url, c.api_key, c.api_key_plaintext ?? false, c.last_synced_at, c.updated_at, c.updated_by],
-    )
   }
   await pool().query('delete from app_users where id = any($1::uuid[])', [[adminId, memberId]])
   await pool().end()
@@ -278,13 +263,6 @@ describe('the lab board', () => {
     stageIds.pop()
   })
 
-  it('refuses a server sync with cairn_not_configured when no Cairn is connected', async () => {
-    await pool().query('delete from cairn_connection where id')
-    const refused = await call(cairnSyncRoute, 'POST', '/integrations/cairn/sync')
-    expect(refused.status).toBe(409)
-    expect(refused.json).toMatchObject({ success: false, code: 'cairn_not_configured', reason: 'not_connected' })
-  })
-
   it('shows a todo with its subject and Cairn pairing, and lists them per row', async () => {
     const shown = await call(showTaskRoute, 'GET', `/tasks/${todoRef}`, { ref: todoRef })
     expect(shown.json.data.subject).toEqual({
@@ -312,59 +290,19 @@ describe('the lab board', () => {
 
   it('links a todo to Cairn and writes the outcome to the log exactly once', async () => {
     auth.actor = actorFor(adminId, 'admin', 'agent')
-    const agentPut = await call(cairnPutRoute, 'PUT', '/integrations/cairn', {}, { url: 'https://cairn.example', apiKey: 'sk_test_12345678' })
-    expect(agentPut.status).toBe(403)
-
-    auth.actor = actorFor(adminId, 'admin')
-    const put = await call(cairnPutRoute, 'PUT', '/integrations/cairn', {}, { url: 'https://cairn.example/', apiKey: 'sk_test_12345678' })
-    expect(put.json.data).toEqual({ url: 'https://cairn.example', key_set: true, last_synced_at: null })
-    expect(JSON.stringify((await call(cairnGetRoute, 'GET', '/integrations/cairn')).json)).not.toContain('sk_test')
-    // Sealed at rest (073), not stored as typed.
-    const stored = (await pool().query('select api_key, api_key_plaintext from cairn_connection where id')).rows[0]
-    expect(stored.api_key).toMatch(/^v1:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+$/)
-    expect(stored.api_key).not.toContain('sk_test')
-    expect(stored.api_key_plaintext).toBe(false)
-
     const cairnRef = `CAIRN-${100_000 + Math.floor(Math.random() * 900_000)}`
     const linked = await call(cairnLinkRoute, 'POST', `/tasks/${todoRef}/cairn-link`, { ref: todoRef }, { cairnRef, cairnStatus: 'todo' })
     expect(linked.status).toBe(200)
     expect(linked.json.data).toMatchObject({ ref: todoRef, cairn_ref: cairnRef, cairn_status: 'todo' })
 
-    const requests: { url: string; auth: string | null }[] = []
-    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
-      requests.push({ url, auth: new Headers(init.headers).get('authorization') })
-      if (!url.endsWith(`/api/v1/tasks/${cairnRef}`)) {
-        return new Response(JSON.stringify({ success: false, error: 'No task.' }), { status: 404 })
-      }
-      return new Response(JSON.stringify({ success: true, data: { status: 'done', resolution: 'Shipped the index.' } }))
-    })
-
-    // A key stored before 073 is plaintext and marked: the sync still presents
-    // it, and seals it in place on that read.
-    await pool().query(`update cairn_connection set api_key = 'sk_test_12345678', api_key_plaintext = true where id`)
-
-    const first = await call(cairnSyncRoute, 'POST', '/integrations/cairn/sync')
+    // The agent reports what its own Cairn CLI read; the server stores no key.
+    const body = { cairnRef, cairnStatus: 'done', cairnResolution: 'Shipped the index.' }
+    const first = await call(cairnLinkRoute, 'POST', `/tasks/${todoRef}/cairn-link`, { ref: todoRef }, body)
     expect(first.status).toBe(200)
-    expect(requests.find((r) => r.url === `https://cairn.example/api/v1/tasks/${cairnRef}`)?.auth).toBe('Bearer sk_test_12345678')
-    const resealed = (await pool().query('select api_key, api_key_plaintext from cairn_connection where id')).rows[0]
-    expect(resealed.api_key_plaintext).toBe(false)
-    expect(resealed.api_key).toMatch(/^v1:/)
-    // One line per todo, beside the counts: what `croft sync` prints.
-    expect(first.json.data.results.find((r: { ref: string }) => r.ref === todoRef)).toEqual({
-      ref: todoRef,
-      cairnRef,
-      cairnStatus: 'done',
-      result: 'was todo · noted · closed',
-    })
-    expect(first.json.data.closed).toBeGreaterThanOrEqual(1)
-    const second = await call(cairnSyncRoute, 'POST', '/integrations/cairn/sync')
+    expect(first.json.data).toMatchObject({ cairn_ref: cairnRef, cairn_status: 'done', noted: true, closed: true })
+    const second = await call(cairnLinkRoute, 'POST', `/tasks/${todoRef}/cairn-link`, { ref: todoRef }, body)
     expect(second.status).toBe(200)
-    expect(second.json.data.results.find((r: { ref: string }) => r.ref === todoRef)).toEqual({
-      ref: todoRef,
-      cairnRef,
-      cairnStatus: 'done',
-      result: 'unchanged',
-    })
+    expect(second.json.data).toMatchObject({ cairn_ref: cairnRef, cairn_status: 'done', noted: false, closed: false })
 
     const notes = await call(listNotesRoute, 'GET', `/subjects/${ref}/notes`, { ref })
     const outcome = notes.json.data.filter((n: { note: string }) => n.note.startsWith(`${cairnRef} done`))

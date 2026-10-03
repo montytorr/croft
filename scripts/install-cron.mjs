@@ -235,14 +235,6 @@ const JOBS = [
     command: [CLI, 'reconcile', ...ALL_INSTANCES],
   },
   {
-    name: 'sync',
-    why: 'Reads linked Cairn statuses back without depending on this machine\'s Cairn CLI.',
-    requires: [CLI],
-    every: 15,
-    env: { CROFT_AGENT: 'maintenance' },
-    command: [CLI, 'sync', '--server-only', ...ALL_INSTANCES],
-  },
-  {
     name: 'agent-files',
     why: 'Repairs the skill, CLI and hooks wherever a runtime reads a stale copy.',
     requires: [SYNC, NODE],
@@ -673,10 +665,6 @@ if (INSTALL && SYNC === DEFAULT_SYNC) place(join(HERE, 'install-cron.mjs'), join
 
 const applicable = JOBS.filter((job) => {
   if (only && !only.includes(job.name)) return false
-  if (job.name === 'sync' && existsSync(CLI) && !readFileSync(CLI, 'utf8').includes("'server-only'")) {
-    console.error(`# skipping sync: ${CLI} predates --server-only; update the CLI first`)
-    return false
-  }
   // An empty requirement is one the environment never named — a job that was
   // not configured rather than one whose file is missing. Reported as itself,
   // because "no  on this machine" reads like a bug in the installer.
@@ -710,6 +698,12 @@ if (USE_LAUNCHD) {
   mkdirSync(AGENTS_DIR, { recursive: true })
   mkdirSync(LOGS, { recursive: true })
   const uid = process.getuid()
+
+  // A retired server-sync agent must not survive a scoped repair install.
+  if (existsSync(plistPath('sync'))) {
+    launchctl(['bootout', `gui/${uid}/${LABEL('sync')}`], { tolerate: true })
+    rmSync(plistPath('sync'), { force: true })
+  }
 
   // Every job in scope is torn down first, including on install: a plist that
   // changed under a loaded agent is not picked up, and the stale one goes on

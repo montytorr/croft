@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { boardLanes, cairnTaskUrl, counts, listGroups, needsResolution } from './todo-lanes'
+import { boardLanes, counts, listGroups, needsResolution } from './todo-lanes'
 
 const todo = (status: string) => ({ status })
 
@@ -48,18 +48,6 @@ describe('needsResolution', () => {
     expect(needsResolution('done', 'cancelled')).toBe(false)
     expect(needsResolution('done', 'todo')).toBe(false)
     expect(needsResolution('todo', 'doing')).toBe(false)
-  })
-})
-
-describe('cairnTaskUrl', () => {
-  it('links a pushed ref to its Cairn task page', () => {
-    expect(cairnTaskUrl('https://cairn.example.com/', 'CAIRN-331')).toBe('https://cairn.example.com/projects/CAIRN/tasks/331')
-  })
-
-  it('is null without a base or a well-formed ref', () => {
-    expect(cairnTaskUrl(null, 'CAIRN-331')).toBeNull()
-    expect(cairnTaskUrl('https://c.example', 'nope')).toBeNull()
-    expect(cairnTaskUrl('https://c.example', null)).toBeNull()
   })
 })
 

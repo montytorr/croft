@@ -112,12 +112,6 @@ export type SubjectTodo = {
   updated_at: string
 }
 
-export type CairnConnection = {
-  url: string | null
-  key_set: boolean
-  last_synced_at: string | null
-}
-
 /**
  * A person's note on a subject: free markdown, editable and removable by its
  * author. Separate from the write-up (one shared document) and from the log

@@ -11,7 +11,6 @@ import {
   TASK_TYPES,
 } from '@/schemas/task'
 import {
-  cairnConnectionSchema,
   cairnLinkSchema,
   createStageSchema,
   createSubjectNoteSchema,
@@ -254,15 +253,6 @@ const subjectTodoSchema = {
   },
 }
 
-const cairnConnectionShape = {
-  type: 'object',
-  properties: {
-    url: { type: ['string', 'null'] },
-    key_set: { type: 'boolean' },
-    last_synced_at: { type: ['string', 'null'], format: 'date-time' },
-  },
-  required: ['url', 'key_set', 'last_synced_at'],
-}
 
 const person = {
   type: 'object',
@@ -1511,86 +1501,13 @@ export const openapiSpec = () => ({
         responses: { '200': okResponse('Deleted.'), '403': errorResponse, '404': errorResponse, '409': errorResponse },
       },
     },
-    '/integrations/cairn': {
-      get: {
-        summary: 'The Cairn connection (administrators)',
-        description: 'Never returns the key — only whether one is set.',
-        responses: { '200': okResponse('CairnConnection', cairnConnectionShape), '403': errorResponse },
-      },
-      put: {
-        summary: 'Connect to a Cairn (signed-in administrator only)',
-        description: '`apiKey` omitted keeps the stored key; `null` clears it. `url: null` disconnects.',
-        requestBody: body(json(cairnConnectionSchema)),
-        responses: { '200': okResponse('CairnConnection', cairnConnectionShape), '400': errorResponse, '403': errorResponse },
-      },
-    },
-    '/integrations/cairn/connect': {
-      post: {
-        summary: 'Start Cairn browser pairing (signed-in administrator only)',
-        description: 'Requests a Croft key from Cairn. Returns a verification URL on that Cairn origin and an encrypted, expiring token bound to the caller. The redeemable device code stays encrypted.',
-        requestBody: body({ type: 'object', required: ['url'], properties: { url: { type: 'string', format: 'uri' } } }),
-        responses: { '200': okResponse('Pairing token, verificationUrl, interval and expiresAt.'), '400': errorResponse, '403': errorResponse, '409': errorResponse },
-      },
-    },
-    '/integrations/cairn/connect/poll': {
-      post: {
-        summary: 'Finish Cairn browser pairing (the initiating signed-in administrator only)',
-        description: 'Polls Cairn using the encrypted token. Pending, denied and expired requests leave the current connection untouched. Approval saves the Croft key sealed at rest and returns only the connection description, never the key.',
-        requestBody: body({ type: 'object', required: ['token'], properties: { token: { type: 'string', maxLength: 5000 } } }),
-        responses: { '200': okResponse('Pairing status and, when approved, CairnConnection.'), '400': errorResponse, '403': errorResponse, '409': errorResponse },
-      },
-    },
-    '/integrations/cairn/sync': {
-      post: {
-        summary: "Pull every pushed todo's status from Cairn",
-        description:
-          'Updates `cairn_status` on each linked todo. The first time Cairn reports one done or cancelled, ' +
-          'the outcome (`CAIRN-331 done: <resolution>`) is appended to the subject log, once, and the todo is ' +
-          'closed with the same status (resolution `Closed in Cairn as CAIRN-331: <resolution>`) unless it ' +
-          'already is: once pushed, Cairn owns its status. A Cairn task that cannot be read is listed in ' +
-          '`failed` and does not stop the rest. `results` has one line per todo. 409 `cairn_not_configured` ' +
-          'when no connection is set (the CLI then syncs through its own cairn CLI).',
-        responses: {
-          '200': okResponse('What the sync did.', {
-            type: 'object',
-            properties: {
-              checked: { type: 'integer' },
-              updated: { type: 'integer' },
-              concluded: { type: 'integer' },
-              closed: { type: 'integer', description: 'Todos closed because their Cairn task ended.' },
-              failed: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: { ref: { type: 'string' }, cairn_ref: { type: 'string' }, error: { type: 'string' } },
-                },
-              },
-              results: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    ref: { type: 'string', example: 'T-41' },
-                    cairnRef: { type: 'string', example: 'CAIRN-331' },
-                    cairnStatus: { type: ['string', 'null'] },
-                    result: { type: 'string', example: 'was doing · noted · closed' },
-                  },
-                },
-              },
-              last_synced_at: { type: ['string', 'null'], format: 'date-time' },
-            },
-          }),
-          '409': errorResponse,
-        },
-      },
-    },
     '/tasks/{ref}/cairn-link': {
       parameters: [{ name: 'ref', in: 'path', required: true, schema: { type: 'string', example: 'T-41' } }],
       post: {
         summary: 'Record that this task was filed in Cairn (`croft push`)',
         description:
           'Also how `croft sync` reports a status it read through a local cairn CLI. With a done or ' +
-          'cancelled `cairnStatus` it does what the server sync does: the once-only ' +
+          'cancelled `cairnStatus` it records the once-only ' +
           '`CAIRN-331 done: <cairnResolution>` subject note, and the todo closed unless it already is. ' +
           'A todo whose subject is not `lab` is refused with `subject_not_published` unless `force: true` ' +
           '(`croft push --force`).',
