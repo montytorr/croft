@@ -77,17 +77,18 @@ describe('subject panels', () => {
     expect(container.querySelector('img')?.getAttribute('src')).toBe('/c/i1')
   })
 
-  it('offers no status control on a todo pushed to Cairn, and links it there', async () => {
+  it('offers no status control on a pushed todo and shows its Cairn reference', async () => {
     await render(
       <TodosPanel
         subjectRef="S-1"
-        cairnUrl="https://cairn.example.com"
         todos={[todo({}), todo({ id: 't2', ref: 'T-2', number: 2, cairn_ref: 'CAIRN-9', cairn_status: 'doing' })]}
       />,
     )
     expect(container.querySelector('select[aria-label="Status of T-1"]')).not.toBeNull()
     expect(container.querySelector('select[aria-label="Status of T-2"]')).toBeNull()
-    expect(container.querySelector('a[href="https://cairn.example.com/projects/CAIRN/tasks/9"]')).not.toBeNull()
+    expect(container.textContent).toContain('CAIRN-9')
+    expect(container.textContent).toContain('doing')
+    expect(container.querySelector('a[href^="https://"]')).toBeNull()
   })
 
   it('asks for a resolution before closing a todo, and patches an ordinary move at once', async () => {

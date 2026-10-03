@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 /**
@@ -36,7 +36,6 @@ import type { Actor } from '@/lib/api/auth'
 
 const databaseUrl = process.env.DATABASE_URL
 if (!databaseUrl) throw new Error('DATABASE_URL is required for integration tests')
-process.env.CROFT_SECRET_KEY ??= randomBytes(32).toString('hex')
 
 const ORIGIN = 'https://croft.example.test'
 const RUN = randomUUID().replace(/[^a-z]/g, '').slice(0, 6)

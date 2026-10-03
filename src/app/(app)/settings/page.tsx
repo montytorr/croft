@@ -6,10 +6,9 @@ import { getBranding } from '@/lib/branding'
 import { PasswordSection } from './password-section'
 import { LabelsSection, type LabelRow } from './labels-section'
 import { LabSection } from './lab-section'
-import { CairnSection } from './cairn-section'
 import { BrandingSection } from './branding-section'
 import { MobileNavButton } from '@/components/mobile-nav-context'
-import { getCairnConnection, listLabProjects, listStages, listTags } from '@/lib/lab/data'
+import { listLabProjects, listStages, listTags } from '@/lib/lab/data'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,14 +19,12 @@ const SettingsPage = async () => {
   if (!user) redirect('/login')
 
   const isAdmin = user.role === 'admin'
-  const [{ data: labels }, branding, stages, tags, projects, cairn] = await Promise.all([
+  const [{ data: labels }, branding, stages, tags, projects] = await Promise.all([
     admin().rpc('list_labels', { p_owner: user.id }),
     getBranding(),
     listStages(),
     listTags(),
     listLabProjects({ id: user.id, role: user.role }),
-    // The connection is an administrator's business; nobody else is sent it.
-    isAdmin ? getCairnConnection() : Promise.resolve(null),
   ])
 
   return (
@@ -49,7 +46,6 @@ const SettingsPage = async () => {
           <div className="flex flex-col gap-5">
             <PasswordSection />
             <LabSection stages={stages} tags={tags} projects={projects} canEdit={isAdmin} />
-            {cairn ? <CairnSection connection={cairn} /> : null}
             <LabelsSection labels={(labels ?? []) as LabelRow[]} />
             {isAdmin ? (
               <BrandingSection

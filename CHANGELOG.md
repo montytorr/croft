@@ -8,16 +8,19 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
-### Added
-
-- Connect the server to Cairn through browser approval in Settings, without copying an API key. Only a signed-in administrator can start and finish pairing; the short-lived token is encrypted and bound to that administrator, and the approved key is sealed at rest.
-- Optional scheduled Cairn sync every 15 minutes, under the maintenance identity. Install it with `scripts/install-cron.mjs --install --only sync` after connecting Cairn. It requires a current CLI and the server connection.
-
 ### Changed
 
 - Subject pages have a larger editorial heading, a todo progress summary, icon tabs and paper panels for the write-up, outline, open work and properties. The layout adapts to phones and both themes.
 - The split write-up editor always edits raw Markdown on the left, with the rendered preview on the right. Text is saved verbatim, including tables, code and HTML; pasted and dropped images still upload to the subject. Saving waits for uploads to finish.
-- Server-backed `croft sync` exits nonzero when linked tasks cannot be read, retaining its report. `--server-only` disables machine-local Cairn fallback; Settings also calls out partial sync failures.
+- `croft sync` always uses the agent machine's Cairn CLI and credentials.
+
+### Removed
+
+- The server-wide Cairn connection, Settings panel, pairing and sync endpoints, stored credential and scheduled server sync. Agent-driven handoff and local status sync remain available.
+
+### Breaking
+
+- The `/api/v1/integrations/cairn` endpoints and `croft sync --server-only` are retired. Migration 079 removes the connection table and any stored Cairn key, preserving todo links and outcomes. Update the CLI for direct local sync; re-running the scheduler installer removes its retired sync job on both cron and launchd.
 
 ## [0.6.1] — 2026-10-02
 

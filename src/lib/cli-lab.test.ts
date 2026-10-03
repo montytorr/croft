@@ -695,76 +695,30 @@ describe('subject visibility', () => {
 })
 
 describe('croft sync', () => {
-  it('asks the server when it has a Cairn connection, and prints its results as a table', async () => {
+  it('rejects the retired server-only flag before sending a request', async () => {
     const seen: Seen[] = []
-    // The server's SyncReport, as `syncCairn` builds it.
-    const report = {
-      checked: 3,
-      updated: 1,
-      concluded: 1,
-      closed: 1,
-      failed: [{ ref: 'T-43', cairn_ref: 'CAIRN-333', error: 'No task CAIRN-333.' }],
-      results: [
-        { ref: 'T-41', cairnRef: 'CAIRN-331', cairnStatus: 'done', result: 'was doing · noted · closed' },
-        { ref: 'T-42', cairnRef: 'CAIRN-332', cairnStatus: 'doing', result: 'unchanged' },
-        { ref: 'T-43', cairnRef: 'CAIRN-333', cairnStatus: 'todo', result: 'unread: No task CAIRN-333.' },
-      ],
-      last_synced_at: '2026-09-30T10:00:00.000Z',
-    }
-    const base = await serve(() => report, seen)
-    const { code, stdout, stderr } = await run(['sync'], base)
-    expect(code).toBe(1)
-    expect(seen[0]).toMatchObject({ method: 'POST', path: '/api/v1/integrations/cairn/sync' })
-    const lines = stdout.trim().split('\n')
-    expect(lines[0]).toBe('#3')
-    expect(lines[1]).toBe('ref\tcairn\tstatus\tresult')
-    expect(lines[2]).toBe('T-41\tCAIRN-331\tdone\twas doing · noted · closed')
-    expect(lines[4]).toBe('T-43\tCAIRN-333\ttodo\tunread: No task CAIRN-333.')
-    expect(stderr).toContain('3 checked, 1 changed, 1 noted, 1 closed, 1 unread')
-  })
-
-  it('reports failed reads in JSON and exits nonzero for scheduled monitoring', async () => {
-    const report = { checked: 1, failed: [{ ref: 'T-1', error: 'unreachable' }], results: [] }
-    const base = await serve(() => report)
-    const result = await run(['sync', '--server-only', '--json'], base)
-    expect(result.code).toBe(1)
-    expect(JSON.parse(result.stdout)).toEqual(report)
-  })
-
-  it('a server-only run never uses local Cairn credentials when disconnected', async () => {
-    const seen: Seen[] = []
-    const base = await serve(() => ({ status: 409, payload: { success: false, error: 'Cairn is not connected.', code: 'cairn_not_configured' } }), seen)
+    const base = await serve(() => ({}), seen)
     const result = await run(['sync', '--server-only'], base)
+    expect(result.code).toBe(2)
+    expect(result.stderr).toContain('--server-only')
+    expect(seen).toHaveLength(0)
+  })
+
+  it('names the local setup needed when no Cairn CLI is installed', async () => {
+    const seen: Seen[] = []
+    const base = await serve(() => ({}), seen)
+    const result = await run(['sync'], base)
     expect(result.code).toBe(1)
-    expect(result.stderr).toContain('Cairn is not connected.')
-    expect(result.stderr).not.toContain('syncing through this machine')
-    expect(seen).toHaveLength(1)
+    expect(result.stderr).toContain('cairn setup --url <your Cairn>')
+    expect(result.stderr).not.toContain('Settings')
+    expect(seen).toHaveLength(0)
   })
 
-  it('does not fall back on a refusal that is not "not configured"', async () => {
-    const base = await serve(() => ({ status: 403, payload: { success: false, error: 'Forbidden.', code: 'forbidden' } }))
-    const { code, stderr } = await run(['sync'], base)
-    expect(code).toBe(1)
-    expect(stderr).toContain('croft sync: Forbidden.')
-  })
-
-  it('syncs through the local cairn CLI when the server has no connection', async () => {
+  it('syncs through the local Cairn CLI without calling the retired integration', async () => {
     const dir = await tempDir('croft-cairn-')
     const cairn = await fakeCairn(dir)
     const seen: Seen[] = []
     const base = await serve((req) => {
-      if (req.path === '/api/v1/integrations/cairn/sync') {
-        // The server's refusal exactly as the sync route sends it.
-        return {
-          status: 409,
-          payload: {
-            success: false,
-            error: 'Cairn is not connected. An administrator can connect it in Settings.',
-            code: 'cairn_not_configured',
-            reason: 'not_connected',
-          },
-        }
-      }
       if (req.path.startsWith('/api/v1/projects/T/tasks')) {
         // The list row's lab fields as the server adds them (TASK_LIST_LAB_FIELDS).
         const row = { status: 'todo', subject_ref: 'S-12' }
@@ -784,7 +738,7 @@ describe('croft sync', () => {
     }, seen)
     const { code, stdout, stderr } = await run(['sync'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
     expect(code, stderr).toBe(0)
-    expect(stderr).toContain('syncing through this machine')
+    expect(seen.some((request) => request.path.startsWith('/api/v1/integrations/'))).toBe(false)
     expect((await cairn.calls()).map((c) => c.args)).toEqual([['show', 'CAIRN-331', '--json'], ['show', 'CAIRN-332', '--json']])
     expect(new URL(seen.find((s) => s.path.startsWith('/api/v1/projects/T/tasks'))!.path, base).searchParams.get('limit')).toBe('200')
     // The resolution travels, so the server writes `CAIRN-331 done: shipped` and closes the todo.
@@ -800,9 +754,6 @@ describe('croft sync', () => {
     const cairn = await fakeCairn(dir)
     const seen: Seen[] = []
     const base = await serve((req) => {
-      if (req.path === '/api/v1/integrations/cairn/sync') {
-        return { status: 409, payload: { success: false, error: 'Cairn is not connected.', code: 'cairn_not_configured' } }
-      }
       if (req.path.startsWith('/api/v1/projects/T/tasks')) {
         return {
           count: 2,

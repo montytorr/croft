@@ -5,7 +5,6 @@ import { notFound, redirect } from 'next/navigation'
 import { CheckSquare, ChevronRight, MessageSquare, Paperclip } from 'lucide-react'
 import { currentUser } from '@/lib/data'
 import {
-  getCairnConnection,
   getSubject,
   listLabProjects,
   listStages,
@@ -82,7 +81,7 @@ const SubjectPage = async ({
   if (!subject) notFound()
   const query = await searchParams
 
-  const [log, todos, humanNotes, files, stages, tags, projects, cairn] = await Promise.all([
+  const [log, todos, humanNotes, files, stages, tags, projects] = await Promise.all([
     listSubjectNotes(subject.id, viewer),
     // The lab's todo rows, not the bare subject list: they carry priority and assignee.
     listLabTodos({ subject: subject.id, includeClosed: true }, viewer),
@@ -91,7 +90,6 @@ const SubjectPage = async ({
     listStages(),
     listTags(),
     listLabProjects(viewer),
-    getCairnConnection(),
   ])
 
   const tally = counts(todos)
@@ -207,7 +205,6 @@ const SubjectPage = async ({
               <TodosPanel
                 subjectRef={subject.ref}
                 todos={todos}
-                cairnUrl={cairn.url}
                 initialView={query.view === 'board' ? 'board' : 'list'}
               />
             ),

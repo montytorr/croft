@@ -1,5 +1,5 @@
 import { mkdtemp, rm } from 'node:fs/promises'
-import { randomBytes, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -69,7 +69,6 @@ import { GET as activityRoute } from '@/app/api/v1/activity/route'
 import { GET as contextRoute } from '@/app/api/v1/context/route'
 import { GET as nextRoute } from '@/app/api/v1/next/route'
 import { POST as reconcileRoute } from '@/app/api/v1/reconcile/route'
-import { POST as cairnSyncRoute } from '@/app/api/v1/integrations/cairn/sync/route'
 import { GET as labProjectsRoute, POST as createLabProjectRoute } from '@/app/api/v1/lab-projects/route'
 import { GET as labelsRoute } from '@/app/api/v1/labels/route'
 import {
@@ -103,7 +102,6 @@ import type { Viewer } from '@/lib/api/visibility'
 
 const databaseUrl = process.env.DATABASE_URL
 if (!databaseUrl) throw new Error('DATABASE_URL is required for integration tests')
-process.env.CROFT_SECRET_KEY ??= randomBytes(32).toString('hex')
 
 const ORIGIN = 'https://croft.example.test'
 const RUN = randomUUID().replace(/[^a-z]/g, '').slice(0, 6)
@@ -181,7 +179,6 @@ const missingTask = (raw: string) => ({ success: false, code: 'not_found', error
 
 let attachmentDir = ''
 let todoProjectExisted = false
-let savedConnection: Record<string, unknown> | null = null
 const subjectIds: string[] = []
 const labProjectIds: string[] = []
 
@@ -248,7 +245,6 @@ beforeAll(async () => {
     ])
   }
   todoProjectExisted = (await q(`select 1 from projects where key = 'T'`)).rowCount === 1
-  savedConnection = (await q('select * from cairn_connection where id')).rows[0] ?? null
 })
 
 afterAll(async () => {
@@ -259,15 +255,6 @@ afterAll(async () => {
   }
   if (labProjectIds.length) await q('delete from lab_projects where id = any($1::uuid[])', [labProjectIds])
   if (!todoProjectExisted) await q(`delete from projects where key = 'T' and owner_user_id = any($1::uuid[])`, [USERS])
-  await q('delete from cairn_connection where id')
-  if (savedConnection) {
-    const c = savedConnection
-    await q(
-      `insert into cairn_connection (id, url, api_key, api_key_plaintext, last_synced_at, updated_at, updated_by)
-       values (true, $1, $2, $3, $4, $5, $6)`,
-      [c.url, c.api_key, c.api_key_plaintext ?? false, c.last_synced_at, c.updated_at, c.updated_by],
-    )
-  }
   await q('delete from app_users where id = any($1::uuid[])', [USERS])
   await pool().end()
   await rm(attachmentDir, { recursive: true, force: true })
@@ -906,29 +893,20 @@ describe('pushing a todo whose subject is not in the lab', () => {
     expect(lab.status).toBe(200)
   })
 
-  it('syncs and reports the private todo to those who see it, and to nobody else', async () => {
-    await q('delete from cairn_connection where id')
-    await q(
-      `insert into cairn_connection (id, url, api_key, api_key_plaintext, updated_at)
-       values (true, 'https://cairn.example.test', 'sk_test_visibility_1234', true, now())`,
-    )
-    vi.stubGlobal('fetch', async () =>
-      new Response(JSON.stringify({ success: true, data: { status: 'todo' } }), { status: 200 }))
-
-    as(C)
-    const outsider = await call(cairnSyncRoute, 'POST', '/integrations/cairn/sync')
-    expect(outsider.status).toBe(200)
-    const outsiderRefs = outsider.json.data.results.map((r: { ref: string }) => r.ref)
-    expect(outsiderRefs).toContain(TL.ref)
-    expect(outsiderRefs).not.toContain(TP.ref)
-    expect(JSON.stringify(outsider.json.data)).not.toContain('CAIRN-901')
-
+  it('accepts local Cairn status reports only for todos the caller may see', async () => {
+    const body = { cairnRef: 'CAIRN-901', cairnStatus: 'todo', force: true }
+    for (const outsider of [C, D]) {
+      as(outsider)
+      const hidden = await call(cairnLinkRoute, 'POST', `/tasks/${TP.ref}/cairn-link`, { ref: TP.ref }, body)
+      expect(hidden.status).toBe(404)
+      expect(JSON.stringify(hidden.json)).not.toContain('CAIRN-901')
+    }
     as(A)
-    const owner = await call(cairnSyncRoute, 'POST', '/integrations/cairn/sync')
-    expect(owner.json.data.results.map((r: { ref: string }) => r.ref)).toContain(TP.ref)
-    expect(owner.json.data.checked).toBe(outsider.json.data.checked + 1)
-    vi.unstubAllGlobals()
+    const owner = await call(cairnLinkRoute, 'POST', `/tasks/${TP.ref}/cairn-link`, { ref: TP.ref }, body)
+    expect(owner.status).toBe(200)
+    expect(owner.json.data).toMatchObject({ ref: TP.ref, cairn_ref: 'CAIRN-901', cairn_status: 'todo' })
   })
+
 })
 
 describe('publishing', () => {

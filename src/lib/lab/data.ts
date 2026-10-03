@@ -1,13 +1,11 @@
 import * as labAdmin from '@/lib/api/lab-admin'
 import * as subjects from '@/lib/api/subjects'
-import * as cairn from '@/lib/api/cairn-link'
 import * as humanNotes from '@/lib/api/human-notes'
 import * as subjectFiles from '@/lib/api/subject-attachments'
 import * as labTodos from '@/lib/api/lab-todos'
 import { isSubjectVisible, type Viewer } from '@/lib/api/visibility'
 import type {
   Attachment,
-  CairnConnection,
   LabProject,
   LabTodo,
   Stage,
@@ -80,6 +78,3 @@ export const listSubjectAttachments = (subjectId: string, viewer: Viewer): Promi
  */
 export const listLabTodos = (filters: labTodos.ListLabTodosOptions | undefined, viewer: Viewer): Promise<LabTodo[]> =>
   labTodos.listLabTodos(filters ?? {}, viewer.id)
-
-/** Whether Cairn is connected. Never the key. Gate the page on the viewer being an admin. */
-export const getCairnConnection = (): Promise<CairnConnection> => cairn.getCairnConnection()

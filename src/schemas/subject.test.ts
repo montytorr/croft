@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  cairnConnectionSchema,
   cairnLinkSchema,
   createStageSchema,
   createSubjectNoteSchema,
@@ -117,9 +116,5 @@ describe('cairn schemas', () => {
     expect(cairnLinkSchema.parse({ cairnRef: 'CAIRN-331' })).toEqual({ cairnRef: 'CAIRN-331' })
   })
 
-  it('trims a trailing slash from the URL and keeps the key optional', () => {
-    expect(cairnConnectionSchema.parse({ url: 'https://cairn.example/' })).toEqual({ url: 'https://cairn.example' })
-    expect(cairnConnectionSchema.parse({ url: null, apiKey: null })).toEqual({ url: null, apiKey: null })
-    expect(cairnConnectionSchema.safeParse({ url: 'ftp://x' }).success).toBe(false)
-  })
+
 })
