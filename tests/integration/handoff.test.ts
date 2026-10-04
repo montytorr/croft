@@ -344,6 +344,31 @@ describe('the deprecated cairn-link route and alias fields', () => {
     const refused = await call(cairnLinkRoute, 'POST', `/tasks/${hidden}/cairn-link`, { ref: hidden }, { cairnRef: 'CAIRN-332' })
     expect(refused.json.code).toBe('subject_not_published')
   })
+
+  it('refreshes a link it already has without --force, and never overwrites another tracker', async () => {
+    asAgent()
+    // A private subject's todo handed off with --force: each sync after that
+    // refreshes the same link and must not be refused for it.
+    const hidden = await fileTodo(privateRef, 'Forced once')
+    const forced = await call(handoffRoute, 'POST', `/tasks/${hidden}/handoff`, { ref: hidden }, { tracker: 'cairn', ref: 'CAIRN-340', force: true })
+    expect(forced.status).toBe(200)
+    const refreshed = await call(handoffRoute, 'POST', `/tasks/${hidden}/handoff`, { ref: hidden }, { tracker: 'cairn', ref: 'CAIRN-340', status: 'doing' })
+    expect(refreshed.status).toBe(200)
+    expect(refreshed.json.data.handoff).toMatchObject({ ref: 'CAIRN-340', status: 'doing' })
+    // A different ref is leaving again, and needs --force again.
+    const moved = await call(handoffRoute, 'POST', `/tasks/${hidden}/handoff`, { ref: hidden }, { tracker: 'cairn', ref: 'CAIRN-341' })
+    expect(moved.json.code).toBe('subject_not_published')
+    const legacyRefresh = await call(cairnLinkRoute, 'POST', `/tasks/${hidden}/cairn-link`, { ref: hidden }, { cairnRef: 'CAIRN-340', cairnStatus: 'in-review' })
+    expect(legacyRefresh.status).toBe(200)
+
+    // A 0.6 CLI's push only knows Cairn: it must not replace a GitHub hand-off.
+    const onGithub = await fileTodo(labRef, 'On GitHub')
+    expect((await call(handoffRoute, 'POST', `/tasks/${onGithub}/handoff`, { ref: onGithub }, { tracker: 'github', ref: 'acme/app#7' })).status).toBe(200)
+    const overwrite = await call(cairnLinkRoute, 'POST', `/tasks/${onGithub}/cairn-link`, { ref: onGithub }, { cairnRef: 'CAIRN-342' })
+    expect(overwrite.status).toBe(409)
+    expect(overwrite.json.code).toBe('conflict')
+    expect((await show(onGithub)).handoff).toMatchObject({ tracker: 'github', ref: 'acme/app#7' })
+  })
 })
 
 describe('lab only', () => {
@@ -360,7 +385,16 @@ describe('lab only', () => {
     expect((await call(createProjectTaskRoute, 'POST', '/projects/T/tasks', { id: 'T' }, {})).status).toBe(400)
 
     // A subject's own todo route is unchanged.
-    expect(await fileTodo(labRef, 'Through the subject')).toMatch(/^T-\d+$/)
+    const parentRef = await fileTodo(labRef, 'Through the subject')
+    expect(parentRef).toMatch(/^T-\d+$/)
+
+    // A sub-task takes its parent's subject, so it is lab work too.
+    const child = await call(createProjectTaskRoute, 'POST', '/projects/T/tasks', { id: 'T' }, { title: `Child ${RUN}`, parentRef })
+    expect(child.status).toBe(201)
+    const row = (await q('select subject_id from tasks where id = $1', [child.json.data.id])).rows[0]
+    const parentRow = (await q(`select subject_id from tasks t join projects p on p.id = t.project_id where p.key = 'T' and t.number = $1`, [Number(parentRef.slice(2))])).rows[0]
+    expect(row.subject_id).toBe(parentRow.subject_id)
+    expect(row.subject_id).not.toBeNull()
   })
 
   it('refuses a new task project with 403 forbidden, and creates nothing', async () => {

@@ -2708,8 +2708,18 @@ const parseCairnRef = (stdout) => {
 /** Croft's todo types are Cairn's; anything unknown files as a feature. */
 const CAIRN_TYPES = { feature: 'feature', bug: 'bug', improvement: 'improvement', chore: 'chore', spike: 'spike', docs: 'docs' }
 
-/** A Cairn from before external refs says so as an unknown flag or a usage error. */
-const REJECTS_EXTERNAL_REF = /external-(?:ref|url)|unknown (?:flag|option)|unrecognized|usage/i
+/** A Cairn from before external refs refuses the flag by name. */
+const REJECTS_EXTERNAL_REF = /unknown flag --external-(?:ref|url)/i
+
+/** Cairn's own ref shape. Anything else is never handed to its CLI as an argument. */
+const CAIRN_TASK_REF = /^[A-Z][A-Z0-9]{0,9}-\d{1,7}$/
+
+/**
+ * Cairn's parser reads any argument starting with `--` as a flag and has no
+ * `--` terminator, so a title that starts that way would be taken as an
+ * option. It keeps its words; the dashes become a dash it cannot misread.
+ */
+const safeTitle = (title) => String(title).replace(/^-{2,}\s*/, '– ')
 
 const cairnAdapter = {
   name: 'cairn',
@@ -2722,7 +2732,7 @@ const cairnAdapter = {
     const kind = CAIRN_TYPES[type] ?? 'feature'
     const description = String(body ?? '').trim()
     const text = [description, originLine(todoRef, todoUrl)].filter(Boolean).join('\n\n')
-    const args = ['add', title, '--project', key, '--type', kind, '--body', '-', '--no-start']
+    const args = ['add', safeTitle(title), '--project', key, '--type', kind, '--body', '-', '--no-start']
     // Cairn refuses a bug or spike with no real body; the line saying where it
     // came from is not one, and the description is what there is.
     if (!description && ['bug', 'spike'].includes(kind)) args.push('--force-empty')
@@ -2735,6 +2745,15 @@ const cairnAdapter = {
     if (run.stderr) process.stderr.write(String(run.stderr).replace(/^/gm, 'cairn: '))
     if (run.status !== 0) die(`cairn add failed (exit ${run.status}); nothing was linked`, run.status === UNDECIDED_EXIT ? UNDECIDED_EXIT : 1)
     const ref = parseCairnRef(run.stdout)
+    // The external ref is this todo's, for good: after a take-back, Cairn
+    // answers with the task the earlier hand-off filed, which may be closed.
+    // Linking it silently would let the next sync close the todo with it.
+    if (ref && /already filed as/i.test(String(run.stderr))) {
+      die(
+        `Cairn already has ${ref} for ${todoRef}, from an earlier hand-off; nothing new was filed.\n` +
+          `if that is the task, record it again: croft handoff ${todoRef} --link ${ref} --tracker cairn`,
+      )
+    }
     if (!ref) {
       die(
         `cairn add exited 0 but named no task ref:\n${String(run.stdout).slice(0, 400)}\n` +
@@ -2746,6 +2765,7 @@ const cairnAdapter = {
   show: (ref) => {
     const bin = resolveCairn()
     if (!bin) return { error: 'no cairn CLI here' }
+    if (!CAIRN_TASK_REF.test(String(ref))) return { error: `"${ref}" is not a Cairn task ref` }
     const run = runTool(bin, ['show', ref, '--json'])
     let task = null
     try {
@@ -2766,8 +2786,9 @@ const cairnAdapter = {
 // -- github -------------------------------------------------------------------
 const resolveGh = () => findTool('gh', 'CROFT_GH_BIN')
 
-const GH_REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
-const GH_REF = /^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)#(\d+)$/
+// A letter or digit first: a repository starting with a dash would read as a flag.
+const GH_REPO = /^[A-Za-z0-9][A-Za-z0-9_.-]*\/[A-Za-z0-9_.][A-Za-z0-9_.-]*$/
+const GH_REF = /^([A-Za-z0-9][A-Za-z0-9_.-]*\/[A-Za-z0-9_.][A-Za-z0-9_.-]*)#(\d+)$/
 
 const githubAdapter = {
   name: 'github',
@@ -2777,7 +2798,7 @@ const githubAdapter = {
     if (!bin) die('croft handoff to github needs the `gh` CLI on PATH (or CROFT_GH_BIN), signed in with `gh auth login`')
     if (!GH_REPO.test(String(target))) die(`"${target}" is not a repository: use owner/repo`)
     const text = [String(body ?? '').trim(), '---', originLine(todoRef, todoUrl)].filter(Boolean).join('\n\n')
-    const run = runTool(bin, ['issue', 'create', '-R', target, '--title', title, '--body-file', '-'], text)
+    const run = runTool(bin, ['issue', 'create', `--repo=${target}`, `--title=${title}`, '--body-file', '-'], text)
     if (run.error) die(`could not run ${bin}: ${run.error.message}`)
     if (run.stderr) process.stderr.write(String(run.stderr).replace(/^/gm, 'gh: '))
     if (run.status !== 0) die(`gh issue create failed (exit ${run.status}); nothing was linked`)
@@ -2805,9 +2826,13 @@ const githubAdapter = {
     if (!issue?.state) return { error: firstLine(run) }
     const url = typeof issue.url === 'string' ? issue.url : null
     if (issue.state !== 'CLOSED') return { status: 'todo', url }
-    return issue.stateReason === 'NOT_PLANNED'
-      ? { status: 'cancelled', resolution: 'closed as not planned', resolutionKind: 'wont-fix', url }
-      : { status: 'done', resolution: 'closed as completed', url }
+    // Only a completed close is done. Not planned, a duplicate, or a reason
+    // this code has never seen closed the issue without doing the work.
+    if (issue.stateReason === 'COMPLETED' || issue.stateReason == null) {
+      return { status: 'done', resolution: 'closed as completed', url }
+    }
+    const reason = String(issue.stateReason).toLowerCase().replace(/_/g, ' ')
+    return { status: 'cancelled', resolution: `closed as ${reason}`, resolutionKind: issue.stateReason === 'DUPLICATE' ? 'duplicate' : 'wont-fix', url }
   },
 }
 
@@ -2838,6 +2863,9 @@ class LegacyServer extends Error {}
  * POST /handoff; where that route does not exist (a 0.6 server), the cairn
  * tracker's old /cairn-link takes the same facts. `onError` is for refusals.
  */
+/** A server refusal for one todo of a sync, reported on its row. */
+class SyncRowError extends Error {}
+
 const postHandoff = async (todoRef, body, onError) => {
   try {
     return await request('POST', `/api/v1/tasks/${todoRef}/handoff`, body, {
@@ -4593,7 +4621,17 @@ const commands = {
       // The subject's outcome note: `<ref> done: <resolution>`.
       if (ended && shown.resolution) body.resolution = shown.resolution
       if (ended && shown.resolutionKind) body.resolutionKind = String(shown.resolutionKind)
-      const linked = await postHandoff(todo.ref, body)
+      // One todo the server refuses is that row's answer, not the end of the run.
+      let linked
+      try {
+        linked = await postHandoff(todo.ref, body, (payload) => {
+          throw new SyncRowError(payload.error ?? payload.code ?? 'refused')
+        })
+      } catch (error) {
+        if (!(error instanceof SyncRowError)) throw error
+        rows.push({ ...row, status: shown.status, result: `refused: ${truncate(error.message, 60)}` })
+        continue
+      }
       const result = [
         shown.status === handoff.status ? 'unchanged' : `was ${handoff.status ?? 'unknown'}`,
         linked?.noted ? 'noted' : '',

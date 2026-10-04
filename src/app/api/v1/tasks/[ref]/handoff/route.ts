@@ -31,8 +31,11 @@ export const POST = route<{ ref: string }, z.infer<typeof handoffSchema>>({
     const tracker = body.tracker as string
 
     // A tracker has no notion of who may see what: a todo of a private or
-    // members-only subject leaves for it only when the caller says so.
-    const subject = await subjectOfTask(task.subject_id, actor.userId)
+    // members-only subject leaves for it only when the caller says so. A
+    // status refresh of the link it already has is not leaving again.
+    const current = handoffOf(task)
+    const refresh = current !== null && current.tracker === tracker && current.ref === body.ref
+    const subject = refresh ? null : await subjectOfTask(task.subject_id, actor.userId)
     if (subject && subject.visibility !== 'lab' && !body.force) {
       return fail(
         'subject_not_published',

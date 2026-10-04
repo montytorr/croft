@@ -3,6 +3,7 @@ import { route } from '@/lib/api/handler'
 import { fail, ok } from '@/lib/api/response'
 import { findTask, refOfRow, refuseArchived, subjectOfTask } from '@/lib/api/tasks'
 import { linkHandoff } from '@/lib/api/handoff'
+import { handoffOf } from '@/lib/api/handoff-shape'
 import { cairnLinkSchema } from '@/schemas/subject'
 
 export const dynamic = 'force-dynamic'
@@ -14,13 +15,23 @@ export const dynamic = 'force-dynamic'
 export const POST = route<{ ref: string }, z.infer<typeof cairnLinkSchema>>({
   schema: cairnLinkSchema,
   handler: async ({ actor, params, body }) => {
-    const task = await findTask(actor, params.ref, 'id, number, subject_id, project:projects!project_id!inner(key, status)')
+    const task = await findTask(actor, params.ref, 'id, number, subject_id, handoff_tracker, handoff_ref, project:projects!project_id!inner(key, status)')
     if (!task) return fail('not_found', `No task ${params.ref}.`)
     const archived = refuseArchived(task)
     if (archived) return archived
 
     const taskRef = refOfRow(task) ?? params.ref
-    const subject = await subjectOfTask(task.subject_id, actor.userId)
+    // A 0.6 CLI only knows Cairn links: it must not overwrite another tracker's.
+    const current = handoffOf(task)
+    if (current && current.tracker !== 'cairn') {
+      return fail(
+        'conflict',
+        `${taskRef} is handed off to ${current.tracker} as ${current.ref}. Update the CLI (0.7: croft handoff) to change it.`,
+        { handoff: current },
+      )
+    }
+    const refresh = current !== null && current.ref === body.cairnRef
+    const subject = refresh ? null : await subjectOfTask(task.subject_id, actor.userId)
     if (subject && subject.visibility !== 'lab' && !body.force) {
       return fail(
         'subject_not_published',
