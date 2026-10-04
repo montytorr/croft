@@ -20,15 +20,25 @@ describe('openapi spec', () => {
   it('documents every route group the CLI depends on', () => {
     const paths = Object.keys(spec.paths)
     for (const p of [
-      '/search', '/projects', '/projects/{id}/tasks', '/tasks/{ref}',
+      '/search', '/projects/{id}/tasks', '/tasks/{ref}',
       '/tasks/{ref}/claim', '/tasks/{ref}/beat', '/tasks/{ref}/checkpoint',
       '/tasks/{ref}/release', '/tasks/{ref}/notes', '/tasks/{ref}/comments',
       '/tasks/{ref}/attachments', '/attachments/{id}',
-      '/tasks/{ref}/dependencies', '/projects/{id}', '/tasks/{ref}/activity', '/tasks/{ref}/children', '/labels',
-      '/context', '/next', '/reconcile', '/subjects', '/subjects/brief',
+      '/tasks/{ref}/children', '/labels', '/reconcile', '/subjects', '/subjects/brief',
     ]) {
       expect(paths).toContain(p)
     }
+  })
+
+  it('no longer documents what 0.8 removed', () => {
+    const paths = Object.keys(spec.paths)
+    for (const p of [
+      '/projects', '/projects/{id}', '/projects/{id}/repos', '/context', '/next', '/activity',
+      '/tasks/{ref}/dependencies', '/tasks/{ref}/mentions', '/tasks/{ref}/activity', '/tasks/{ref}/cairn-link',
+    ]) {
+      expect(paths).not.toContain(p)
+    }
+    expect(JSON.stringify(spec)).not.toMatch(/cairn/i)
   })
 
   it('derives the create-task body from the Zod schema', () => {
@@ -71,17 +81,6 @@ describe('openapi spec', () => {
     const err = spec.paths['/tasks/{ref}'].patch.responses['400'].content['application/json']
       .schema as { properties: Record<string, unknown> }
     expect(err.properties).toHaveProperty('suggestedResolution')
-  })
-
-  it('documents the optional project scope on the context endpoint', () => {
-    const context = spec.paths['/context'].get as {
-      parameters: { name: string; schema: { enum?: string[] } }[]
-      responses: Record<string, unknown>
-    }
-    expect(context.parameters.find((parameter) => parameter.name === 'scope')?.schema.enum)
-      .toEqual(['all', 'project'])
-    expect(context.responses).toHaveProperty('400')
-    expect(context.responses).toHaveProperty('404')
   })
 
   const routesOnDisk = (): string[] => {

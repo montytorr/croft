@@ -2,13 +2,11 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * Security review F1: when a project moves between Croft instances, the copy
- * left behind is archived. Before this, nothing stopped a CLI still routed to
- * that instance by a stale cache from closing, noting or claiming a task in
- * it — reads were refused nowhere, but neither were writes. This is that gap,
- * against a real database and the actual route handlers, because the guard
- * (`refuseArchived`) reads an embedded `project.status` the adapter has to
- * actually return for the check to mean anything.
+ * A project row archived by hand is read-only: reads work, writes are refused
+ * with 409 (`refuseArchived`). Nothing in the API archives a project any more,
+ * so the test archives the row itself. Run against a real database and the
+ * actual route handlers, because the guard reads an embedded `project.status`
+ * the adapter has to actually return for the check to mean anything.
  */
 
 const auth = vi.hoisted(() => ({ actor: null as null | Record<string, unknown> }))
@@ -25,7 +23,6 @@ import { pool } from '@/lib/db/client'
 import { GET as showTaskRoute, PATCH as taskPatch, DELETE as taskDelete } from '@/app/api/v1/tasks/[ref]/route'
 import { POST as claimTask } from '@/app/api/v1/tasks/[ref]/claim/route'
 import { GET as listNotes, POST as createNote } from '@/app/api/v1/tasks/[ref]/notes/route'
-import { PATCH as projectPatch } from '@/app/api/v1/projects/[id]/route'
 import { POST as createTask, GET as listTasks } from '@/app/api/v1/projects/[id]/tasks/route'
 
 const databaseUrl = process.env.DATABASE_URL
@@ -83,9 +80,7 @@ const showTask = (ref: string) =>
   showTaskRoute(new Request(`${ORIGIN}/api/v1/tasks/${ref}`), { params: Promise.resolve({ ref }) })
 
 const setProjectStatus = (status: string) =>
-  projectPatch(new Request(`${ORIGIN}/api/v1/projects/${projectId}`, {
-    method: 'PATCH', headers: jsonHeaders, body: JSON.stringify({ status }),
-  }), { params: Promise.resolve({ id: projectId }) })
+  pool().query('update projects set status = $2 where id = $1', [projectId, status])
 
 const addTaskToProject = () =>
   createTask(new Request(`${ORIGIN}/api/v1/projects/${projectId}/tasks`, {
@@ -131,9 +126,8 @@ beforeEach(() => {
 
 describe('writes to a task in an archived project', () => {
   it('archives the project', async () => {
-    const response = await setProjectStatus('archived')
-    expect(response.status).toBe(200)
-    expect((await response.json()).data.status).toBe('archived')
+    await setProjectStatus('archived')
+    expect((await pool().query('select status from projects where id = $1', [projectId])).rows[0].status).toBe('archived')
   })
 
   it('still allows reading the task', async () => {
@@ -149,7 +143,7 @@ describe('writes to a task in an archived project', () => {
     expect((await listed.json()).data.count).toBeGreaterThan(0)
   })
 
-  it('refuses PATCH with 409 conflict, naming the project and what to do', async () => {
+  it('refuses PATCH with 409 conflict, naming the project', async () => {
     const response = await patchTask(ref, { priority: 'high' })
     expect(response.status).toBe(409)
     const body = await response.json()
@@ -157,8 +151,6 @@ describe('writes to a task in an archived project', () => {
     expect(body.code).toBe('conflict')
     expect(body.error).toContain(KEY)
     expect(body.error).toContain('archived')
-    expect(body.error).toContain('--instance')
-    expect(body.error).toContain('restore')
   })
 
   it('refuses adding a note with 409 conflict', async () => {
@@ -186,9 +178,7 @@ describe('writes to a task in an archived project', () => {
   })
 
   it('restores the project, after which the same writes succeed', async () => {
-    const restored = await setProjectStatus('active')
-    expect(restored.status).toBe(200)
-    expect((await restored.json()).data.status).toBe('active')
+    await setProjectStatus('active')
 
     const patched = await patchTask(ref, { priority: 'high' })
     expect(patched.status).toBe(200)

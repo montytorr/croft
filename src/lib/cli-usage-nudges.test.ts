@@ -7,9 +7,8 @@ import { spawn } from 'node:child_process'
 
 /**
  * The nudges CROFT-294 added to the verbs agents actually type: `add` claims
- * for a runtime, `done` says what it recorded and when nobody could see the
- * work, `note` points a dead end at --kind attempt, and the briefing carries
- * the rules. Each asserts what reached the wire as well as what was said,
+ * for a runtime, `done` says what it recorded, and `note` points a dead end
+ * at --kind attempt. Each asserts what reached the wire as well as what was said,
  * because a hint that changed the stored data would be a different feature.
  */
 const servers: Server[] = []
@@ -62,7 +61,7 @@ const run = async (args: string[], base: string, agent?: string) => {
   })
 }
 
-const created = { ref: 'ACME-7', number: 7, title: 'Wire the relay', status: 'backlog' }
+const created = { ref: 'T-7', number: 7, title: 'Wire the relay', status: 'backlog' }
 
 const addServer = ({ similar = [] as unknown[], held = [] as unknown[] } = {}): Reply => (req) => {
   if (req.path.startsWith('/api/v1/search')) return { results: similar }
@@ -78,17 +77,17 @@ describe('croft add, for an agent runtime', () => {
   it('claims what it files', async () => {
     const seen: Seen[] = []
     const base = await serve(addServer(), seen)
-    const { code, stdout, stderr } = await run(['add', 'Wire the relay', '--project', 'ACME'], base, 'codex')
+    const { code, stdout, stderr } = await run(['add', 'Wire the relay', '--parent', 'T-1'], base, 'codex')
     expect(code).toBe(0)
     expect(claims(seen)).toHaveLength(1)
     expect(stdout).toContain('status\tdoing')
-    expect(stderr).toContain('claimed ACME-7')
+    expect(stderr).toContain('claimed T-7')
   })
 
   it('only files it with --no-start', async () => {
     const seen: Seen[] = []
     const base = await serve(addServer(), seen)
-    const { code } = await run(['add', 'Wire the relay', '--project', 'ACME', '--no-start'], base, 'codex')
+    const { code } = await run(['add', 'Wire the relay', '--parent', 'T-1', '--no-start'], base, 'codex')
     expect(code).toBe(0)
     expect(claims(seen)).toHaveLength(0)
   })
@@ -97,9 +96,9 @@ describe('croft add, for an agent runtime', () => {
     const seen: Seen[] = []
     const similar = [{ ref: 'ACME-3', status: 'doing', title: 'Wire the relay to the gateway' }]
     const base = await serve(addServer({ similar }), seen)
-    const { code, stderr } = await run(['add', 'Wire the relay', '--project', 'ACME'], base, 'claude-code')
+    const { code, stderr } = await run(['add', 'Wire the relay', '--parent', 'T-1'], base, 'claude-code')
     expect(code).toBe(0)
-    expect(seen.some((s) => s.method === 'POST' && s.path.endsWith('/projects/ACME/tasks'))).toBe(true)
+    expect(seen.some((s) => s.method === 'POST' && s.path.endsWith('/projects/T/tasks'))).toBe(true)
     expect(claims(seen)).toHaveLength(0)
     expect(stderr).toContain('similar existing work:')
     expect(stderr).toContain('NOT CLAIMED: ACME-3')
@@ -112,23 +111,23 @@ describe('croft add, for an agent runtime', () => {
       { ref: 'ACME-1', status: 'done', title: 'Wire the relay' },
     ]
     const base = await serve(addServer({ similar }), seen)
-    await run(['add', 'Wire the relay', '--project', 'ACME'], base, 'codex')
+    await run(['add', 'Wire the relay', '--parent', 'T-1'], base, 'codex')
     expect(claims(seen)).toHaveLength(1)
   })
 
   it('does not claim a follow-up filed while this session holds work here', async () => {
     const seen: Seen[] = []
-    const held = [{ number: 5, status: 'doing', claimed_by: 'codex · a@b', project: { key: 'ACME' } }]
+    const held = [{ number: 5, status: 'doing', claimed_by: 'codex · a@b', project: { key: 'T' } }]
     const base = await serve(addServer({ held }), seen)
-    const { stderr } = await run(['add', 'Wire the relay', '--project', 'ACME'], base, 'codex')
+    const { stderr } = await run(['add', 'Wire the relay', '--parent', 'T-1'], base, 'codex')
     expect(claims(seen)).toHaveLength(0)
-    expect(stderr).toContain('you already hold ACME-5')
+    expect(stderr).toContain('you already hold T-5')
   })
 
   it('does not claim when --status says where the task goes', async () => {
     const seen: Seen[] = []
     const base = await serve(addServer(), seen)
-    await run(['add', 'Wire the relay', '--project', 'ACME', '--status', 'todo'], base, 'codex')
+    await run(['add', 'Wire the relay', '--parent', 'T-1', '--status', 'todo'], base, 'codex')
     expect(claims(seen)).toHaveLength(0)
   })
 
@@ -136,7 +135,7 @@ describe('croft add, for an agent runtime', () => {
     const seen: Seen[] = []
     const similar = [{ ref: 'ACME-3', status: 'doing', title: 'Wire the relay to the gateway' }]
     const base = await serve(addServer({ similar }), seen)
-    await run(['add', 'Wire the relay', '--project', 'ACME', '--start'], base, 'codex')
+    await run(['add', 'Wire the relay', '--parent', 'T-1', '--start'], base, 'codex')
     expect(claims(seen)).toHaveLength(1)
   })
 })
@@ -145,7 +144,7 @@ describe('croft add, for a person', () => {
   it('files without claiming, exactly as before', async () => {
     const seen: Seen[] = []
     const base = await serve(addServer(), seen)
-    const { code, stderr } = await run(['add', 'Wire the relay', '--project', 'ACME'], base)
+    const { code, stderr } = await run(['add', 'Wire the relay', '--parent', 'T-1'], base)
     expect(code).toBe(0)
     expect(claims(seen)).toHaveLength(0)
     expect(seen.some((s) => s.path.includes('mine=true'))).toBe(false)
@@ -155,29 +154,22 @@ describe('croft add, for a person', () => {
   it('accepts --no-start without complaint', async () => {
     const seen: Seen[] = []
     const base = await serve(addServer(), seen)
-    const { code, stderr } = await run(['add', 'Wire the relay', '--project', 'ACME', '--no-start'], base)
+    const { code, stderr } = await run(['add', 'Wire the relay', '--parent', 'T-1', '--no-start'], base)
     expect(code).toBe(0)
     expect(stderr).not.toContain('ignored')
   })
 })
 
-const closeServer = (activity: unknown[]): Reply => (req) => {
+const closeServer = (): Reply => (req) => {
   if (req.method === 'PATCH') return { id: 't', number: 7, status: 'done', resolution: 'x', resolution_kind: 'fixed' }
-  if (req.path.includes('/activity')) return activity
   return {}
 }
-
-const CLOSE_ONLY = [
-  { event: 'resolved', data: {} },
-  { event: 'status_changed', data: { from: 'backlog', to: 'done' } },
-  { event: 'created', data: {} },
-]
 
 describe('croft done', () => {
   it('says it recorded fixed when --kind was omitted, and still sends fixed', async () => {
     const seen: Seen[] = []
-    const base = await serve(closeServer([{ event: 'claimed', data: {} }]), seen)
-    const { code, stderr } = await run(['done', 'ACME-7', '--resolution', 'shipped'], base, 'codex')
+    const base = await serve(closeServer(), seen)
+    const { code, stderr } = await run(['done', 'T-7', '--resolution', 'shipped'], base, 'codex')
     expect(code).toBe(0)
     expect(seen.find((s) => s.method === 'PATCH')?.body?.resolutionKind).toBe('fixed')
     expect(stderr).toContain('recorded as fixed — use --kind verified|answered')
@@ -186,46 +178,19 @@ describe('croft done', () => {
 
   it('says nothing about the kind when one was given', async () => {
     const seen: Seen[] = []
-    const base = await serve(closeServer([{ event: 'claimed', data: {} }]), seen)
-    const { stderr } = await run(['done', 'ACME-7', '--resolution', 'read it', '--kind', 'verified'], base, 'codex')
+    const base = await serve(closeServer(), seen)
+    const { stderr } = await run(['done', 'T-7', '--resolution', 'read it', '--kind', 'verified'], base, 'codex')
     expect(stderr).not.toContain('recorded as fixed')
-  })
-
-  it('warns, after closing, when nothing ever showed the work being done', async () => {
-    const seen: Seen[] = []
-    const base = await serve(closeServer(CLOSE_ONLY), seen)
-    const { code, stderr } = await run(['done', 'ACME-7', '--resolution', 'shipped', '--kind', 'fixed'], base, 'claude-code')
-    expect(code).toBe(0)
-    expect(seen.some((s) => s.method === 'PATCH')).toBe(true)
-    expect(stderr).toContain('ACME-7 was closed without ever being claimed')
-  })
-
-  it('does not warn when a commit or a move to in-review showed the work', async () => {
-    for (const trace of [
-      { event: 'git_commit', data: { sha: 'abc' } },
-      { event: 'status_changed', data: { from: 'doing', to: 'in-review' } },
-    ]) {
-      const base = await serve(closeServer([...CLOSE_ONLY, trace]), [])
-      const { stderr } = await run(['done', 'ACME-7', '--resolution', 'shipped', '--kind', 'fixed'], base, 'codex')
-      expect(stderr).not.toContain('without ever being claimed')
-    }
   })
 
   it('no longer asks what the task taught: Croft keeps no memory store', async () => {
     const seen: Seen[] = []
-    const base = await serve(closeServer([{ event: 'claimed', data: {} }]), seen)
+    const base = await serve(closeServer(), seen)
     const { stderr } = await run(['done', 'T-7', '--resolution', 'shipped', '--kind', 'fixed'], base, 'codex')
     expect(stderr).not.toContain('establish anything')
     expect(seen.some((s) => s.path.includes('/recall'))).toBe(false)
   })
 
-  it('does not warn a person, who is documented as never claiming', async () => {
-    const seen: Seen[] = []
-    const base = await serve(closeServer(CLOSE_ONLY), seen)
-    const { stderr } = await run(['done', 'ACME-7', '--resolution', 'shipped', '--kind', 'fixed'], base)
-    expect(stderr).not.toContain('without ever being claimed')
-    expect(seen.some((s) => s.path.includes('/activity'))).toBe(false)
-  })
 })
 
 describe('croft note', () => {
@@ -234,7 +199,7 @@ describe('croft note', () => {
   it('points a dead end at --kind attempt without changing what is stored', async () => {
     const seen: Seen[] = []
     const base = await serve(noteServer, seen)
-    const { stderr } = await run(['note', 'ACME-7', 'bumped pool_size to 30, no change'], base, 'codex')
+    const { stderr } = await run(['note', 'T-7', 'bumped pool_size to 30, no change'], base, 'codex')
     expect(seen[0]?.body?.kind).toBe('note')
     expect(stderr).toContain('--kind attempt')
   })
@@ -243,54 +208,20 @@ describe('croft note', () => {
     'recognises "%s"',
     async (text) => {
       const base = await serve(noteServer, [])
-      const { stderr } = await run(['note', 'ACME-7', text], base, 'codex')
+      const { stderr } = await run(['note', 'T-7', text], base, 'codex')
       expect(stderr).toContain('--kind attempt')
     },
   )
 
   it('stays quiet for an ordinary note, or when a kind was given', async () => {
     for (const args of [
-      ['note', 'ACME-7', 'the relay reads its config at boot'],
-      ['note', 'ACME-7', 'tried X, no change', '--kind', 'finding'],
+      ['note', 'T-7', 'the relay reads its config at boot'],
+      ['note', 'T-7', 'tried X, no change', '--kind', 'finding'],
     ]) {
       const base = await serve(noteServer, [])
       const { stderr } = await run(args, base, 'codex')
       expect(stderr).not.toContain('--kind attempt')
     }
-  })
-})
-
-describe('the briefing', () => {
-  const briefing = {
-    project: 'ACME',
-    held: [{ ref: 'ACME-7', title: 'Wire the relay', status: 'doing', quiet: false }],
-    inFlight: [], staleClaims: [],
-  }
-
-  it('carries the working rules in a few hundred bytes', async () => {
-    const base = await serve(() => briefing, [])
-    const { stdout } = await run(['context', '--project', 'ACME'], base)
-    const start = stdout.indexOf('Lab work (exploring, proving an idea')
-    expect(start).toBeGreaterThan(-1)
-    const rules = stdout.slice(start).trim()
-    expect(Buffer.byteLength(rules)).toBeLessThanOrEqual(360)
-    for (const rule of ['Croft holds lab work only', '--kind finding|attempt|decision', 'Claim the todo you work', '--conclusion -', 'done --resolution']) {
-      expect(rules).toContain(rule)
-    }
-  })
-
-  it('still says nothing when there is nothing to brief', async () => {
-    const base = await serve(() => ({ ...briefing, project: null, held: [] }), [])
-    const { stdout } = await run(['context'], base)
-    expect(stdout).toBe('')
-  })
-
-  it('keeps the rules out of a single-file answer', async () => {
-    const file = { path: 'src/a.ts', tasks: [{ ref: 'ACME-7', status: 'doing', title: 'x' }] }
-    const base = await serve(() => ({ ...briefing, file }), [])
-    const { stdout } = await run(['context', '--file', 'src/a.ts'], base)
-    expect(stdout).toContain('Croft knows about src/a.ts')
-    expect(stdout).not.toContain('Exploring or proving')
   })
 })
 
@@ -309,9 +240,9 @@ describe('the assignee (CROFT-310)', () => {
       if (req.path.startsWith('/api/v1/search')) return { results: [] }
       return { ...created, assignee_user_id: alice.id, assignee: alice }
     }, seen)
-    const { code, stdout } = await run(['add', 'Wire the relay', '--project', 'ACME'], base)
+    const { code, stdout } = await run(['add', 'Wire the relay', '--parent', 'T-1'], base)
     expect(code).toBe(0)
-    const post = seen.find((s) => s.method === 'POST' && s.path.endsWith('/projects/ACME/tasks'))
+    const post = seen.find((s) => s.method === 'POST' && s.path.endsWith('/projects/T/tasks'))
     expect(post?.body).not.toHaveProperty('assignee')
     expect(stdout).toContain('assignee\tAlice')
     expect(stdout).not.toContain('assignee.email')
@@ -322,12 +253,12 @@ describe('the assignee (CROFT-310)', () => {
     const seen: Seen[] = []
     const base = await serve((req) => {
       if (req.path.startsWith('/api/v1/search')) return { results: [] }
-      if (req.path.includes('/tasks?')) return { count: 1, tasks: [{ number: 7, status: 'todo', type: 'bug', priority: 'high', title: 'T', claimed_by: 'codex · Bob', assignee: alice, project: { key: 'ACME' } }] }
+      if (req.path.includes('/tasks?')) return { count: 1, tasks: [{ number: 7, status: 'todo', type: 'bug', priority: 'high', title: 'T', claimed_by: 'codex · Bob', assignee: alice, project: { key: 'T' } }] }
       return created
     }, seen)
-    await run(['add', 'Wire the relay', '--project', 'ACME', '--assignee', 'bob@acme.io'], base)
-    await run(['update', 'ACME-7', '--assignee', 'me'], base)
-    const { stdout } = await run(['list', 'ACME', '--assignee', 'me'], base)
+    await run(['add', 'Wire the relay', '--parent', 'T-1', '--assignee', 'bob@acme.io'], base)
+    await run(['update', 'T-7', '--assignee', 'me'], base)
+    const { stdout } = await run(['list', '--assignee', 'me'], base)
     expect(seen.find((s) => s.method === 'POST')?.body?.assignee).toBe('bob@acme.io')
     expect(seen.find((s) => s.method === 'PATCH')?.body?.assignee).toBe('me')
     expect(seen.some((s) => s.method === 'GET' && s.path.includes('assignee=me'))).toBe(true)
@@ -340,24 +271,24 @@ describe('the assignee (CROFT-310)', () => {
     const row = { ...created, status: 'done', resolution: 'x', assignee_user_id: alice.id, assignee: alice }
     const base = await serve(() => row, [])
     for (const args of [
-      ['done', 'ACME-7', '--resolution', 'shipped', '--kind', 'fixed'],
-      ['cancel', 'ACME-7', '--resolution', 'dropped'],
-      ['show', 'ACME-7', '--full'],
-      ['claim', 'ACME-7'],
-      ['release', 'ACME-7'],
+      ['done', 'T-7', '--resolution', 'shipped', '--kind', 'fixed'],
+      ['cancel', 'T-7', '--resolution', 'dropped'],
+      ['show', 'T-7', '--full'],
+      ['claim', 'T-7'],
+      ['release', 'T-7'],
     ]) {
       const { code, stdout } = await run(args, base)
       expect(code, args.join(' ')).toBe(0)
       expect(stdout, args.join(' ')).toContain('assignee\tAlice\n')
       expect(stdout, args.join(' ')).not.toMatch(/assignee\.|assignee_user_id/)
     }
-    const { stdout } = await run(['done', 'ACME-7', '--resolution', 'shipped', '--kind', 'fixed', '--json'], base)
+    const { stdout } = await run(['done', 'T-7', '--resolution', 'shipped', '--kind', 'fixed', '--json'], base)
     expect(JSON.parse(stdout)).toMatchObject({ assignee_user_id: alice.id, assignee: alice })
   })
 
   it('leaves the digest, which already names the assignee, as it is', async () => {
-    const base = await serve(() => ({ ref: 'ACME-7', title: 'Wire the relay', assignee: 'Alice', createdBy: 'codex · Bob' }), [])
-    const { stdout } = await run(['show', 'ACME-7'], base)
+    const base = await serve(() => ({ ref: 'T-7', title: 'Wire the relay', assignee: 'Alice', createdBy: 'codex · Bob' }), [])
+    const { stdout } = await run(['show', 'T-7'], base)
     expect(stdout).toContain('assignee\tAlice\n')
     expect(stdout).toContain('createdBy\tcodex · Bob\n')
   })
@@ -369,21 +300,6 @@ describe('the assignee (CROFT-310)', () => {
     expect(stdout.trim().split('\n')).toEqual(['#1', 'name\temail', 'Alice\talice@acme.io'])
   })
 
-  it('next sends the filter and names whose each task is', async () => {
-    const seen: Seen[] = []
-    const base = await serve(() => ({
-      pick: { ref: 'ACME-7', title: 'Wire the relay', status: 'todo', priority: 'high', assignee: 'Alice', reason: 'queued and ready' },
-      then: [{ ref: 'ACME-9', title: 'Port the parser', assignee: 'Julien', reason: 'queued and ready · assigned to Julien' }],
-      considered: 2,
-      offerable: 2,
-    }), seen)
-    const { code, stdout } = await run(['next', '--project', 'ACME', '--assignee', 'me'], base)
-    expect(code).toBe(0)
-    expect(seen[0]?.path).toContain('assignee=me')
-    expect(stdout).toContain('ACME-7  Wire the relay  · Alice')
-    expect(stdout).toContain('  ACME-9  Port the parser  · Julien')
-  })
-
   it('check sends the filter', async () => {
     const seen: Seen[] = []
     const base = await serve(() => ({ count: 0, results: [] }), seen)
@@ -391,40 +307,4 @@ describe('the assignee (CROFT-310)', () => {
     expect(new URL(seen[0]!.path, base).searchParams.get('assignee')).toBe('julien@acme.io')
   })
 
-  it('the briefing lists unattended work and names someone elses in-flight work', async () => {
-    const base = await serve(() => ({
-      project: 'ACME',
-      held: [],
-      inFlight: [
-        { ref: 'ACME-3', title: 'Relay retries', status: 'doing', claimedBy: 'codex', quietFor: '5m', stalled: false, assignee: 'Julien' },
-        { ref: 'ACME-4', title: 'Drop the cache', status: 'doing', claimedBy: null, quietFor: '3d', stalled: true },
-      ],
-      unattended: {
-        tasks: [
-          { ref: 'ACME-7', title: 'Wire the relay', status: 'todo', priority: 'urgent' },
-          { ref: 'ACME-8', title: 'Write the runbook', status: 'backlog', priority: 'medium' },
-        ],
-        more: 4,
-      },
-      knowledge: [], staleClaims: [], lastSession: null,
-    }), [])
-    const { stdout } = await run(['context', '--project', 'ACME'], base)
-    expect(stdout).toContain("  ACME-3  doing  Relay retries  (codex) · Julien's")
-    expect(stdout).toContain('  ACME-4  doing  Drop the cache  quiet 3d\n')
-    expect(stdout).toContain(
-      'Assigned to you, nobody on it:\n' +
-        '  ACME-7  todo  Wire the relay  [urgent]\n' +
-        '  ACME-8  backlog  Write the runbook\n' +
-        '  +4 more -- croft next --assignee me\n',
-    )
-  })
-
-  it('the briefing says nothing about unattended work from a server that does not send it', async () => {
-    const base = await serve(() => ({
-      project: 'ACME', held: [{ ref: 'ACME-7', title: 'Wire the relay', status: 'doing', quiet: false }],
-      inFlight: [], knowledge: [], staleClaims: [], lastSession: null,
-    }), [])
-    const { stdout } = await run(['context', '--project', 'ACME'], base)
-    expect(stdout).not.toContain('Assigned to you')
-  })
 })

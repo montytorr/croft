@@ -42,8 +42,7 @@ const SWIMLANE_LABEL: Record<Swimlane, string> = {
 
 /**
  * A multi-select popover. The same outside-click/Escape pattern as
- * `label-editor.tsx` and `bulk-bar.tsx`'s `Action` menu — one look for every
- * menu in the app.
+ * `label-editor.tsx` — one look for every menu in the app.
  */
 const FilterMenu = ({
   label,
@@ -152,7 +151,7 @@ export const BoardToolbar = ({
 }) => {
   const [knownLabels, setKnownLabels] = useState<string[]>([])
 
-  // Same one-shot fetch list-view.tsx uses: offering labels already in use is
+  // One-shot fetch: offering labels already in use is
   // what keeps the filter useful instead of a blank text box.
   useEffect(() => {
     const load = async () => {
@@ -170,9 +169,8 @@ export const BoardToolbar = ({
   ]
 
   return (
-    // No overflow utility on this row, ever — see src/lib/overflow-guard.test.ts
-    // and board-toolbar.test.ts. Setting one overflow axis to `auto` forces the
-    // other from `visible` to `auto`, which is exactly what clipped the bulk
+    // No overflow utility on this row, ever — see board-toolbar.test.ts. Setting one overflow axis to `auto` forces the
+    // other from `visible` to `auto`, which is exactly what clipped a floating
     // bar's own menus out of existence. This row wraps instead.
     <div className="border-border flex flex-wrap items-center gap-1 border-b px-3 py-1.5">
       <Select

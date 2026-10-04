@@ -1,6 +1,6 @@
 'use client'
 
-import { InlineInput, Select } from '@/components/ui/control'
+import { InlineInput } from '@/components/ui/control'
 
 import { useState } from 'react'
 import Link from 'next/link'
@@ -27,20 +27,14 @@ export const ChildrenPanel = ({
   // Not named `children`: that is React's own prop, and passing an array of
   // tasks through it reads like a mistake even when it works.
   items,
-  projects = [],
 }: {
   taskRef: string
   projectKey: string
   items: ChildTask[]
-  /** Every project the child could be filed in. A change that lands in four
-   *  repos is one parent with a child in each of their projects, and until now
-   *  this panel could only create in the project it was standing in. */
-  projects?: { key: string; title: string }[]
 }) => {
   const router = useRouter()
   const request = useMutate()
   const [adding, setAdding] = useState(false)
-  const [target, setTarget] = useState(projectKey)
   const [title, setTitle] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -53,7 +47,7 @@ export const ChildrenPanel = ({
     if (!value || busy) return
     setBusy(true)
     setError(null)
-    const result = await mutate(`/api/v1/projects/${target}/tasks`, {
+    const result = await mutate(`/api/v1/projects/${projectKey}/tasks`, {
       method: 'POST',
       body: { title: value, parentRef: taskRef, status: 'todo' },
     })
@@ -156,22 +150,6 @@ export const ChildrenPanel = ({
             aria-label="New sub-task title"
             className="min-w-0 flex-1"
           />
-          {projects.length > 1 && (
-            <Select
-              size="sm"
-              value={target}
-              onChange={(e) => setTarget(e.target.value)}
-              aria-label="Which project the sub-task goes in"
-              title="A sub-task can live in another repo's project — that is how one change lands across several"
-              className="w-[5.75rem]"
-            >
-              {projects.map((p) => (
-                <option key={p.key} value={p.key}>
-                  {p.key}
-                </option>
-              ))}
-            </Select>
-          )}
         </div>
       )}
 

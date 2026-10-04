@@ -11,7 +11,6 @@ if (!databaseUrl) throw new Error('DATABASE_URL is required for integration test
 const ownerId = randomUUID()
 const memberId = randomUUID()
 const projectId = randomUUID()
-const memberProjectId = randomUUID()
 const taskId = randomUUID()
 const sharedTaskId = randomUUID()
 
@@ -27,10 +26,6 @@ beforeAll(async () => {
   await pool().query(
     `insert into projects (id, owner_user_id, key, title) values ($1,$2,'INT','Integrity')`,
     [projectId, ownerId],
-  )
-  await pool().query(
-    `insert into projects (id, owner_user_id, key, title) values ($1,$2,'MEM','Member project')`,
-    [memberProjectId, memberId],
   )
   await pool().query(
     `insert into tasks (id, project_id, number, title, actor_type, actor_id, status)
@@ -80,14 +75,6 @@ describe('shared workspace task lifecycle', () => {
     expect(events.rows).toEqual([{ owner_user_id: memberId, actor_id: actor }])
   })
 
-  it('lets a member move an admin-owned task into another workspace project', async () => {
-    const moved = await pool().query(
-      `select * from move_task($1,$2,$3)`,
-      [memberId, sharedTaskId, memberProjectId],
-    )
-    expect(moved.rows[0]).toMatchObject({ id: sharedTaskId, number: 1, project_key: 'MEM' })
-  })
-
   it('keeps workspace identifiers globally unique across users', async () => {
     await expect(pool().query(
       `insert into projects (owner_user_id, key, title) values ($1, 'INT', 'Duplicate')`,
@@ -101,7 +88,7 @@ describe('shared workspace RPCs', () => {
     await pool().query("update tasks set labels = array['shared-label'] where id = $1", [taskId])
 
     const searched = await pool().query(
-      `select * from search_tasks($1, 'Concurrency target', null, null, null, null, 20, 3)`,
+      `select * from search_all($1, 'Concurrency target', null, null, null, 20, 3)`,
       [memberId],
     )
     expect(searched.rows.some((row) => row.id === taskId)).toBe(true)
@@ -118,7 +105,6 @@ describe('shared workspace RPCs', () => {
 
   it('removes owner predicates from every compatibility RPC definition', async () => {
     const names = [
-      'search_tasks',
       'search_all',
       'activity_feed',
       'list_labels',

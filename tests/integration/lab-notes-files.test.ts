@@ -33,7 +33,7 @@ import { POST as createLabProjectRoute } from '@/app/api/v1/lab-projects/route'
 import { GET as filesRoute } from '@/app/api/files/route'
 import { listLabTodos, listSubjectAttachments, listSubjectHumanNotes } from '@/lib/lab/data'
 import { listBoardTasks } from '@/lib/board-data'
-import { listTaskAttachments, listTasks } from '@/lib/data'
+import { listTaskAttachments } from '@/lib/data'
 
 const databaseUrl = process.env.DATABASE_URL
 if (!databaseUrl) throw new Error('DATABASE_URL is required for integration tests')
@@ -384,7 +384,6 @@ describe('todo lists carry their subject', () => {
       priority: 'medium',
       claimed_by: null,
       handoff: null,
-      cairn_ref: null,
       assignee: { id: adminId, name: expect.any(String) },
       subject: { ref, title: `Files ${RUN}`, project: { name: projectName, color: '#4f8c86' } },
     })
@@ -397,15 +396,12 @@ describe('todo lists carry their subject', () => {
     expect((await listLabTodos({ subject: otherRef, includeClosed: true }, { id: memberId, role: 'member' as const })).map((t) => t.status)).toEqual(['done'])
   })
 
-  it('the board and the project list carry it too', async () => {
+  it('the board carries it too', async () => {
     const board = await listBoardTasks('', { includeClosed: true }, { id: memberId, role: 'member' as const })
     const card = board.tasks.find((t) => t.title === `Bench ${RUN}`)!
     expect(card.subject).toMatchObject({ ref, project: { name: projectName } })
-    expect(card).toHaveProperty('cairn_ref', null)
+    expect(card).not.toHaveProperty('cairn_ref')
     expect(card).toHaveProperty('handoff', null)
 
-    const t = (await pool().query(`select id from projects where key = 'T'`)).rows[0].id as string
-    const page = await listTasks(t, { includeClosed: true }, { id: memberId, role: 'member' as const })
-    expect(page.tasks.find((x) => x.title === `Bench ${RUN}`)?.subject?.ref).toBe(ref)
   })
 })

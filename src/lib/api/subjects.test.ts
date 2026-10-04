@@ -3,7 +3,6 @@ import { conclusionMissing, nextConcludedAt, noteContentHash, stageNoteHash, sta
 import { handoffOutcomeHash, handoffOutcomeNote, closedInKind, closedInResolution } from './handoff'
 import { parseRef } from './tasks'
 import { parseSubjectRef, subjectRef, isConcluding } from '@/lib/lab/types'
-import { PROJECT_KEY_RULE } from '@/lib/project-rename'
 
 describe('subject refs', () => {
   it('reads S-12, s-12 and a bare number', () => {
@@ -14,27 +13,20 @@ describe('subject refs', () => {
   })
 
   it('refuses anything that is not a subject ref', () => {
-    for (const bad of ['T-12', 'S-', 'S12', 'CAIRN-12', '', 'S-1.5']) expect(parseSubjectRef(bad)).toBeNull()
+    for (const bad of ['T-12', 'S-', 'S12', 'LIN-12', '', 'S-1.5']) expect(parseSubjectRef(bad)).toBeNull()
   })
 })
 
 describe('single-letter project keys', () => {
-  it('are valid keys, so the todo project can be T', () => {
-    expect(PROJECT_KEY_RULE.test('T')).toBe(true)
-    expect(PROJECT_KEY_RULE.test('CAI')).toBe(true)
-    expect(PROJECT_KEY_RULE.test('1A')).toBe(false)
-    expect(PROJECT_KEY_RULE.test('ABCDEFGHIJK')).toBe(false)
-  })
-
   it('make T-41 an addressable task ref', () => {
     expect(parseRef('T-41')).toEqual({ key: 'T', number: 41 })
     expect(parseRef('t-41')).toEqual({ key: 'T', number: 41 })
   })
 
   it('stay invisible to trackers whose refs need a key of two or more', () => {
-    const CAIRN_REF = /\b([A-Z][A-Z0-9]{1,9})-(\d{1,6})\b/
-    expect(CAIRN_REF.test('T-41')).toBe(false)
-    expect(CAIRN_REF.test('S-12')).toBe(false)
+    const TRACKER_REF = /\b([A-Z][A-Z0-9]{1,9})-(\d{1,6})\b/
+    expect(TRACKER_REF.test('T-41')).toBe(false)
+    expect(TRACKER_REF.test('S-12')).toBe(false)
   })
 })
 
@@ -104,20 +96,20 @@ describe('notes', () => {
 
 describe('hand-off outcomes', () => {
   it('writes the outcome line with the resolution when there is one', () => {
-    expect(handoffOutcomeNote('CAIRN-331', 'done', ' Shipped in v2. ')).toBe('CAIRN-331 done: Shipped in v2.')
-    expect(handoffOutcomeNote('CAIRN-331', 'cancelled', null)).toBe('CAIRN-331 cancelled')
+    expect(handoffOutcomeNote('LIN-331', 'done', ' Shipped in v2. ')).toBe('LIN-331 done: Shipped in v2.')
+    expect(handoffOutcomeNote('LIN-331', 'cancelled', null)).toBe('LIN-331 cancelled')
   })
 
   it('keys the outcome on ref and status, so a revised resolution is not a second note', () => {
-    expect(handoffOutcomeHash('cairn', 'CAIRN-331', 'done')).toBe(handoffOutcomeHash('cairn', 'CAIRN-331', 'done'))
-    expect(handoffOutcomeHash('cairn', 'CAIRN-331', 'done')).not.toBe(
-      handoffOutcomeHash('cairn', 'CAIRN-331', 'cancelled'),
+    expect(handoffOutcomeHash('linear', 'LIN-331', 'done')).toBe(handoffOutcomeHash('linear', 'LIN-331', 'done'))
+    expect(handoffOutcomeHash('linear', 'LIN-331', 'done')).not.toBe(
+      handoffOutcomeHash('linear', 'LIN-331', 'cancelled'),
     )
-    expect(handoffOutcomeHash('cairn', 'X-1', 'done')).not.toBe(handoffOutcomeHash('github', 'X-1', 'done'))
+    expect(handoffOutcomeHash('linear', 'X-1', 'done')).not.toBe(handoffOutcomeHash('github', 'X-1', 'done'))
   })
 
   it('closes a todo saying where it was closed, with the tracker\'s kind or `verified`', () => {
-    expect(closedInResolution('cairn', 'CAIRN-331', ' Shipped in v2. ')).toBe('Closed in cairn as CAIRN-331: Shipped in v2.')
+    expect(closedInResolution('linear', 'LIN-331', ' Shipped in v2. ')).toBe('Closed in linear as LIN-331: Shipped in v2.')
     expect(closedInResolution('github', 'o/r#4', null)).toBe('Closed in github as o/r#4')
     expect(closedInKind('wont-fix')).toBe('wont-fix')
     // A kind Croft does not have, or none, must not fail the close.

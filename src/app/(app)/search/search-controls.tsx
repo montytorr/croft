@@ -2,20 +2,10 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { TASK_STATUSES, TASK_TYPES } from '@/schemas/task'
 import { Spinner } from '@/components/spinner'
 import { Search as SearchIcon, X } from 'lucide-react'
 import { Input, Select } from '@/components/ui/control'
 import { cn } from '@/lib/utils'
-
-const STATUS_LABEL: Record<string, string> = {
-  backlog: 'Backlog',
-  todo: 'Todo',
-  doing: 'In Progress',
-  'in-review': 'In Review',
-  done: 'Done',
-  cancelled: 'Cancelled',
-}
 
 const Filter = ({
   value,
@@ -51,18 +41,10 @@ const Filter = ({
  */
 export const SearchControls = ({
   q,
-  project,
-  type,
-  status,
   kind,
-  projects,
 }: {
   q: string
-  project: string
-  type: string
-  status: string
   kind: string
-  projects: { key: string; title: string }[]
 }) => {
   const router = useRouter()
   // The query lives in the URL, so every keystroke is a server round trip.
@@ -82,19 +64,10 @@ export const SearchControls = ({
 
   const push = (next: {
     q?: string
-    project?: string
-    type?: string
-    status?: string
     kind?: string
   }) => {
     const params = new URLSearchParams()
-    const merged = { q: draft, project, type, status, kind, ...next }
-    // Type and status only mean anything for tasks, so choosing another kind
-    // drops them rather than silently returning nothing.
-    if (merged.kind && merged.kind !== 'all' && merged.kind !== 'task') {
-      merged.type = ''
-      merged.status = ''
-    }
+    const merged = { q: draft, kind, ...next }
     if (merged.kind === 'all') merged.kind = ''
     for (const [key, value] of Object.entries(merged)) {
       if (value) params.set(key, value)
@@ -117,7 +90,7 @@ export const SearchControls = ({
   // `q` prop, not the ref: a ref read during render neither re-renders when it
   // changes nor is sound under concurrent rendering.
   const pendingDebounce = draft.trim() !== q.trim()
-  const cleared = !q && !project && !type && !status && (!kind || kind === 'all')
+  const cleared = !q && (!kind || kind === 'all')
 
   return (
     <div className="border-border/70 flex shrink-0 flex-col gap-2 border-b px-3 py-2 sm:h-[2.625rem] sm:flex-row sm:items-center sm:px-4 sm:py-0">
@@ -166,28 +139,6 @@ export const SearchControls = ({
           { value: 'note', label: 'Todo notes' },
         ]}
       />
-      <Filter
-        value={project}
-        onChange={(v) => push({ project: v })}
-        placeholder="All projects"
-        options={projects.map((p) => ({ value: p.key, label: p.title }))}
-      />
-      {(kind === 'all' || kind === 'task') && (
-        <>
-          <Filter
-            value={type}
-            onChange={(v) => push({ type: v })}
-            placeholder="Any type"
-            options={TASK_TYPES.map((t) => ({ value: t, label: t }))}
-          />
-          <Filter
-            value={status}
-            onChange={(v) => push({ status: v })}
-            placeholder="Any status"
-            options={TASK_STATUSES.map((s) => ({ value: s, label: STATUS_LABEL[s] ?? s }))}
-          />
-        </>
-      )}
       {!cleared && (
         <button
           type="button"

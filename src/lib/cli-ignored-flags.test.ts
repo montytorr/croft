@@ -118,29 +118,25 @@ describe('a flag the running command never read', () => {
  * at once. Each of these is a documented invocation whose every flag the verb
  * really does read; a false positive here is the failure that matters.
  *
- * `add`, `update`, `done`, `cancel`, `list` and `run` are the ones a static
+ * `add`, `update`, `done`, `cancel` and `list` are the ones a static
  * analysis got wrong: they read their flags through `for (const k of [...])`
  * loops and `[flag, field]` pairs, so a grep for `flags.x` reports them as
  * ignored and the proxy does not.
  */
 describe('documented invocations stay silent', () => {
   const invocations: string[][] = [
-    ['add', 'A title', '--project', 'CAI', '--type', 'bug', '--priority', 'high', '--body', 'b', '--label', 'l'],
+    ['add', 'A title', '--parent', 'T-1', '--type', 'bug', '--priority', 'high', '--body', 'b', '--label', 'l'],
     ['update', 'CAI-1', '--title', 'T', '--status', 'doing', '--type', 'bug', '--priority', 'low'],
-    ['update', 'CAI-1', '--also-project', 'HM'],
     ['done', 'CAI-1', '--resolution', 'r', '--kind', 'fixed'],
     ['done', 'CAI-1', '--duplicate-of', 'CAI-2', '--resolution', 'r'],
     ['cancel', 'CAI-1', '--resolution', 'r', '--kind', 'wont-fix'],
-    ['list', 'CAI', '--status', 'doing', '--type', 'bug', '--label', 'l', '--mine', '--limit', '5'],
-    ['run', 'CAI-1', 'npm test', '--status', 'passed', '--exit-code', '0', '--duration-ms', '10'],
-    ['commit', 'CAI-1', 'abc1234', '--repo', '/tmp', '--branch', 'b', '--message', 'm'],
+    ['list', '--status', 'doing', '--type', 'bug', '--label', 'l', '--mine', '--limit', '5'],
     ['note', 'CAI-1', 'text', '--kind', 'finding'],
     ['release', 'CAI-1', '--force'],
     ['checkpoint', 'CAI-1', '--summary', 's'],
     ['block', 'CAI-1', '--reason', 'r'],
     ['note', 'T-1', 'text', '--kind', 'attempt'],
     ['done', 'T-1', '--resolution', 'r'],
-    ['push', 'T-1', 'abc1234', '--repo', '/tmp', '--branch', 'b', '--remote', 'origin'],
     ['subject', 'add', 'A subject', '--stage', 'exploring', '--tag', 'a', '--tag', 'b,c', '--owner', 'me', '--body', 'b'],
     ['subject', 'list', '--stage', 'exploring', '--tag', 'a', '--mine', '--all'],
     ['subject', 'show', 'S-1', '--full'],
@@ -151,23 +147,19 @@ describe('documented invocations stay silent', () => {
     ['stages'],
     ['tags'],
     ['context', '--brief', '--cwd', '/tmp'],
-    ['check', 'x', '--project', 'CAI', '--kinds', 'task'],
-    ['check', 'x', '--tasks'],
+    ['check', 'x', '--kinds', 'task'],
     ['show', 'CAI-1', '--full'],
     ['projects'],
-    ['project', 'list', '--archived'],
     ['subject', 'add', 'A subject', '--project', 'Trig'],
     ['subject', 'list', '--project', 'none'],
     ['subject', 'edit', 'S-1', '--project', 'Trig'],
-    ['add', 'A title', '--project', 'CAI', '--assignee', 'bob@acme.io'],
+    ['add', 'A title', '--parent', 'T-1', '--assignee', 'bob@acme.io'],
     ['update', 'CAI-1', '--assignee', 'me'],
-    ['list', 'CAI', '--assignee', 'me'],
-    ['next', '--project', 'CAI', '--assignee', 'me'],
+    ['list', '--assignee', 'me'],
     ['check', 'x', '--assignee', 'julien@acme.io'],
     ['subject', 'add', 'A subject', '--visibility', 'members', '--member', 'mael', '--member', 'sam,me'],
     ['subject', 'share', 'S-1', '+mael', '-sam', '--visibility', 'members'],
     ['subject', 'publish', 'S-1'],
-    ['push', 'T-1', '--link', 'CAIRN-1', '--force'],
   ]
 
   it.each(invocations.map((args) => [args.join(' '), args] as const))(
@@ -178,33 +170,4 @@ describe('documented invocations stay silent', () => {
       expect(stderr).not.toContain('does not take')
     },
   )
-})
-
-describe('context scope option', () => {
-  it('passes the project scope to the context endpoint', async () => {
-    const seen: { url?: string } = {}
-    const base = await serve(seen)
-    const { code, stderr } = await run(['context', '--scope', 'project', '--project', 'MES', '--json'], base)
-    expect(code).toBe(0)
-    expect(stderr).not.toContain('does not take')
-    expect(new URL(seen.url!, base).searchParams.get('scope')).toBe('project')
-    expect(new URL(seen.url!, base).searchParams.get('project')).toBe('MES')
-  })
-
-  it('does not change the default context request', async () => {
-    const seen: { url?: string } = {}
-    const base = await serve(seen)
-    const { code } = await run(['context', '--project', 'MES', '--json'], base)
-    expect(code).toBe(0)
-    expect(new URL(seen.url!, base).searchParams.has('scope')).toBe(false)
-  })
-
-  it('rejects an unsupported scope before contacting the server', async () => {
-    const seen: { url?: string } = {}
-    const base = await serve(seen)
-    const { code, stderr } = await run(['context', '--scope', 'workspace'], base)
-    expect(code).not.toBe(0)
-    expect(stderr).toContain('--scope must be project or all')
-    expect(seen.url).toBeUndefined()
-  })
 })

@@ -8,6 +8,27 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+### Breaking
+
+- CLIs before 0.8 calling removed routes get 404 — re-run `croft setup`.
+- The 0.7 deprecated aliases are gone: `croft push T-n` without a sha (use `croft handoff`), the `cairn_ref` / `cairn_key` JSON fields, `/tasks/[ref]/cairn-link`, and the CLI's fallback for servers older than 0.7.
+
+### Removed
+
+- Multi-project management: creating, renaming, re-keying, archiving, restoring and deleting task projects, project repositories, former keys and the rename redirect, and putting a todo in more than one project. Every todo lives in the hidden project `T`. `croft project` and `croft map` go, and so do `croft update --project` and `--also-project`.
+- `croft context` without `--brief` and `/api/v1/context` (bare `croft context` now prints the brief), and the file-touch lookup (`--file`).
+- `croft next` and `/api/v1/next`.
+- Task dependencies: `croft deps`, `blockedby`, `unblockedby`, the MCP tools `croft_deps` and `croft_link`, the dependency editor.
+- Mentions: the route, the mentions panel and the database table.
+- Git and test evidence: `croft commit`, `croft run`, `croft history`, `croft push T-n <sha>`, and the per-task activity route.
+- The task-only search mode, the search-results bulk bar, and the search evaluation scripts (`scripts/ab-search.mjs`, `scripts/score-search-eval.mjs`).
+- The CLI's key-based instance routing and its project-key cache: a directory, a session or `--instance` chooses the instance, never a ref. Multi-instance support itself stays.
+- The `session_closed` exit code.
+
+### Fixed
+
+- The New todo dialog (`c` on /todos, /board, a todo page and the palette) always failed with `subject_required`. It now asks for a subject, defaulting to the one in context, and offers a sub-task of the open todo.
+
 ## [0.7.0] — 2026-10-04
 
 ### Added

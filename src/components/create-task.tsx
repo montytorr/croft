@@ -2,34 +2,38 @@
 
 import { Spinner } from '@/components/spinner'
 
-import { Button, InlineInput } from '@/components/ui/control'
+import { Button } from '@/components/ui/control'
 
 import { useRouter } from 'next/navigation'
 import { mutate } from '@/lib/api/mutate'
-import { useEffect, useRef, useState } from 'react'
-import { Avatar, PriorityIcon, ProjectIcon, StatusIcon, TypePill } from '@/components/icons'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Avatar, PriorityIcon, StatusIcon, TypePill } from '@/components/icons'
 import { usePeople } from '@/components/people-context'
 import {
   TASK_PRIORITIES, TASK_STATUSES, TASK_TYPES,
   type TaskPriority, type TaskStatus, type TaskType,
 } from '@/schemas/task'
+import { TODO_PROJECT_KEY, type SubjectSummary } from '@/lib/lab/types'
+import type { TodoContext } from '@/lib/lab/ui-shortcuts'
 import { cn } from '@/lib/utils'
 
+type SubjectChoice = Pick<SubjectSummary, 'number' | 'ref' | 'title'>
+
 /**
- * Task creation.
+ * New todo.
  *
- * Everything except the title has a default, and the dialog opens with only
- * the title focused. Friction on creation is how a tracker ends up empty, so
- * the fast path is: press c, type, press enter.
+ * A todo is always for a subject, so the dialog asks which: a picker of the
+ * subjects you can see, set to the one you are looking at when there is one.
+ * From a todo's own page it can instead file a sub-task of that todo, which
+ * stays with the parent's subject and so needs no picker. Everything except
+ * the title has a default: press c, type, press enter.
  */
 export const CreateTask = ({
-  projects,
-  defaultProject,
+  context,
   open,
   onClose,
 }: {
-  projects: { key: string; title: string }[]
-  defaultProject?: string
+  context: TodoContext
   open: boolean
   onClose: () => void
 }) => {
@@ -39,28 +43,47 @@ export const CreateTask = ({
 
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
-  const [project, setProject] = useState(defaultProject ?? projects[0]?.key ?? '')
-  const [type, setType] = useState<TaskType>('feature')
-  const [status, setStatus] = useState<TaskStatus>('backlog')
+  const [subjects, setSubjects] = useState<SubjectChoice[] | null>(null)
+  const [subject, setSubject] = useState(context.subject === null ? '' : String(context.subject))
+  const [subTask, setSubTask] = useState(false)
+  const [type, setType] = useState<TaskType>('chore')
+  const [status, setStatus] = useState<TaskStatus>('todo')
   const [priority, setPriority] = useState<TaskPriority>('medium')
   const [assignee, setAssignee] = useState(currentUserId)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [similar, setSimilar] = useState<{ ref: string; title: string; status: string }[]>([])
-  const [labels, setLabels] = useState('')
-  // Existing labels, offered as suggestions. Offering what is already in use
-  // is the only thing that stops a fourth spelling of "database" appearing.
-  const [known, setKnown] = useState<string[]>([])
 
+  const { parentRef } = context
+  const contextSubject = context.subject
+  const filingSubTask = subTask && parentRef !== null
+
+  // The subjects you can see, once per open: the dialog remounts on each open,
+  // and keeping the list out of the layout keeps every page from carrying it.
+  // From a todo's page the default is that todo's subject.
   useEffect(() => {
+    const controller = new AbortController()
     const load = async () => {
-      const res = await fetch('/api/v1/labels')
-      if (!res.ok) return
-      const json = await res.json().catch(() => null)
-      setKnown(((json?.data ?? []) as { label: string }[]).map((l) => l.label))
+      try {
+        const [list, parent] = await Promise.all([
+          fetch('/api/v1/subjects', { signal: controller.signal }),
+          parentRef && contextSubject === null
+            ? fetch(`/api/v1/tasks/${parentRef}`, { signal: controller.signal })
+            : Promise.resolve(null),
+        ])
+        const listed = list.ok ? await list.json().catch(() => null) : null
+        setSubjects(((listed?.data ?? []) as SubjectChoice[]).map(({ number, ref, title: name }) => ({ number, ref, title: name })))
+        const parentJson = parent?.ok ? await parent.json().catch(() => null) : null
+        const parentSubject = parentJson?.data?.subject?.number
+        if (typeof parentSubject === 'number') setSubject((current) => current || String(parentSubject))
+      } catch {
+        // aborted, or offline: the picker stays empty and says so
+        setSubjects((current) => current ?? [])
+      }
     }
     void load()
-  }, [])
+    return () => controller.abort()
+  }, [parentRef, contextSubject])
 
   // Focus only. State is NOT reset here: the parent remounts this component
   // on each open (via key), so it always starts fresh without an effect
@@ -70,7 +93,7 @@ export const CreateTask = ({
   }, [open])
 
   // The same duplicate check the CLI does on `croft add`, surfaced as you
-  // type. Finding the existing task is more useful than filing a second one.
+  // type. Finding the existing todo is more useful than filing a second one.
   // Derived rather than cleared in an effect.
   const showSimilar = title.trim().length >= 8
   const visibleSimilar = showSimilar ? similar : []
@@ -80,7 +103,7 @@ export const CreateTask = ({
     const controller = new AbortController()
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/v1/search?q=${encodeURIComponent(title)}&limit=3`, {
+        const res = await fetch(`/api/v1/search?q=${encodeURIComponent(title)}&kinds=task&limit=3`, {
           signal: controller.signal,
         })
         const payload = await res.json()
@@ -95,26 +118,28 @@ export const CreateTask = ({
     }
   }, [title, open, showSimilar])
 
-  const submit = async () => {
-    if (!title.trim() || !project || pending) return
+  const chosen = subjects?.find((s) => String(s.number) === subject)
+  const ready = Boolean(title.trim()) && (filingSubTask || Boolean(chosen))
+
+  const submit = useCallback(async () => {
+    if (!ready || pending) return
     setPending(true)
     setError(null)
 
-    const result = await mutate<{ number: number }>(`/api/v1/projects/${project}/tasks`, {
-      method: 'POST',
-      body: {
-        title: title.trim(),
-        description: body.trim() || undefined,
-        type,
-        status,
-        priority,
-        assignee,
-        labels: labels
-          .split(',')
-          .map((l) => l.trim())
-          .filter(Boolean),
-      },
-    })
+    const fields = {
+      title: title.trim(),
+      description: body.trim() || undefined,
+      type,
+      status,
+      priority,
+      assignee,
+    }
+    const result = await mutate<{ number: number }>(
+      filingSubTask
+        ? `/api/v1/projects/${TODO_PROJECT_KEY}/tasks`
+        : `/api/v1/subjects/${chosen?.ref}/todos`,
+      { method: 'POST', body: filingSubTask ? { ...fields, parentRef } : fields },
+    )
     setPending(false)
 
     if (!result.ok) {
@@ -122,9 +147,9 @@ export const CreateTask = ({
       return
     }
     onClose()
-    router.push(`/projects/${project}/tasks/${result.data.number}`)
+    router.push(`/projects/${TODO_PROJECT_KEY}/tasks/${result.data.number}`)
     router.refresh()
-  }
+  }, [ready, pending, title, body, type, status, priority, assignee, filingSubTask, chosen?.ref, parentRef, onClose, router])
 
   useEffect(() => {
     if (!open) return
@@ -137,7 +162,7 @@ export const CreateTask = ({
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  })
+  }, [open, onClose, submit])
 
   if (!open) return null
 
@@ -148,6 +173,8 @@ export const CreateTask = ({
     'hover:border-border-strong hover:bg-surface-hover hover:text-fg ' +
     'focus-within:border-accent focus-within:text-fg focus-within:ring-2 focus-within:ring-ring/50'
 
+  const noSubjects = subjects !== null && subjects.length === 0
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[12vh]"
@@ -155,12 +182,16 @@ export const CreateTask = ({
     >
       <div className="scrim absolute inset-0" aria-hidden />
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="New todo"
         className="border-border bg-surface raised-lg enter-sheet relative w-full max-w-[35rem] overflow-hidden rounded-xl border"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="border-border flex items-center gap-2 border-b px-4 py-2.5">
-          <ProjectIcon size={12} projectKey={project || undefined} />
-          <span className="text-fg-subtle text-[0.6875rem]">New todo in {project || '—'}</span>
+          <span className="text-fg-subtle text-[0.6875rem]">
+            {filingSubTask ? `New sub-task of ${parentRef}` : 'New todo'}
+          </span>
         </div>
 
         <input
@@ -173,7 +204,8 @@ export const CreateTask = ({
               void submit()
             }
           }}
-          placeholder="Task title"
+          placeholder="Todo title"
+          aria-label="Title"
           className="placeholder:text-fg-subtle text-fg w-full bg-transparent px-4 pt-3 pb-1 text-[1rem] outline-none"
         />
 
@@ -201,20 +233,40 @@ export const CreateTask = ({
         )}
 
         <div className="border-border bg-surface-raised/40 flex flex-wrap items-center gap-1.5 border-t px-4 py-2.5">
-          <label className={chip}>
-            <ProjectIcon size={12} projectKey={project || undefined} />
-            {project}
-            <select
-              value={project}
-              onChange={(e) => setProject(e.target.value)}
-              className="absolute inset-0 cursor-pointer opacity-0"
-              aria-label="Project"
+          {filingSubTask ? null : (
+            <label className={cn(chip, 'max-w-full min-w-0')}>
+              <span className="text-fg-subtle font-mono text-[0.6875rem]">{chosen?.ref ?? 'S-?'}</span>
+              <span className="max-w-[16rem] min-w-0 truncate">
+                {chosen?.title ?? (subjects === null ? 'Loading subjects…' : noSubjects ? 'No subjects yet' : 'Pick a subject')}
+              </span>
+              <select
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                disabled={noSubjects}
+                className="absolute inset-0 cursor-pointer opacity-0"
+                aria-label="Subject"
+              >
+                {chosen ? null : <option value="">Pick a subject</option>}
+                {(subjects ?? []).map((s) => (
+                  <option key={s.number} value={s.number}>
+                    {s.ref} {s.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {parentRef ? (
+            <button
+              type="button"
+              aria-pressed={subTask}
+              onClick={() => setSubTask((on) => !on)}
+              className={cn(chip, 'font-mono', subTask && 'border-accent text-fg')}
+              title="File it under this todo instead of straight under its subject"
             >
-              {projects.map((p) => (
-                <option key={p.key} value={p.key}>{p.title}</option>
-              ))}
-            </select>
-          </label>
+              Sub-task of {parentRef}
+            </button>
+          ) : null}
 
           <label className={cn(chip, 'pr-1')}>
             <TypePill type={type} />
@@ -269,27 +321,11 @@ export const CreateTask = ({
             </select>
           </label>
 
-          <label className="relative">
-            <InlineInput
-              value={labels}
-              onChange={(e) => setLabels(e.target.value)}
-              list="croft-known-labels"
-              placeholder="labels…"
-              aria-label="Labels, comma separated"
-              className="w-[8.125rem] text-[0.75rem]"
-            />
-            <datalist id="croft-known-labels">
-              {known.map((l) => (
-                <option key={l} value={l} />
-              ))}
-            </datalist>
-          </label>
-
           <Button
             variant="primary"
             size="sm"
-            onClick={submit}
-            disabled={!title.trim() || !project || pending}
+            onClick={() => void submit()}
+            disabled={!ready || pending}
             className="ml-auto h-[1.625rem] px-3 text-[0.75rem]"
           >
             {pending ? (
@@ -304,7 +340,7 @@ export const CreateTask = ({
         </div>
 
         {error && (
-          <p className="text-danger bg-danger-subtle/60 border-border enter-rise border-t px-4 py-2 text-[0.75rem]">
+          <p className="text-danger bg-danger-subtle/60 border-border enter-rise border-t px-4 py-2 text-[0.75rem]" role="alert">
             {error}
           </p>
         )}

@@ -24,20 +24,15 @@ describe('handoffOf', () => {
 })
 
 describe('withHandoff', () => {
-  it('replaces the columns with `handoff` and keeps the cairn aliases null for another tracker', () => {
+  it('replaces the columns with `handoff`, and carries no tracker-specific aliases', () => {
     const shaped = withHandoff({ id: 't', ...linked }) as Record<string, unknown>
     expect(shaped).not.toHaveProperty('handoff_ref')
-    expect(shaped).toMatchObject({ id: 't', cairn_ref: null, cairn_status: null, cairn_synced_at: null })
+    expect(Object.keys(shaped).sort()).toEqual(['handoff', 'id'])
     expect((shaped.handoff as { tracker: string }).tracker).toBe('github')
   })
 
-  it('fills the deprecated aliases when the tracker is cairn', () => {
-    const shaped = withHandoff({ id: 't', ...linked, handoff_tracker: 'cairn', handoff_ref: 'CAIRN-331', handoff_status: 'doing' })
-    expect(shaped).toMatchObject({ cairn_ref: 'CAIRN-331', cairn_status: 'doing' })
-  })
-
   it('says handoff: null on a row selected with the columns but not linked, and leaves other rows alone', () => {
-    expect(withHandoff({ id: 't', handoff_ref: null, handoff_tracker: null })).toMatchObject({ handoff: null, cairn_ref: null })
+    expect(withHandoff({ id: 't', handoff_ref: null, handoff_tracker: null })).toEqual({ id: 't', handoff: null })
     expect(withHandoff({ id: 't' })).toEqual({ id: 't' })
   })
 })

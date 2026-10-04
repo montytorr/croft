@@ -32,8 +32,6 @@ const todo = (over: Partial<PageTodo>): PageTodo => ({
   status: 'todo',
   claimed_by: null,
   handoff: null,
-  cairn_ref: null,
-  cairn_status: null,
   updated_at: '2026-09-30T10:00:00Z',
   ...over,
 })

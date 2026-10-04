@@ -24,8 +24,6 @@ export type CreatedTask = {
   updated_at: string
   claimed_by: string | null
   handoff: null
-  cairn_ref: null
-  cairn_status: null
   assignee: { id: string; name: string; email: string; active: boolean }
   ref: string
 }
@@ -42,21 +40,14 @@ export const createTaskInProject = async (
   body: CreateTaskInput,
   extra: { subjectId?: string | null; retry?: string } = {},
 ): Promise<{ ok: true; task: CreatedTask } | { ok: false; response: Response }> => {
-  // Same rule as writing to an existing task (F1): a project archived here
-  // is most likely the copy a move to another instance left behind, and a
-  // stale-cached CLI filing a new task into it would strand the task the
-  // same way a claim or a note would.
+  // Same rule as writing to an existing task: nothing is filed into an archived project.
   if (project.status === 'archived') {
     return {
       ok: false,
-      response: fail(
-        'conflict',
-        `${project.key} is archived — most likely because it moved to another Croft instance and ` +
-          `this is the copy left behind. If it moved, point the CLI at the other one with ` +
-          `--instance <the other instance>. To file work here instead, restore ${project.key} first: ` +
-          `\`croft project restore ${project.key}\`.`,
-        { project: project.key, projectStatus: 'archived' },
-      ),
+      response: fail('conflict', `${project.key} is archived. Restore the project before filing work in it.`, {
+        project: project.key,
+        projectStatus: 'archived',
+      }),
     }
   }
 
@@ -114,10 +105,8 @@ export const createTaskInProject = async (
   return {
     ok: true,
     task: {
-      ...(data as unknown as Omit<CreatedTask, 'assignee' | 'ref' | 'handoff' | 'cairn_ref' | 'cairn_status'>),
+      ...(data as unknown as Omit<CreatedTask, 'assignee' | 'ref' | 'handoff'>),
       handoff: null,
-      cairn_ref: null,
-      cairn_status: null,
       assignee: owner.person,
       ref: `${project.key}-${data.number}`,
     },

@@ -7,10 +7,8 @@ import { ChevronsUpDown } from 'lucide-react'
 import { Avatar, PriorityIcon, ProjectIcon, StatusIcon, TypePill } from '@/components/icons'
 import { usePeople } from '@/components/people-context'
 import { InlineInput } from '@/components/ui/control'
-import { ResolutionDialog } from '../../resolution-dialog'
-import { LabelEditor } from '../../label-editor'
-import { AlsoIn } from './also-in'
-import { DependencyEditor } from './dependency-editor'
+import { ResolutionDialog } from '@/components/todo/resolution-dialog'
+import { LabelEditor } from '@/components/todo/label-editor'
 import {
   TASK_PRIORITIES,
   TASK_STATUSES,
@@ -24,7 +22,7 @@ import { cn } from '@/lib/utils'
 import { RelativeTime } from '@/components/relative-time'
 import { dueDateDisplay, fullDateTime, todayDate } from '@/lib/dates'
 import { useMounted, useRenderedClaimStale } from '@/lib/use-mounted'
-import type { Task, Project, Relation } from '@/lib/data'
+import type { Task, Project } from '@/lib/data'
 import { useMutate } from '@/lib/api/use-mutate'
 import { ROW, ROW_LABEL } from './styles'
 
@@ -300,16 +298,10 @@ type OptimisticValues = Partial<
 export const Properties = ({
   task,
   project,
-  relations = [],
-  alsoProjects = [],
-  projects = [],
   parent = null,
 }: {
   task: Task
   project: Project
-  relations?: Relation[]
-  alsoProjects?: string[]
-  projects?: { key: string; title: string }[]
   parent?: { ref: string; title: string } | null
 }) => {
   const router = useRouter()
@@ -318,7 +310,6 @@ export const Properties = ({
   const mounted = useMounted()
   const stale = useRenderedClaimStale(task.heartbeat_at)
   const [pendingClose, setPendingClose] = useState<TaskStatus | null>(null)
-  const [moving, setMoving] = useState(false)
   const [knownLabels, setKnownLabels] = useState<string[]>([])
 
   // Fetched once. Offering labels already in use is what keeps this from
@@ -364,29 +355,6 @@ export const Properties = ({
   const onAssignee = (userId: string) => {
     const person = people.find((p) => p.id === userId) ?? null
     void patch({ assignee: userId }, { assignee_user_id: userId, assignee: person })
-  }
-
-  /**
-   * Moving is its own request rather than going through `patch` above:
-   * per-project numbering means the ref changes underneath this page, so a
-   * success here has to navigate rather than just refresh in place.
-   */
-  const onProject = async (nextKey: string) => {
-    if (nextKey === project.key || moving) return
-    setMoving(true)
-    const result = await request<{ moved?: { ref: string; from: string } | null }>(
-      `/api/v1/tasks/${task.id}`,
-      { method: 'PATCH', body: { project: nextKey } },
-    )
-    setMoving(false)
-    if (!result.ok) return
-    const moved = result.data?.moved
-    if (!moved) {
-      router.refresh()
-      return
-    }
-    const idx = moved.ref.lastIndexOf('-')
-    router.replace(`/projects/${moved.ref.slice(0, idx)}/tasks/${moved.ref.slice(idx + 1)}`)
   }
 
   const onParent = async (ref: string | null) => {
@@ -553,41 +521,18 @@ export const Properties = ({
       </div>
 
       <div className="border-border mt-4 flex flex-col gap-0.5 border-t pt-4">
-        {projects.length > 0 ? (
-          <SelectRow
-            label="Project"
-            value={project.key}
-            options={projects.map((p) => p.key)}
-            labels={Object.fromEntries(projects.map((p) => [p.key, p.title]))}
-            icon={<ProjectIcon size={13} projectKey={project.key} />}
-            disabled={moving}
-            onChange={onProject}
-          />
-        ) : (
-          <div className={ROW}>
-            <span className={ROW_LABEL}>Project</span>
-            <span className="text-fg-muted flex min-w-0 flex-1 items-center gap-2 text-[0.8125rem]">
-              <ProjectIcon size={13} projectKey={project.key} />
-              <span className="min-w-0 truncate">{project.title}</span>
-            </span>
-          </div>
-        )}
-
-        {projects.length > 0 && (
-          <AlsoIn
-            taskRef={`${project.key}-${task.number}`}
-            homeKey={project.key}
-            alsoProjects={alsoProjects}
-            projects={projects}
-          />
-        )}
+        <div className={ROW}>
+          <span className={ROW_LABEL}>Project</span>
+          <span className="text-fg-muted flex min-w-0 flex-1 items-center gap-2 text-[0.8125rem]">
+            <ProjectIcon size={13} projectKey={project.key} />
+            <span className="min-w-0 truncate">{project.title}</span>
+          </span>
+        </div>
 
         <div className={ROW}>
           <span className={ROW_LABEL}>Parent</span>
           <ParentEditor parent={parent} onSave={onParent} />
         </div>
-
-        <DependencyEditor taskRef={`${project.key}-${task.number}`} relations={relations} />
       </div>
 
       <div className="border-border mt-4 flex flex-col gap-1 border-t pt-3">

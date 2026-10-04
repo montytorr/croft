@@ -99,7 +99,7 @@ export const resolveTodoFilters = async (
   return { ok: true, value }
 }
 
-type Row = Omit<LabTodo, 'ref' | 'assignee' | 'handoff' | 'cairn_ref' | 'cairn_status'> & {
+type Row = Omit<LabTodo, 'ref' | 'assignee' | 'handoff'> & {
   key: string
   assignee_id: string | null
   assignee_name: string | null

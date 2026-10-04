@@ -5,7 +5,7 @@ import { LiveUpdates } from '@/components/live-updates'
 import { BrandName } from '@/components/brand'
 import { redirect } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
-import { currentUser, listProjects } from '@/lib/data'
+import { currentUser } from '@/lib/data'
 import { activityFeed, type ActivityRow } from '@/lib/api/activity-feed'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { EmptyState } from '@/components/empty-state'
@@ -29,20 +29,17 @@ const PAGE = 80
 const ActivityPage = async ({
   searchParams,
 }: {
-  searchParams: Promise<{ project?: string; actor?: string; kinds?: string; before?: string }>
+  searchParams: Promise<{ actor?: string; kinds?: string; before?: string }>
 }) => {
-  const { project, actor, kinds, before } = await searchParams
+  const { actor, kinds, before } = await searchParams
   const user = await currentUser()
   if (!user) redirect('/login')
-
-  const projects = await listProjects(user.id, {}, { id: user.id, role: user.role })
 
   let rows: ActivityRow[] = []
   let failure: string | null = null
   try {
     rows = await activityFeed(user.id, {
       before,
-      project: project || undefined,
       actor: actor || undefined,
       kinds: kinds ? kinds.split(',').filter(Boolean) : undefined,
       limit: PAGE,
@@ -56,7 +53,7 @@ const ActivityPage = async ({
 
   const withParam = (key: string, value: string) => {
     const p = new URLSearchParams()
-    for (const [k, v] of Object.entries({ project, actor, kinds })) if (v) p.set(k, v)
+    for (const [k, v] of Object.entries({ actor, kinds })) if (v) p.set(k, v)
     p.set(key, value)
     return `/activity?${p}`
   }
@@ -80,10 +77,8 @@ const ActivityPage = async ({
       </header>
 
       <ActivityControls
-        project={project ?? ''}
         actor={actor ?? ''}
         kinds={kinds ?? ''}
-        projects={projects.map((p) => ({ key: p.key, title: p.title }))}
         actors={actors}
       />
 

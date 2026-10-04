@@ -2,13 +2,10 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
-import { currentUser, listProjects } from '@/lib/data'
-import { searchAll, searchTasks, type SearchAllRow, type SearchRow } from '@/lib/api/search'
-import { TASK_STATUSES, TASK_TYPES, type TaskStatus, type TaskType } from '@/schemas/task'
-import { PriorityIcon, ProjectIcon, StatusIcon, TypePill } from '@/components/icons'
+import { currentUser } from '@/lib/data'
+import { searchAll, type SearchAllRow } from '@/lib/api/search'
 import { BrandName } from '@/components/brand'
 import { SearchControls } from './search-controls'
-import { SearchResults } from './search-results'
 import { UnifiedResults } from './unified-results'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { EmptyState } from '@/components/empty-state'
@@ -25,62 +22,34 @@ const SearchPage = async ({
 }: {
   searchParams: Promise<{
     q?: string
-    project?: string
-    type?: string
-    status?: string
     kind?: string
   }>
 }) => {
-  const { q = '', project, type, status, kind } = await searchParams
+  const { q = '', kind } = await searchParams
   const user = await currentUser()
   if (!user) redirect('/login')
 
-  const projects = await listProjects(user.id, {}, { id: user.id, role: user.role })
   const query = q.trim()
 
-  // A type or status filter is a statement about tasks, so it selects the
-  // task-only path along with an explicit `kind=task`. That path keeps
-  // selection and bulk edit, which mean nothing for a subject.
-  const taskOnly = kind === 'task' || Boolean(type) || Boolean(status)
-
-  let rows: SearchRow[] = []
   let unified: SearchAllRow[] = []
   let widened = false
   let failure: string | null = null
 
   if (query.length >= 2) {
     try {
-      if (taskOnly) {
-        ;({ rows, widened } = await searchTasks(
-          user.id,
-          query,
-          {
-            project: project || undefined,
-            type: TASK_TYPES.includes(type as TaskType) ? type : undefined,
-            status: TASK_STATUSES.includes(status as TaskStatus) ? status : undefined,
-          },
-          60,
-        ))
-      } else {
-        ;({ rows: unified, widened } = await searchAll(
-          user.id,
-          query,
-          {
-            project: project || undefined,
-            kinds: KINDS.includes(kind as Kind) && kind !== 'all' ? [kind as string] : undefined,
-          },
-          60,
-        ))
-      }
+      ;({ rows: unified, widened } = await searchAll(
+        user.id,
+        query,
+        { kinds: KINDS.includes(kind as Kind) && kind !== 'all' ? [kind as string] : undefined },
+        60,
+      ))
     } catch (error) {
       failure = error instanceof Error ? error.message : 'Search failed.'
     }
   }
 
-  const count = taskOnly ? rows.length : unified.length
-  const resolved = taskOnly
-    ? rows.filter((r) => r.resolution).length
-    : unified.filter((r) => r.answered).length
+  const count = unified.length
+  const resolved = unified.filter((r) => r.answered).length
 
   return (
     <div className="flex h-dvh flex-col">
@@ -105,11 +74,7 @@ const SearchPage = async ({
 
       <SearchControls
         q={q}
-        project={project ?? ''}
-        type={type ?? ''}
-        status={status ?? ''}
         kind={kind ?? 'all'}
-        projects={projects.map((p) => ({ key: p.key, title: p.title }))}
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -129,24 +94,8 @@ const SearchPage = async ({
             }
             hint="Nobody has looked into this yet — it could be a new subject."
           />
-        ) : !taskOnly ? (
-          <UnifiedResults rows={unified} query={query} />
         ) : (
-          <SearchResults
-            query={query}
-            rows={rows.map((row) => ({
-              id: row.id,
-              number: row.number,
-              title: row.title,
-              type: row.type,
-              status: row.status,
-              priority: row.priority,
-              resolution: row.resolution,
-              resolution_kind: row.resolution_kind,
-              description: row.description,
-              project_key: row.project_key,
-            }))}
-          />
+          <UnifiedResults rows={unified} query={query} />
         )}
       </div>
     </div>

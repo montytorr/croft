@@ -72,7 +72,7 @@ const VERSION = '0.7.0'
  * Which Croft this command talks to, on a machine that uses more than one.
  *
  * One machine can hold a personal and a professional instance, and nothing in
- * a task ref, a project key or a directory name says which a command is for.
+ * a task ref or a directory name says which a command is for.
  * Guessing is how a client's notes end up on the personal server, so the
  * choice is explicit or it is not made: `--instance`, CROFT_INSTANCE, or the
  * default ~/.croft/instances.json names. With none of them, and the file set to
@@ -80,14 +80,14 @@ const VERSION = '0.7.0'
  * to ask the user rather than try again.
  *
  * Every instance keeps its own state in ~/.croft/instances/<name>/ — env,
- * outbox, ownership, projects.json — because a ref or a directory mapped on
+ * outbox, ownership — because a ref or a directory routed to
  * one means nothing on the other. No instances.json is the single-instance
  * machine this CLI has always served, and nothing about it changes.
  */
 const INSTANCES_PATH = join(CROFT_DIR, 'instances.json')
 const INSTANCE_NAME = /^[a-z0-9][a-z0-9-]{0,31}$/
 const UNDECIDED_EXIT = 10
-const EXIT_CODES = { already_claimed: 9, session_closed: 11 }
+const EXIT_CODES = { already_claimed: 9 }
 
 const readInstances = () => {
   if (!existsSync(INSTANCES_PATH)) return null
@@ -180,9 +180,7 @@ const requestedInstance = () => {
 const HOME = homedir()
 const SESSION_ROUTES_DIR = join(CROFT_DIR, 'session-routes')
 const SESSION_ID = /^[A-Za-z0-9._:-]{1,100}$/
-// One letter is a key too: todos live in project T (T-41). S-n is a subject,
-// which belongs to no project and never routes by key.
-const REF_ARG = /^([A-Z][A-Z0-9]{0,9})-\d+$/
+// Every todo lives in the one hidden project T (T-41).
 const TODO_KEY = 'T'
 
 /** For messages: a path under the home directory, without the username in it. */
@@ -256,118 +254,6 @@ const routeProblem = (route, instances, routes) => {
 
 const instanceDir = (name) => join(CROFT_DIR, 'instances', name)
 
-/**
- * The project keys each instance was last seen to have, refreshed by that
- * instance's own requests. Read only here, so a ref names its instance without
- * a question and without asking a server that may not be the one it is for.
- */
-const PROJECT_KEYS_FILE = 'project-keys.json'
-const PROJECT_KEYS_TTL_MS = 6 * 60 * 60 * 1000
-const instancesWithKey = (key, instances) =>
-  Object.keys(instances).filter((name) => {
-    try {
-      return JSON.parse(readFileSync(join(instanceDir(name), PROJECT_KEYS_FILE), 'utf8')).keys?.includes(key)
-    } catch {
-      return false
-    }
-  })
-
-/**
- * Whether ONE instance's own project-key cache is too old, missing or
- * unreadable to answer for it — never a statement about any other instance.
- * Missing or unreadable is treated as stale rather than "no projects": an
- * instance that has never been reached, or answered with something this
- * could not parse, has told us nothing about what it owns.
- */
-const isStaleInstance = (name) => {
-  const path = join(instanceDir(name), PROJECT_KEYS_FILE)
-  try {
-    const cached = JSON.parse(readFileSync(path, 'utf8'))
-    if (!Array.isArray(cached.keys)) return true
-    const at = Date.parse(cached.at ?? '')
-    const age = Number.isFinite(at) ? Date.now() - at : Date.now() - statSync(path).mtimeMs
-    return age >= PROJECT_KEYS_TTL_MS
-  } catch {
-    return true
-  }
-}
-
-/**
- * Stricter than `isStaleInstance`: true only when an instance has NEVER
- * produced a readable project-key cache, as opposed to one that did and has
- * simply gone stale with age (the normal state of any secondary instance
- * nobody has used in six hours). Staleness-by-age is a risk this file already
- * accepts elsewhere — a brand-new project on a reachable instance, before its
- * first key request, is invisible the same way. An instance that has never
- * been reached at all is a sharper problem: EVERY project it owns is
- * invisible, permanently, not just the ones created since its last refresh —
- * so it gets its own check before this file lets an unclassified ref default
- * to somewhere else.
- */
-const neverReachedInstance = (name) => {
-  try {
-    const cached = JSON.parse(readFileSync(join(instanceDir(name), PROJECT_KEYS_FILE), 'utf8'))
-    return !Array.isArray(cached.keys)
-  } catch {
-    return true
-  }
-}
-
-/**
- * A fixed, short budget for finding out whether a stale cache is merely old
- * or genuinely unreachable, tried only for instances resolveRoute already
- * knows are stale. Not CROFT_DEADLINE_MS: that constant is not defined yet
- * when this file's top-level routing runs (it is read from the environment
- * further down, after the instance is already chosen), and this must not
- * inherit a caller's much longer budget anyway — routing is a hint, and a
- * hint that can take 15 seconds to fail defeats the point of being one.
- */
-const ROUTE_REFRESH_TIMEOUT_MS = 1500
-
-/**
- * Ask ONE instance — by its own URL and its own key, never this process's —
- * what it currently owns, and update its cache if it answers. This is the
- * same request `refreshProjectKeys` makes for the instance this process is
- * running as, made usable for any instance named in instances.json, because a
- * routing decision needs to know whether a stale neighbour is merely quiet or
- * actually unreachable, and it needs to know that about instances this
- * process never selected and has no session with.
- *
- * A missing env file, an instance with no key on it, a timeout, a network
- * error, or a non-success payload all resolve to `false` — every one of them
- * is "could not confirm", and the caller falls back to treating the cache as
- * still stale.
- */
-const refreshInstanceKeysFor = async (name, instances) => {
-  // Not `trimUrl`: that helper is declared later in this file, after the
-  // top-level routing decision that can already need this function has run.
-  const url = (instances[name]?.url ?? '').replace(/\/+$/, '')
-  if (!url) return false
-  const env = fileEnv(join(instanceDir(name), 'env'))
-  const key = env.CROFT_API_KEY || Object.entries(env).find(([k]) => k.startsWith('CROFT_API_KEY_'))?.[1]
-  if (!key) return false
-  try {
-    const res = await fetch(`${url}/api/v1/projects`, {
-      headers: { Authorization: `Bearer ${key}` },
-      signal: AbortSignal.timeout(ROUTE_REFRESH_TIMEOUT_MS),
-    })
-    if (!res.ok) return false
-    const payload = await res.json()
-    if (!payload?.success || !Array.isArray(payload.data)) return false
-    // Active projects only, same as refreshProjectKeys: an archived project's
-    // copy must not keep claiming a ref that has moved on.
-    const keys = [...new Set(payload.data.flatMap((p) => [p.key, ...(p.former_keys ?? []).map((f) => f.key)]).filter(Boolean))]
-    const dir = instanceDir(name)
-    mkdirSync(dir, { recursive: true, mode: 0o700 })
-    const path = join(dir, PROJECT_KEYS_FILE)
-    writeFileSync(`${path}.tmp`, `${JSON.stringify({ at: new Date().toISOString(), keys })}\n`, { mode: 0o600 })
-    renameSync(`${path}.tmp`, path)
-    return true
-  } catch {
-    return false
-  }
-}
-
 const routeSession = () => {
   const id = (process.env.CROFT_SESSION_ID || process.env.CLAUDE_CODE_SESSION_ID || process.env.CODEX_THREAD_ID || '').trim()
   return SESSION_ID.test(id) ? id : null
@@ -386,124 +272,20 @@ const sessionRoute = (session, instances) => {
 /**
  * Where a directory's commands go, and why — or why nothing can be said.
  *
- * A saved route comes before a ref: it is an answer somebody gave on purpose,
- * and the ref's side is a cache of project keys that can be hours old. When
- * the two disagree the route still wins, and the caller is told how to send
- * the one command elsewhere rather than having it done for them.
- *
- * Async because a ref-shaped command with a stale instance in play first
- * tries to make that instance's cache current (`refreshInstanceKeysFor`)
- * before deciding anything — see the block below the saved-route check. Every
- * other path returns without awaiting anything, so a command with no stale
- * instance to worry about pays nothing for this being async.
+ * A saved route comes first: it is an answer somebody gave on purpose. Then
+ * the session's own choice, then the default instance, and otherwise nothing
+ * can be said and the caller asks.
  */
-const resolveRoute = async ({ config, dir, session, ref }) => {
+const resolveRoute = ({ config, dir, session }) => {
   const { instances, unclassified, routes } = config
   const { key, repo } = routeKey(dir)
   const route = routeFor(key, routes)
   if (route) {
-    const owners = ref ? instancesWithKey(ref, instances) : []
-    const elsewhere = owners.length === 1 && owners[0] !== route.instance
-    return {
-      name: route.instance,
-      why: `${route.match === 'folder' ? 'folder ' : ''}route ${tilde(route.path)}`,
-      ...(elsewhere ? { hint: `croft: ${ref} is a project on ${owners[0]}, and this directory is routed to ${route.instance}; add --instance ${owners[0]} if it is meant for ${owners[0]}` } : {}),
-    }
+    return { name: route.instance, why: `${route.match === 'folder' ? 'folder ' : ''}route ${tilde(route.path)}` }
   }
   const bySession = sessionRoute(session, instances)
-  if (!ref) {
-    if (bySession) return { name: bySession, why: 'chosen for this session' }
-    if (unclassified.mode === 'default') return { name: unclassified.instance, why: 'default instance' }
-    return { name: null, key, repo }
-  }
-
-  // A ref-shaped command must not fall through to a session/default when the
-  // ownership cache may have changed. An explicit --instance or saved route
-  // remains available, and the next request to that instance refreshes keys.
-  //
-  // CROFT-305 refined this, and CROFT-316 is why it had to: keys are
-  // PER-INSTANCE, so `owners` below looks at every instance's last-known
-  // cache, stale or fresh, and only an instance whose cache actually LISTS
-  // this ref's key is in it. Blocking every ref-shaped command whenever ANY
-  // instance was stale — the original rule — refused personal work on every
-  // project a healthy instance plainly owns, for as long as one unrelated
-  // instance was unreachable (an office WAF returning 403 on every request
-  // was enough). What actually has to be refused is narrower: a ref whose
-  // only evidence of ownership is stale, or whose ownership is disputed.
-  //
-  // But "stale" is the ordinary state of any secondary instance nobody has
-  // used in six hours, not a sign of trouble — most of the time, asking it is
-  // cheap and just works. So before any of that: every instance this file
-  // currently believes is stale gets one short, parallel, best-effort chance
-  // (refreshInstanceKeysFor, ROUTE_REFRESH_TIMEOUT_MS each) to say what it
-  // owns right now, with its own key against its own URL. `owners` and
-  // `isStaleInstance` below are read AFTER this, so a neighbour that answers
-  // is treated exactly like one that was fresh all along — no separate "just
-  // refreshed" rule to keep in step with the normal one. A neighbour that
-  // does not answer (still down, still never reached) leaves the cache
-  // exactly as it was, and every rule below applies to it unchanged.
-  //
-  // This is also the fix for a NEVER-reached instance (no project-keys.json
-  // at all, not just an old one): without a chance to answer for itself first,
-  // such an instance can never appear in `owners` — every project it owns is
-  // permanently invisible, not just the ones created since some last refresh.
-  // A merely-aged cache that plainly does not list this key is a smaller,
-  // already-accepted risk (a brand-new project on a reachable instance,
-  // before its first key request, is invisible the same way) — this file
-  // does not chase that one further; the server's own 409 on an archived
-  // project is the backstop for the closely related case of a project that
-  // just moved: the instance it moved to may still show up here as the sole
-  // fresh owner while its own cache has not yet caught up, exactly as before.
-  const staleNow = Object.keys(instances).filter((name) => isStaleInstance(name))
-  if (staleNow.length > 0) {
-    await Promise.all(staleNow.map((name) => refreshInstanceKeysFor(name, instances)))
-  }
-
-  const owners = instancesWithKey(ref, instances)
-  const staleOwners = owners.filter((name) => isStaleInstance(name))
-  if (staleOwners.length > 0) {
-    return {
-      name: null,
-      error: `croft: ${staleOwners.join(', ')} last claimed ${ref} but could not be reached just now to confirm it still does; ` +
-        `retry with an explicit --instance once it answers`,
-    }
-  }
-  if (owners.length > 1) {
-    return { name: null, error: `croft: ${ref} is claimed by multiple Croft instances (${owners.join(', ')}); use --instance <name>` }
-  }
-  if (owners.length === 1) {
-    // Every remaining owner is fresh (staleOwners was empty above); an
-    // unrelated instance that still could not be checked, even after the
-    // refresh attempt above, did not claim this key, so it is worth a note,
-    // never a refusal.
-    const uncheckable = Object.keys(instances).filter((name) => name !== owners[0] && isStaleInstance(name))
-    return {
-      name: owners[0],
-      why: `${ref} is a project there`,
-      ...(uncheckable.length
-        ? { hint: `croft: ${uncheckable.join(', ')} could not be checked (stale project cache); routing ${ref} to ${owners[0]} on its own record` }
-        : {}),
-    }
-  }
   if (bySession) return { name: bySession, why: 'chosen for this session' }
-  if (unclassified.mode === 'default') {
-    // Nothing claims this ref — the ordinary shape of a brand-new project.
-    // But a default only silently proceeds if no instance's silence about
-    // owning it is itself untrustworthy: an instance that has NEVER been
-    // reached (still true after the refresh attempt above) has told this
-    // file nothing at all, ever, and defaulting past it is exactly the "every
-    // project on that instance is invisible" bug this file must not repeat.
-    const unseen = Object.keys(instances).filter((name) => name !== unclassified.instance && neverReachedInstance(name))
-    if (unseen.length > 0) {
-      return {
-        name: null,
-        error: `croft: ${unseen.join(', ')} has never been reached, so it is not known whether ${ref} belongs to it ` +
-          `rather than to the default (${unclassified.instance}); retry with an explicit --instance once it answers, ` +
-          `e.g. --instance ${unseen[0]}`,
-      }
-    }
-    return { name: unclassified.instance, why: 'default instance' }
-  }
+  if (unclassified.mode === 'default') return { name: unclassified.instance, why: 'default instance' }
   return { name: null, key, repo }
 }
 
@@ -664,15 +446,7 @@ const selectInstance = async () => {
   }
   // Help reads nothing and sends nothing; it should not wait on git to say so.
   if (JUST_HELP) return { undecided: 'croft: no instance chosen' }
-  const refWord = EARLY_COMMAND === 'task' && earlyPositional[1] === 'delete'
-    ? earlyPositional[2]
-    : earlyPositional[1]
-  // Every Croft instance has a T project, so T-41 says nothing about which
-  // instance it is on; the directory decides, as for a command with no ref.
-  const refKey = EARLY_COMMAND === 'subject' ? undefined : REF_ARG.exec(refWord ?? '')?.[1]
-  const ref = refKey === TODO_KEY || refKey === 'S' ? undefined : refKey
-  const route = await resolveRoute({ config: INSTANCES, dir: ROUTE_DIR, session: ROUTE_SESSION, ref })
-  if (route.hint) process.stderr.write(`${route.hint}\n`)
+  const route = resolveRoute({ config: INSTANCES, dir: ROUTE_DIR, session: ROUTE_SESSION })
   if (route.error) return { undecided: route.error }
   if (route.name) return at(route.name, route.why)
   if (INTERACTIVE) {
@@ -725,8 +499,7 @@ const SESSION = (() => {
  * CROFT_SHARE_LOCATION=off, in the environment or the instance's env file,
  * keeps this machine's layout on this machine: no working directory, no git
  * remote and no hostname leave it. Paths name clients and projects; on a
- * shared instance every member can read what arrives with them. `context`
- * then resolves the project only from `croft map` or --project, and an
+ * shared instance every member can read what arrives with them. An
  * explicit CROFT_HOST is still sent, since it is a label someone chose.
  */
 const SHARE_LOCATION = !/^(off|0|false|no)$/i.test(
@@ -1049,7 +822,7 @@ const flags = new Proxy(typedFlags, {
  * the help text is in this set. Add to both, or the test says so.
  */
 const KNOWN_FLAGS = new Set([
-  'adopt', 'all', 'all-instances', 'also-project', 'archived', 'assignee', 'body', 'branch', 'brief',
+  'adopt', 'all', 'all-instances', 'archived', 'assignee', 'body', 'branch', 'brief',
   'conclusion', 'confirm', 'cwd', 'default', 'dir', 'dry-run', 'duplicate-of', 'duration-ms', 'exit-code',
   'file', 'folder', 'force', 'force-empty', 'full', 'help', 'instance', 'json', 'key', 'kind', 'kinds',
   'label', 'limit', 'link', 'maintenance', 'member', 'message', 'mine', 'name', 'no-hooks', 'no-jobs', 'no-parent',
@@ -1250,38 +1023,6 @@ const warnIfStale = (res) => {
   if (!line) return
   warnedStale = true
   process.stderr.write(`${line}\n`)
-}
-
-/**
- * A rename, said out loud (CROFT-264).
- *
- * AC was renamed HOL. Every old ref and `--project AC` went on resolving, and
- * nothing said why the answer came back as HOL — so an agent whose notes said
- * AC-113 could not tell it had the same task, and one filtering on AC could not
- * tell a renamed project from an empty one. The server now reports how it got
- * there (`requested_ref`, `renamed_from`); this says so.
- *
- * stderr, like every other advisory here: stdout is parsed, and the same facts
- * are in it already as fields for anything that parses. Once per key per
- * process, because a batch touching forty old refs needs telling once.
- */
-const renameDay = (at) => (typeof at === 'string' ? at.slice(0, 10) : '?')
-
-const renameLine = (requested, rename, ref) => {
-  const by = rename.by ? ` by ${rename.by}` : ''
-  if (requested && ref && requested !== ref) {
-    return `${requested} is now ${ref} — project ${rename.key} was renamed ${rename.to} on ${renameDay(rename.at)}${by}. ${requested} still resolves; write ${ref}.`
-  }
-  return `note: project ${rename.key} is now ${rename.to} — renamed on ${renameDay(rename.at)}${by}. ${rename.key} still resolves; write ${rename.to}.`
-}
-
-const toldRenames = new Set()
-const tellRename = (requested, rename, ref) => {
-  if (!rename?.key || !rename?.to) return
-  const id = `${requested ?? ''}|${rename.key}`
-  if (toldRenames.has(id)) return
-  toldRenames.add(id)
-  process.stderr.write(`${renameLine(requested, rename, ref)}\n`)
 }
 
 /** `-` means read the value from stdin, so long markdown bodies stay off argv. */
@@ -1783,42 +1524,6 @@ const flushOutbox = async () => withReplayLock(async () => {
  */
 let mutated = false
 
-/**
- * Keep this instance's list of project keys fresh enough to route a ref by
- * (resolveRoute). Only this instance's own server is asked, with its own key,
- * after it has already answered; at most every six hours, or at once after a
- * project was created or rekeyed. A failure keeps the old list.
- */
-let refreshingKeys = false
-const refreshProjectKeys = async (force) => {
-  if (!INSTANCE.name || refreshingKeys) return
-  const path = join(STATE_DIR, PROJECT_KEYS_FILE)
-  try {
-    if (!force && Date.now() - statSync(path).mtimeMs < PROJECT_KEYS_TTL_MS) return
-  } catch { /* never fetched */ }
-  refreshingKeys = true
-  try {
-    // Active projects only, with the keys they used to have. An archived
-    // project is history: when a project moves to another instance, the copy
-    // left behind is archived, and it must not keep claiming the moved refs.
-    const res = await fetch(`${BASE}/api/v1/projects`, {
-      headers: authHeaders(),
-      // A hint, so never allowed to hold up the answer longer than the answer itself could.
-      signal: AbortSignal.timeout(Math.min(DEADLINE_MS, 3_000)),
-    })
-    const payload = await res.json()
-    if (!payload?.success || !Array.isArray(payload.data)) return
-    const keys = [...new Set(payload.data.flatMap((p) => [p.key, ...(p.former_keys ?? []).map((f) => f.key)]).filter(Boolean))]
-    mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 })
-    writeFileSync(`${path}.tmp`, `${JSON.stringify({ at: new Date().toISOString(), keys })}\n`, { mode: 0o600 })
-    renameSync(`${path}.tmp`, path)
-  } catch {
-    // A routing hint, never worth failing the command that earned it.
-  } finally {
-    refreshingKeys = false
-  }
-}
-
 const request = async (method, path, body, { soft = false, onError } = {}) => {
   requireKey()
   if (method !== 'GET') mutated = true
@@ -1925,20 +1630,9 @@ const request = async (method, path, body, { soft = false, onError } = {}) => {
       ? '\n  write where it lives instead: `$ENV_VAR`, `process.env.X`, a vault path, or `<password>`.' +
         '\n  if it was a real credential, rotate it: it has already been in this transcript.'
       : ''
-    // Some 409s get their own exit code so a caller can branch on them:
-    // "someone else has it", and "that session is already closed" (the
-    // session hook stops checkpointing it, CROFT-319).
+    // A 409 gets its own exit code so a caller can branch on it: "someone else has it".
     die(`${payload.error}${extra}${hint}`, EXIT_CODES[payload.code] ?? 1)
   }
-
-  // Any response reached through a retired key says so here, once, rather than
-  // each verb remembering to — the gap CROFT-264 was, verb by verb.
-  const told = payload.data
-  if (told && typeof told === 'object' && !Array.isArray(told) && told.renamed_from) {
-    tellRename(told.requested_ref, told.renamed_from, refOfTask(told))
-  }
-
-  await refreshProjectKeys(method !== 'GET' && path.startsWith('/api/v1/projects'))
 
   // Recorded here rather than at each call site: one place that already knows
   // the method, the path and that the server said yes.
@@ -2049,15 +1743,6 @@ const emit = (data, opts = {}) => {
 }
 
 /** Comma or repeated-flag list, e.g. --label a,b --label c. */
-/**
- * Which Croft project a directory belongs to.
- *
- * The server can guess from sessions already recorded against a cwd, but only
- * after the first one. This is the explicit answer, kept next to the
- * credentials: a longest-prefix map in ~/.croft/projects.json, so a monorepo
- * subdirectory can override its parent.
- */
-const PROJECT_MAP_PATH = join(STATE_DIR, 'projects.json')
 const OWNERSHIP_DIR = join(STATE_DIR, 'ownership')
 
 const ownershipPath = (ref) => join(OWNERSHIP_DIR, `${ref.toUpperCase().replace(/[^A-Z0-9-]/g, '_')}.json`)
@@ -2141,195 +1826,10 @@ const refOfTask = (data) => {
   return key && data?.number !== undefined ? `${key}-${data.number}` : undefined
 }
 
-/**
- * Mappings that name a key the project no longer has.
- *
- * They keep working — the server resolves a retired key — but every briefing
- * and `next` from that directory then goes through the old name, and an agent
- * reading "[AC]" files new work under a key that no longer exists as far as
- * anyone else can see (CROFT-264). One soft call, so an older server or a
- * network failure leaves `croft map` exactly as it was.
- */
-const warnRetiredMappings = async (map) => {
-  const keys = new Set(Object.values(map))
-  if (keys.size === 0) return
-  const projects = await request('GET', '/api/v1/projects?archived=1', undefined, { soft: true })
-  if (!Array.isArray(projects)) return
-  const liveFor = new Map()
-  for (const p of projects) for (const f of p.former_keys ?? []) liveFor.set(f.key, { to: p.key, at: f.retired_at })
-  for (const [path, k] of Object.entries(map)) {
-    const now = liveFor.get(k)
-    if (!now) continue
-    process.stderr.write(
-      `warning: ${path} is mapped to ${k}, which was renamed ${now.to} on ${renameDay(now.at)}. ` +
-        `It still resolves; run \`croft map ${now.to}\` there to update it.\n`,
-    )
-  }
-}
-
-const readProjectMap = () => {
-  try {
-    return JSON.parse(readFileSync(PROJECT_MAP_PATH, 'utf8'))
-  } catch {
-    return {}
-  }
-}
-
-const projectForDir = (dir) => {
-  const map = readProjectMap()
-  let best = null
-  for (const [path, key] of Object.entries(map)) {
-    if ((dir === path || dir.startsWith(`${path}/`)) && (!best || path.length > best[0].length)) {
-      best = [path, key]
-    }
-  }
-  return best?.[1] ?? null
-}
-
-const git = (dir, args) => {
-  try {
-    return (
-      execFileSync('git', ['-C', dir, ...args], {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      }).trim() || null
-    )
-  } catch {
-    return null
-  }
-}
-
-const gitRoot = (dir) => git(dir, ['rev-parse', '--show-toplevel'])
-
-/**
- * The repository this directory belongs to, as the server will know it.
- *
- * `origin` because that is what a clone writes. Sent raw: reducing spellings
- * to one repository is the server's rule, so the CLI, the MCP facade and an
- * import cannot drift apart on it.
- */
-const gitRemote = (dir) => git(dir, ['remote', 'get-url', 'origin'])
-
-/**
- * Deliberately not read on the resolution path: `rev-list --max-parents=0`
- * walks the whole history, which is milliseconds here and seconds on a large
- * repository, and the briefing hook can afford neither.
- */
-const gitRootCommit = (dir) => git(dir, ['rev-list', '--max-parents=0', 'HEAD'])?.split('\n').pop()
-
 const splitList = (v) => {
   if (v === undefined || v === true) return []
   const parts = Array.isArray(v) ? v : [v]
   return parts.flatMap((p) => String(p).split(',')).map((x) => x.trim()).filter(Boolean)
-}
-
-/**
- * The briefing, as text a model reads once at the top of a session.
- *
- * Ordered by what changes behaviour soonest: what you are still holding, then
- * what is moving around you, then where the last session stopped, then what is
- * known here. Anything with nothing to say prints nothing at all -- an empty
- * heading is noise that trains the reader to skip the block.
- */
-const renderContext = (d, { fileOnly = false } = {}) => {
-  const out = []
-
-  // A file read is a narrow question. Answering it with the whole project
-  // briefing, on every Read, is how an injection channel becomes noise the
-  // reader learns to skip -- and then the one time it matters, it is skipped.
-  if (fileOnly) {
-    const f = d.file
-    if (!f?.tasks?.length) return ''
-    out.push(`## Croft knows about ${f.path}`)
-    for (const t of f.tasks) {
-      out.push(`  ${t.ref}  ${t.status}${t.resolved ? ' (answered)' : ''}  ${truncate(t.title, 54)}`)
-    }
-    return `${out.join('\n')}\n`
-  }
-
-  const where = d.project ? `[${d.project}]` : '[unfiled]'
-  out.push(`## Croft ${where}`)
-
-  // This checkout is mapped to a key the project no longer has. The briefing
-  // is for the live project either way; saying so is what stops the next agent
-  // filing "AC-…" refs into its notes for another month.
-  if (d.projectRenamed) {
-    const r = d.projectRenamed
-    out.push(
-      `  ${r.key} was renamed ${r.to} on ${renameDay(r.at)} -- ${r.key}-n refs still resolve; ` +
-        `write ${r.to}-n, and run \`croft map ${r.to}\` here to update this checkout.`,
-    )
-  }
-
-  if (d.held?.length) {
-    out.push('', 'You are holding:')
-    for (const t of d.held) {
-      const quiet = t.quiet ? '  <- no note in 24h; checkpoint or release it' : ''
-      // A recent rename, beside the ref it changed: the agent that wrote
-      // AC-113 in yesterday's notes must recognise HOL-113 as the same task.
-      const was = t.was?.length ? ` (was ${t.was.join(', ')})` : ''
-      out.push(`  ${t.ref}${was}  ${t.status}  ${truncate(t.title, 58)}${quiet}`)
-    }
-  }
-
-  if (d.inFlight?.length) {
-    // Separated on purpose. "In flight" reads as work someone is on, and a
-    // dropped task sitting in that list looked exactly like a live one --
-    // which is how ten of them accumulated without anyone noticing.
-    const live = d.inFlight.filter((t) => !t.stalled)
-    const stalled = d.inFlight.filter((t) => t.stalled)
-    // Named only when it is somebody else's: an agent should not pick up
-    // Julien's dropped work thinking it is its own human's (CROFT-310).
-    const whose = (t) => (t.assignee ? ` · ${t.assignee}'s` : '')
-
-    if (live.length) {
-      out.push('', 'In flight here:')
-      for (const t of live) {
-        const who = t.claimedBy ? `  (${t.claimedBy})` : ''
-        out.push(`  ${t.ref}  ${t.status}  ${truncate(t.title, 52)}${who}${whose(t)}`)
-      }
-    }
-
-    if (stalled.length) {
-      out.push('', 'Started and dropped here -- nobody is on these:')
-      for (const t of stalled) {
-        out.push(`  ${t.ref}  ${t.status}  ${truncate(t.title, 44)}  quiet ${t.quietFor}${whose(t)}`)
-      }
-      out.push('  Finish one and close it with a resolution, or move it back to todo.')
-    }
-  }
-
-  // Work that is the reader's human's and that no agent holds: without this
-  // it surfaces only when somebody thinks to ask for it.
-  if (d.unattended?.tasks?.length) {
-    out.push('', 'Assigned to you, nobody on it:')
-    for (const t of d.unattended.tasks) {
-      const pressing = t.priority === 'urgent' || t.priority === 'high' ? `  [${t.priority}]` : ''
-      out.push(`  ${t.ref}  ${t.status}  ${truncate(t.title, 52)}${pressing}`)
-    }
-    if (d.unattended.more > 0) {
-      // `next` rather than `list`: list includes closed work, and the question
-      // this answers is which of them to pick up.
-      out.push(`  +${d.unattended.more} more -- croft next --assignee me`)
-    }
-  }
-
-  if (d.staleClaims?.length) {
-    out.push('', 'Stale claims (lease expired, takeable):')
-    for (const t of d.staleClaims) out.push(`  ${t.ref}  held ${t.heldFor} by ${t.claimedBy}`)
-  }
-
-  if (d.file) {
-    const f = d.file
-    if (f.tasks?.length) {
-      out.push('', `About ${f.path}:`)
-      for (const t of f.tasks) out.push(`  ${t.ref}  ${t.status}  ${truncate(t.title, 56)}`)
-    }
-  }
-
-  if (out.length === 1) return ''
-  out.push('', ...BRIEFING_RULES)
-  return `${out.join('\n')}\n`
 }
 
 /**
@@ -2343,12 +1843,6 @@ const LAB_RULE =
 
 /** Said only where a lab project has a hand-off target, so the verb exists for someone. */
 const HANDOFF_RULE = 'Committed work leaves the lab: croft handoff T-n.'
-
-const BRIEFING_RULES = [
-  LAB_RULE,
-  'Log findings as you go: croft subject note S-n - --kind finding|attempt|decision. Claim the todo you work.',
-  'Conclude: croft subject stage S-n "<stage>" --conclusion -. Close todos: done --resolution. Bodies: markdown.',
-]
 
 const truncate = (s, n) => (!s ? '' : s.length > n ? `${s.slice(0, n - 1)}…` : s)
 
@@ -2369,13 +1863,15 @@ const SUBJECT_NOTE_KINDS = ['note', 'finding', 'decision', 'attempt', 'handoff']
 const SEED_CONCLUDING = new Set(['done', 'rejected', 'rolled out'])
 const CONCLUDING = new Set(['completed', 'dropped'])
 
+const TODO_REF = /^T-\d+$/
+
 const subjectArg = (value, usage) => {
   const raw = String(need(value, usage)).trim()
   const match = SUBJECT_REF.exec(raw)
   if (!match) {
     die(
       `"${raw}" is not a subject ref — subjects are S-n (e.g. S-12).` +
-        (REF_ARG.test(raw) ? ` ${raw} is a todo: use the task verbs (croft show ${raw}).` : ''),
+        (TODO_REF.test(raw) ? ` ${raw} is a todo: use the task verbs (croft show ${raw}).` : ''),
     )
   }
   return `S-${Number(match[1])}`
@@ -2597,16 +2093,15 @@ const TRACKER_NAME = /^[a-z][a-z0-9-]{1,31}$/
 
 /**
  * Which tracker a hand-off goes to: --tracker, then the subject's lab project,
- * then CROFT_TRACKER, then `fallback`, then the only adapter this machine has.
+ * then CROFT_TRACKER, then the only adapter this machine has.
  * Dies saying what to pass when that leaves more than one, or none.
  */
-const chooseTracker = (todo, fallback = null) => {
+const chooseTracker = (todo) => {
   const flagged = flags.tracker === undefined ? null : String(need(flags.tracker, '--tracker needs a name, e.g. --tracker github')).trim().toLowerCase()
   const name =
     flagged ??
     projectHandoff(todo).tracker ??
-    (process.env.CROFT_TRACKER?.trim().toLowerCase() || null) ??
-    fallback
+    (process.env.CROFT_TRACKER?.trim().toLowerCase() || null)
   if (name) {
     if (!TRACKER_NAME.test(name)) die(`"${name}" is not a tracker name: lowercase letters, digits and dashes`)
     return name
@@ -2840,53 +2335,23 @@ const TRACKER_ADAPTERS = { cairn: cairnAdapter, github: githubAdapter }
 const adapterFor = (name) => (Object.hasOwn(TRACKER_ADAPTERS, name) ? TRACKER_ADAPTERS[name] : null)
 const availableAdapters = () => Object.values(TRACKER_ADAPTERS).filter((a) => a.available())
 
-// -- servers older than 0.7 ---------------------------------------------------
-// They answer `cairn_ref`/`cairn_key` and take the link at /cairn-link.
-
-/** A todo's hand-off, from whichever server answered. */
-const handoffOf = (todo) =>
-  todo?.handoff ??
-  (todo?.cairn_ref ? { tracker: 'cairn', ref: todo.cairn_ref, url: null, status: todo.cairn_status ?? null, synced_at: null } : null)
-
-/** Whether a task row comes from a server that reports hand-offs at all. */
-const reportsHandoff = (todo) => 'handoff' in todo || 'cairn_ref' in todo
+/** A todo's hand-off, as the server reports it. */
+const handoffOf = (todo) => todo?.handoff ?? null
 
 /** The tracker and target a lab project sends its todos to. */
 const projectHandoffOf = (project) => ({
-  tracker: project?.handoff_tracker ?? (project?.cairn_key ? 'cairn' : null),
-  target: project?.handoff_target ?? project?.cairn_key ?? null,
+  tracker: project?.handoff_tracker ?? null,
+  target: project?.handoff_target ?? null,
 })
 
-class LegacyServer extends Error {}
-
-/**
- * POST /handoff; where that route does not exist (a 0.6 server), the cairn
- * tracker's old /cairn-link takes the same facts. `onError` is for refusals.
- */
 /** A server refusal for one todo of a sync, reported on its row. */
 class SyncRowError extends Error {}
 
-const postHandoff = async (todoRef, body, onError) => {
-  try {
-    return await request('POST', `/api/v1/tasks/${todoRef}/handoff`, body, {
-      onError: (payload, status) => {
-        if (status === 404 && payload.code === 'non_json' && body.tracker === 'cairn') throw new LegacyServer()
-        onError?.(payload, status)
-      },
-    })
-  } catch (error) {
-    if (!(error instanceof LegacyServer)) throw error
-  }
-  const legacy = { cairnRef: body.ref }
-  if (body.status) legacy.cairnStatus = body.status
-  if (body.resolution) legacy.cairnResolution = body.resolution
-  if (body.resolutionKind) legacy.cairnResolutionKind = body.resolutionKind
-  if (body.force) legacy.force = true
-  return request('POST', `/api/v1/tasks/${todoRef}/cairn-link`, legacy, { onError })
-}
+const postHandoff = (todoRef, body, onError) =>
+  request('POST', `/api/v1/tasks/${todoRef}/handoff`, body, { onError })
 // ---- end of tracker adapters ----
 
-/** Every handed-off todo: one listing of T, or subject by subject. */
+/** Every handed-off todo: one listing of T. */
 const linkedTodos = async () => {
   // The list pages at 200, the most the server takes.
   const PAGE = 200
@@ -2897,14 +2362,7 @@ const linkedTodos = async () => {
     tasks.push(...page)
     if (page.length < PAGE || (typeof listed?.count === 'number' && tasks.length >= listed.count)) break
   }
-  if (tasks.length && tasks.some(reportsHandoff)) {
-    return tasks.filter((t) => handoffOf(t)).map((t) => ({ ...t, ref: refOfTask(t) ?? `${TODO_KEY}-${t.number}` }))
-  }
-  const subjects = asList(await request('GET', '/api/v1/subjects?archived=include', undefined, { soft: true }), 'subjects')
-  const todos = await Promise.all(
-    subjects.map((s) => request('GET', `/api/v1/subjects/${s.ref}/todos`, undefined, { soft: true })),
-  )
-  return todos.flatMap((list) => asList(list, 'todos')).filter((t) => handoffOf(t))
+  return tasks.filter((t) => handoffOf(t)).map((t) => ({ ...t, ref: refOfTask(t) ?? `${TODO_KEY}-${t.number}` }))
 }
 
 /** Done and cancelled, in Croft and in any tracker alike. */
@@ -3024,7 +2482,6 @@ const HELP = `croft — the lab board: subjects to explore and prove, their todo
   todos (refs T-41), worked here until they are handed off
     croft show T-41 [--full]       a digest unless --full
     croft list [--status S] [--type T] [--mine] [--assignee me|<who>]
-                                   todos (--project K for another container)
     croft claim T-41               exits 9 if another agent holds it
     croft note T-41 "<text>" [--kind note|finding|decision|attempt|handoff]
     croft checkpoint T-41 --summary "<where things stand>"
@@ -3049,15 +2506,11 @@ const HELP = `croft — the lab board: subjects to explore and prove, their todo
     croft sync                     pull the status of every handed-off todo back, for
                                    each tracker with an adapter here; the rest are skipped
     adapters: ${Object.keys(TRACKER_ADAPTERS).join(', ')}        each uses that tool's own CLI and sign-in on this machine
-    croft push T-41 <sha> [--repo PATH] [--branch NAME] [--remote NAME] [--url URL]
-                                   records a git push, as commit does
-                                   (push T-41 with no sha is deprecated: use handoff)
 
   briefing
     croft context --brief [--cwd D]        the lab in five lines; silent when there is
                                            nothing to say or nothing is configured
-    croft context [--scope project|all] [--project K]
-                                   what you hold, what is in flight, stale claims
+                                           (bare croft context prints the same)
 
   instances
     croft instance [list]                        which Croft instance a command uses
@@ -3086,40 +2539,29 @@ const HELP = `croft — the lab board: subjects to explore and prove, their todo
     --body -  /  --resolution -  /  --conclusion -   read the value from stdin
     bodies are markdown: ## headings, - lists, code in backticks
 
-  croft help --all               the inherited task verbs too: dependencies, labels,
-                                 routing, maintenance and the rest
+  croft help --all               more todo verbs, labels, routing, maintenance
 
   exit codes: 1 error · 2 unknown or ignored flag · 9 already claimed · 10 which instance?
   env: CROFT_BASE_URL, CROFT_API_KEY, CROFT_TRACKER
 `
 
-/** \`croft help --all\`: the verbs inherited from the task tracker Croft was forked from, still working on a todo. */
+/** `croft help --all`: the todo verbs beyond the lab ones, labels, routing and maintenance. */
 const HELP_INHERITED = `
-  inherited task verbs (they work on todos; the lab verbs above are enough for most work)
-    croft next [--assignee me|<who>]       what to pick up, and why
+  more todo verbs
     croft log T-41 [--kind K]      the work log
     croft beat T-41                keep a claim alive
     croft block T-41 --reason "<why>"   |   croft unblock T-41
     croft update T-41 [--title T] [--status S] [--type T] [--priority P] [--assignee <who>] [--body -]
     croft comment T-41 "<text>"
-    croft commit T-41 <sha> [--repo PATH] [--branch NAME] [--message TEXT] [--url URL]
-    croft run T-41 "<command>" --status passed|failed|skipped [--exit-code N]
-                                   record what you already did; nothing is run
-    croft attach T-41 <file>  |  croft files T-41  |  croft history T-41
-    croft children T-41  |  croft deps T-41  |  croft blockedby T-41 T-40  |  croft unblockedby T-41 T-40
+    croft attach T-41 <file>  |  croft files T-41
+    croft children T-41            sub-tasks of a todo
     croft list --label L           filter by label
-    croft add "<title>" --project K [--type bug] [--priority high] [--body -] [--parent T-40]
-                                   refused without a subject: croft subject todo S-12 "<title>"
-
-  labels and task projects
-    croft labels  |  croft labels rename <from> <to>  |  croft labels remove <label>
-    croft project list [--archived]   the task containers (every todo is in T)
-    croft project create <KEY> "<title>" [--body -]   KEY is 1-10 uppercase, starting with a letter
-    croft project rename <KEY> "<title>"  |  croft project rekey <KEY> <NEW>
-    croft project rename <KEY> --key <NEW>
-    croft project archive|restore <KEY>  |  croft project delete <KEY> --confirm <KEY>
+    croft add "<title>" --parent T-40 [--type bug] [--priority high] [--body -]
+                                   a sub-task; a todo itself: croft subject todo S-12 "<title>"
     croft task delete <ref> --confirm <ref>       junk only; refuses a task with history
-    croft map [<KEY>|none]         which project this directory is
+
+  labels
+    croft labels  |  croft labels rename <from> <to>  |  croft labels remove <label>
 
   routing
     croft route                                  which instance this directory uses, and why
@@ -3161,39 +2603,6 @@ const closeTask = async (status, defaultKind) => {
       `recorded as fixed — use --kind verified|answered|not-reproducible|superseded if that is not what happened\n`,
     )
   }
-
-  // Said once, at the close, and only when nothing at all showed the work
-  // being done: the same predicate the server uses (migration 054), so
-  // a sweep item with a commit against it, or one moved to in-review, is not
-  // nagged. A person is documented as never claiming, so only a runtime is.
-  if (!AGENT) return
-  const events = await request('GET', `/api/v1/tasks/${ref}/activity?limit=500`, undefined, { soft: true })
-  if (!Array.isArray(events)) return
-  const TRACE = new Set(['claimed', 'checkpointed', 'git_commit', 'git_push', 'run_result'])
-  const seen = events.some(
-    (e) =>
-      TRACE.has(e.event) ||
-      (e.event === 'status_changed' && !['done', 'cancelled'].includes(e.data?.to ?? '')),
-  )
-  if (!seen) {
-    process.stderr.write(
-      `${refOfTask(closed) ?? ref} was closed without ever being claimed — nobody could see it being worked. ` +
-        `Next time claim first (\`croft add\` now claims for agents).\n`,
-    )
-  }
-}
-
-/** `from -> to`, or the raw keys, kept to one short cell. */
-const summariseEvent = (data) => {
-  if (!data || typeof data !== 'object') return ''
-  if ('from' in data || 'to' in data) {
-    const from = Array.isArray(data.from) ? data.from.join('|') : (data.from ?? '')
-    const to = Array.isArray(data.to) ? data.to.join('|') : (data.to ?? '')
-    return `${from} -> ${to}`
-  }
-  return Object.entries(data)
-    .map(([k, v]) => `${k}=${v}`)
-    .join(' ')
 }
 
 /**
@@ -3222,7 +2631,7 @@ const addInstance = async ({ name, url, makeDefault = false, adopt = false, uncl
   else if (unclassified) config.unclassified = unclassified
 
   const dir = instanceDir(name)
-  const legacy = ['env', 'projects.json', 'ownership'].filter((f) => existsSync(join(CROFT_DIR, f)))
+  const legacy = ['env', 'ownership'].filter((f) => existsSync(join(CROFT_DIR, f)))
   const queued = existsSync(CROFT_DIR) && readdirSync(CROFT_DIR).some((f) =>
     (f === 'outbox.jsonl' || f.startsWith(OUTBOX_PREFIX)) &&
     f !== basename(OUTBOX_LOCK_PATH) && f !== basename(OUTBOX_REPLAY_LOCK_PATH))
@@ -3462,34 +2871,8 @@ const keyIsValid = async (baseUrl, key) => {
   }
 }
 
-/**
- * The task containers, as `croft projects` listed them before lab projects:
- * `croft project list [--archived]`. Every todo lives in `T`.
- */
-const listTaskProjects = async () => {
-  const suffix = flags.archived ? '?archived=1' : ''
-  const data = await request('GET', `/api/v1/projects${suffix}`)
-  if (FORMAT !== 'tsv') return emit(data)
-  // `was` is the keys a project used to have, space-separated, and it is the
-  // LAST column: readers of this table (trig's connector among them) key on
-  // the header, and a column appended at the end is one they never see move.
-  // When they were retired, and by whom, is in --json as `former_keys`.
-  const rows = data.map(({ former_keys: former, ...rest }) => ({
-    ...rest,
-    was: (former ?? []).map((f) => f.key).join(' '),
-  }))
-  const columns = [
-    ...new Set(rows.flatMap(({ was: _was, ...rest }) => Object.keys(flatten(rest)))),
-    'was',
-  ]
-  emit(rows, { columns })
-}
-
-/**
- * The body of `croft handoff` (and of the deprecated `push T-41`). `legacyTracker`
- * is the tracker an old spelling always meant, used when nothing else names one.
- */
-const handOff = async ({ legacyTracker }) => {
+/** The body of `croft handoff`. */
+const handOff = async () => {
   const ref = need(positional[0], 'usage: croft handoff T-41 [--to <TARGET>] [--tracker <NAME>]   |   --link <REF> [--url URL]   |   --undo')
 
   if (flags.undo) {
@@ -3501,8 +2884,7 @@ const handOff = async ({ legacyTracker }) => {
 
   const todo = await request('GET', `/api/v1/tasks/${ref}`)
   const todoRef = refOfTask(todo) ?? ref
-  // The old spelling's --to named a key in its one tracker, whatever the project says.
-  const tracker = legacyTracker && flags.tracker === undefined && flags.to !== undefined ? legacyTracker : chooseTracker(todo, legacyTracker)
+  const tracker = chooseTracker(todo)
   const refusal = unpublishedRefusal(todoRef)
   const subjectRef = todo.subject?.ref ?? todo.subject_ref ?? (todo.subject_number ? `S-${todo.subject_number}` : null)
 
@@ -3564,19 +2946,12 @@ const commands = {
   async check() {
     const q = need(positional[0], 'usage: croft check "<subject>"')
     const params = new URLSearchParams({ q })
-    if (flags.project) params.set('project', flags.project)
     if (flags.type) params.set('type', flags.type)
     if (flags.kinds) params.set('kinds', flags.kinds)
-    if (flags.tasks) params.set('tasksOnly', '1')
     // Whose tasks. Like --type, a statement about tasks, so the answer is
     // tasks only.
     if (flags.assignee) params.set('assignee', flags.assignee)
     const data = await request('GET', `/api/v1/search?${params}`)
-    // The exact-ref hit, when the ref asked for used a retired key: said before
-    // the table, so "AC-113" coming back as HOL-113 is not a mystery.
-    for (const r of data.results ?? []) {
-      if (r.renamedFrom) tellRename(r.requestedRef, r.renamedFrom, r.ref)
-    }
     emit(data, {
       rows: (d) =>
         d.results.map((r) => ({
@@ -3613,8 +2988,7 @@ const commands = {
   },
 
   async list() {
-    // Todos, unless told otherwise: every subject's todos live in project T.
-    const project = flags.project ?? positional[0] ?? TODO_KEY
+    const project = TODO_KEY
     const params = new URLSearchParams()
     for (const k of ['status', 'type', 'label', 'limit', 'offset']) {
       if (flags[k]) params.set(k, flags[k])
@@ -3664,9 +3038,7 @@ const commands = {
 
   /**
    * The lab projects (Trig, Croft…): what a subject can be part of, and the
-   * tracker and target each one's todos go to on `croft handoff T-n`. The task
-   * containers this used to list are an internal detail now — every todo
-   * lives in `T` — and are still listed by `croft project list`.
+   * tracker and target each one's todos go to on `croft handoff T-n`.
    */
   async projects() {
     const data = await request('GET', '/api/v1/lab-projects')
@@ -3685,8 +3057,9 @@ const commands = {
   },
 
   async add() {
-    const title = need(positional[0], 'usage: croft add "<title>" --project <KEY>   (a lab todo belongs to a subject: croft subject todo S-12 "<title>")')
-    const project = need(flags.project, 'a --project is required. A lab todo belongs to a subject: croft subject todo S-12 "<title>"')
+    const title = need(positional[0], 'usage: croft add "<title>" --parent T-40   (a todo belongs to a subject: croft subject todo S-12 "<title>")')
+    need(flags.parent, 'a --parent is required: croft add makes sub-tasks. A todo belongs to a subject: croft subject todo S-12 "<title>"')
+    const project = TODO_KEY
 
     /**
      * A bug or a spike with no body is not yet a report — it is a title.
@@ -3710,7 +3083,7 @@ const commands = {
       if ((described ?? '').trim().length < 40) {
         die(
           `a ${flags.type} needs a body: what happens, what you expected, and how to see it.\n` +
-            '  croft add "<title>" --project K --type ' + flags.type + ' --body -   # markdown on stdin\n' +
+            '  croft add "<title>" --parent T-40 --type ' + flags.type + ' --body -   # markdown on stdin\n' +
             '  ...--body "one line is fine when that is genuinely all there is"\n' +
             'If the title really is the whole story, pass --force-empty.',
         )
@@ -3837,11 +3210,6 @@ const commands = {
     if (flags.parent) body.parentRef = flags.parent
     if (flags['no-parent']) body.parentRef = null
     if (flags.assignee) body.assignee = flags.assignee
-    // Moving renumbers the task, so the response reports the new ref.
-    if (flags.project) body.project = flags.project
-    // Widening does not: the task keeps its home project and its ref, and only
-    // starts appearing in the other projects' lists and boards too.
-    if (flags['also-project'] !== undefined) body.alsoProjects = splitList(flags['also-project'])
     if (flags['duplicate-of']) {
       body.duplicateOf = flags['duplicate-of']
       body.resolutionKind = 'duplicate'
@@ -3859,33 +3227,6 @@ const commands = {
    */
   async cancel() {
     return closeTask('cancelled', 'wont-fix')
-  },
-
-  async commit() {
-    const ref = need(positional[0], 'usage: croft commit <ref> <sha> [--repo PATH]')
-    const sha = need(positional[1], 'a commit SHA is required')
-    const payload = { event: 'git_commit', sha }
-    if (flags.repo) payload.repo = flags.repo
-    if (flags.branch) payload.branch = flags.branch
-    if (flags.message) payload.message = await resolveValue(flags.message)
-    if (flags.url) payload.url = flags.url
-    return emit(await request('POST', `/api/v1/tasks/${ref}/activity`, payload))
-  },
-
-  async run() {
-    const ref = need(positional[0], 'usage: croft run <ref> "<command>" --status passed|failed|skipped')
-    const command = await resolveValue(need(positional[1], 'the command is required'))
-    const status = need(flags.status, '--status is required')
-    if (!['passed', 'failed', 'skipped'].includes(status)) {
-      die('--status must be passed, failed, or skipped')
-    }
-    const payload = { event: 'run_result', command, status }
-    for (const [flag, field] of [['exit-code', 'exitCode'], ['duration-ms', 'durationMs']]) {
-      if (flags[flag] !== undefined) payload[field] = Number(flags[flag])
-    }
-    if (flags.output !== undefined) payload.output = await resolveValue(flags.output)
-    if (flags.url) payload.url = flags.url
-    return emit(await request('POST', `/api/v1/tasks/${ref}/activity`, payload))
   },
 
   async note() {
@@ -3977,56 +3318,6 @@ const commands = {
     }
   },
 
-  async history() {
-    const ref = need(positional[0], 'usage: croft history <ref>')
-    const data = await request('GET', `/api/v1/tasks/${ref}/activity`)
-    emit(data, {
-      rows: (d) =>
-        d.map((e) => ({
-          when: e.created_at.slice(0, 16).replace('T', ' '),
-          who: e.actor_id,
-          event: e.event,
-          detail: summariseEvent(e.data),
-        })),
-      columns: ['when', 'who', 'event', 'detail'],
-    })
-    if (FORMAT === 'tsv' && data.length === 0) process.stderr.write('no recorded activity\n')
-  },
-
-  async deps() {
-    const ref = need(positional[0], 'usage: croft deps <ref>')
-    const data = await request('GET', `/api/v1/tasks/${ref}/dependencies`)
-    emit(data, {
-      rows: (d) =>
-        d.map((r) => ({
-          direction: r.direction,
-          ref: r.ref,
-          status: r.status,
-          title: truncate(r.title, 62),
-        })),
-      columns: ['direction', 'ref', 'status', 'title'],
-    })
-    if (FORMAT === 'tsv' && data.length === 0) {
-      process.stderr.write('no dependencies\n')
-    }
-  },
-
-  async blockedby() {
-    const ref = need(positional[0], 'usage: croft blockedby <ref> <other-ref>')
-    const other = need(positional[1], 'the blocking task ref is required')
-    emit(await request('POST', `/api/v1/tasks/${ref}/dependencies`, {
-      ref: other,
-      direction: 'blocked-by',
-    }))
-  },
-
-  async unblockedby() {
-    const ref = need(positional[0], 'usage: croft unblockedby <ref> <other-ref>')
-    const other = need(positional[1], 'the blocking task ref is required')
-    const q = new URLSearchParams({ ref: other, direction: 'blocked-by' })
-    emit(await request('DELETE', `/api/v1/tasks/${ref}/dependencies?${q}`))
-  },
-
   async labels() {
     const sub = positional[0]
     if (sub === 'rename' || sub === 'merge') {
@@ -4054,16 +3345,16 @@ const commands = {
    *
    * `cancel` keeps the record and the reason and is what this store is for;
    * this is for junk that should never have existed. The server refuses a task
-   * with children, notes, comments or dependants, and demands the ref back.
+   * with children, notes or comments, and demands the ref back.
    */
   async task() {
     const sub = need(positional[0], 'usage: croft task delete <ref> --confirm <ref>')
     if (sub !== 'delete') die(`unknown subcommand "${sub}" — expected delete`)
-    const ref = need(positional[1], 'a task ref is required, e.g. CAI-42')
+    const ref = need(positional[1], 'a task ref is required, e.g. T-42')
 
-    // Ask before telling: the ref the server knows is canonical (a former
-    // project key still resolves), and confirming with a spelling the server
-    // will not echo back would fail for a reason nobody could see.
+    // Ask before telling: the ref the server knows is canonical, and
+    // confirming with a spelling it will not echo back would fail for a reason
+    // nobody could see.
     const task = await request('GET', `/api/v1/tasks/${encodeURIComponent(ref)}`)
     const canonical = `${task.project.key}-${task.number}`
 
@@ -4081,109 +3372,6 @@ const commands = {
         `/api/v1/tasks/${encodeURIComponent(canonical)}?confirm=${encodeURIComponent(canonical)}`,
       ),
     )
-  },
-
-  async project() {
-    const sub = need(
-      positional[0],
-      'usage: croft project <list|create|rename|rekey|archive|restore|delete> <KEY> [...]',
-    )
-    // The task containers (T holds every todo). Lab projects are `croft projects`.
-    if (sub === 'list') return listTaskProjects()
-    const key = need(positional[1], 'a project key is required')
-
-    /**
-     * Creating one, which this CLI could not do until now.
-     *
-     * The server has always accepted POST /api/v1/projects, so any agent that
-     * went looking at the OpenAPI document could open a project while an agent
-     * following the CLI concluded it was not allowed to. Two agents reading
-     * the same system got different answers about what they may do, and that
-     * asymmetry is what this closes — the capability was already there.
-     */
-    if (sub === 'create') {
-      const title = need(positional[2], 'usage: croft project create <KEY> "<title>"')
-      // Checked here as well as on the server, so the error names the rule
-      // rather than coming back as a validation failure from a POST.
-      if (!/^[A-Z][A-Z0-9]{0,9}$/.test(key)) {
-        die(`"${key}" is not a project key — 1 to 10 uppercase letters or digits, starting with a letter, e.g. LAB`)
-      }
-      const description = flags.body === undefined ? undefined : await resolveValue(flags.body)
-      emit(
-        await request('POST', '/api/v1/projects', {
-          key,
-          title,
-          ...(description ? { description } : {}),
-        }),
-      )
-      return
-    }
-
-    /**
-     * Changing the KEY, which the API has always allowed and this CLI never
-     * offered — so the one rename that rewrites every ref was the one only
-     * reachable by a hand-written PATCH (CROFT-264). `rekey` says what it does;
-     * `rename --key` is the same thing in the spelling `entities rename` uses.
-     */
-    const rekey = async (newKey, title) => {
-      if (!/^[A-Z][A-Z0-9]{0,9}$/.test(newKey)) {
-        die(`"${newKey}" is not a project key — 1 to 10 uppercase letters or digits, starting with a letter, e.g. LAB`)
-      }
-      const data = await request('PATCH', `/api/v1/projects/${key}`, {
-        key: newKey,
-        ...(title ? { title } : {}),
-      })
-      emit(data)
-      if (FORMAT !== 'tsv') return
-      if (!data.former_key) {
-        process.stderr.write(`${data.key} already has that key; nothing changed.\n`)
-        return
-      }
-      const was = data.former_key
-      process.stderr.write(
-        `renamed ${was} -> ${data.key}: every ${was}-n ref now reads ${data.key}-n.\n` +
-          `${was}-n refs keep resolving, so commits and notes that say ${was}-42 still find ` +
-          `${data.key}-42, and ${was} cannot be given to another project.\n` +
-          `checkouts mapped to ${was} keep working; run "croft map ${data.key}" in each to update the map.\n`,
-      )
-    }
-
-    if (sub === 'rekey') {
-      await rekey(need(positional[2], 'usage: croft project rekey <KEY> <NEW_KEY>'))
-      return
-    }
-
-    if (sub === 'rename') {
-      if (flags.key !== undefined) {
-        const newKey = need(flags.key, 'usage: croft project rename <KEY> --key <NEW_KEY> ["<new title>"]')
-        await rekey(newKey, positional[2])
-        return
-      }
-      const title = need(positional[2], 'usage: croft project rename <KEY> "<new title>"  (or --key <NEW_KEY>)')
-      emit(await request('PATCH', `/api/v1/projects/${key}`, { title }))
-      return
-    }
-    if (sub === 'archive' || sub === 'restore') {
-      emit(await request('PATCH', `/api/v1/projects/${key}`, {
-        status: sub === 'archive' ? 'archived' : 'active',
-      }))
-      return
-    }
-    if (sub === 'delete') {
-      // Deleting a project removes every task in it. The API demands the key
-      // back as confirmation; require it here too rather than passing it
-      // silently on the caller's behalf.
-      if (flags.confirm !== key) {
-        const info = await request('GET', `/api/v1/projects/${key}`)
-        die(
-          `This would delete ${info.task_count} task(s) in ${key} and everything ` +
-            `attached to them, permanently.\nRe-run with --confirm ${key} if that is what you want.`,
-        )
-      }
-      emit(await request('DELETE', `/api/v1/projects/${key}?confirm=${encodeURIComponent(key)}`))
-      return
-    }
-    die(`unknown subcommand "${sub}" — expected create, rename, rekey, archive, restore or delete`)
   },
 
   async claim() {
@@ -4234,42 +3422,6 @@ const commands = {
                 (d.waiting ? ` (${d.waiting} for another runtime or instance)` : ''),
             ],
     })
-  },
-
-  /**
-   * What to pick up, rather than what exists.
-   *
-   * The briefing says what is held, in flight and dropped, and never which one
-   * to do — so every agent invented its own ranking and they disagreed. The
-   * reason is printed with the pick because a recommendation nobody can check
-   * is one nobody should follow.
-   */
-  async next() {
-    const params = new URLSearchParams()
-    const project = flags.project ?? projectForDir(process.cwd())
-    if (project) params.set('project', project)
-    if (flags.assignee) params.set('assignee', flags.assignee)
-    const data = await request('GET', `/api/v1/next?${params}`)
-
-    if (FORMAT === 'json') return emit(data)
-    if (!data.pick) {
-      const why = data.considered
-        ? `nothing workable — ${data.considered} open, all blocked, waiting on something, or held by someone else`
-        : 'nothing open'
-      process.stdout.write(`${why}\n`)
-      return
-    }
-
-    // The assignee rides on every line: an agent choosing from "then" should
-    // not have to open a task to learn it is somebody else's.
-    const line = (t) => `${t.ref}  ${t.title}${t.assignee ? `  · ${t.assignee}` : ''}`
-    process.stdout.write(
-      `${line(data.pick)}\n  ${data.pick.reason}\n  ${data.pick.priority} · ${data.pick.status}` +
-        `\n\n  croft claim ${data.pick.ref}\n` +
-        (data.then?.length
-          ? `\nthen:\n${data.then.map((t) => `  ${line(t)}`).join('\n')}\n`
-          : ''),
-    )
   },
 
   // --- the briefing ------------------------------------------------------
@@ -4569,27 +3721,7 @@ const commands = {
    *   handoff T-41 --undo                           take it back (nothing is done there)
    */
   async handoff() {
-    return handOff({ legacyTracker: null })
-  },
-
-  /**
-   * Two verbs under one name. `push <ref> <sha>` records a git push, as it
-   * always has. `push T-41` with no sha is the deprecated (0.7) spelling of
-   * `handoff`, removed in 0.8.
-   */
-  async push() {
-    const ref = need(positional[0], 'usage: croft push <ref> <sha>   (to hand a todo off: croft handoff T-41)')
-    if (flags.to === undefined && flags.link === undefined && positional[1] !== undefined) {
-      const sha = positional[1]
-      const payload = { event: 'git_push', sha }
-      if (flags.repo) payload.repo = flags.repo
-      if (flags.branch) payload.branch = flags.branch
-      if (flags.remote) payload.remote = flags.remote
-      if (flags.url) payload.url = flags.url
-      return emit(await request('POST', `/api/v1/tasks/${ref}/activity`, payload))
-    }
-    process.stderr.write(`croft: \`push ${ref}\` without a sha is deprecated (0.7), removed in 0.8: use \`croft handoff ${ref}\`\n`)
-    return handOff({ legacyTracker: 'cairn' })
+    return handOff()
   },
 
   /** Pull the status of every handed-off todo back, through each tracker's own CLI and credentials. */
@@ -4642,25 +3774,10 @@ const commands = {
     emit(rows, { columns: ['ref', 'tracker', 'handoff', 'status', 'result'] })
   },
 
+  /** The lab in five lines. `--brief` is the form a hook uses; bare `context` is the same. */
   async context() {
-    if (flags.brief) return brief()
-    const cwd = flags.cwd ?? process.cwd()
-    const params = new URLSearchParams()
-    if (SHARE_LOCATION) params.set('cwd', cwd)
-    const project = flags.project ?? projectForDir(cwd)
-    if (project) params.set('project', project)
-    if (flags.scope !== undefined) {
-      if (flags.scope !== 'project' && flags.scope !== 'all') die('--scope must be project or all')
-      params.set('scope', flags.scope)
-    }
-    // Costs one local git call and answers where the map cannot: a second
-    // clone, a moved directory, a worktree.
-    const repo = SHARE_LOCATION ? gitRemote(cwd) : null
-    if (repo) params.set('repo', repo)
-    if (flags.file) params.set('file', flags.file)
-    const data = await request('GET', `/api/v1/context?${params}`)
-    if (FORMAT === 'json') return emit(data)
-    process.stdout.write(renderContext(data, { fileOnly: Boolean(flags.file) }))
+    void flags.brief
+    return brief()
   },
 
   /**
@@ -5161,88 +4278,6 @@ const commands = {
     }
   },
 
-  async map() {
-    const dir = flags.dir ?? gitRoot(process.cwd()) ?? process.cwd()
-    const key = positional[0]
-
-    if (!key) {
-      const map = readProjectMap()
-      const rows = Object.entries(map).map(([path, k]) => ({ project: k, path }))
-      emit(
-        { count: rows.length, here: projectForDir(process.cwd()) ?? '', rows },
-        { rows: (d) => d.rows, columns: ['project', 'path'] },
-      )
-      await warnRetiredMappings(map)
-      return
-    }
-
-    const map = readProjectMap()
-    const repo = gitRemote(dir)
-    let claimed = null
-
-    if (key === 'none') {
-      // Releasing the repository claim too, because `map <KEY>` made one.
-      // Deleting only the local line left every clone of this repository —
-      // including this one — still resolving, so `map none` reported success
-      // and changed nothing observable: the silent failure this command was
-      // just taught to stop producing.
-      //
-      // The claim belongs to a project, so we need the one that holds it: the
-      // local line if there is one, and otherwise whatever the repository
-      // itself currently resolves to, which is the case a fresh clone hits.
-      const holder =
-        map[dir] ??
-        (repo
-          ? (await request('GET', `/api/v1/context?repo=${encodeURIComponent(repo)}`, undefined, {
-              soft: true,
-            }))?.project
-          : null)
-
-      delete map[dir]
-
-      if (repo && holder) {
-        const released = await request(
-          'DELETE',
-          `/api/v1/projects/${holder}/repos?remote=${encodeURIComponent(repo)}`,
-          undefined,
-          { soft: true },
-        )
-        if (released) claimed = { released: repo, from: holder }
-      }
-    } else {
-      // This used to write whatever it was handed. A mistyped key produced a
-      // map that resolved to nothing, silently, for as long as it took someone
-      // to wonder why the briefing had gone quiet.
-      //
-      // Store the key the server came back with rather than the spelling we
-      // were given: this route resolves a uuid too, and a uuid in the map is 36
-      // characters that every later /context rejects outright — which is the
-      // same silence, reached by a route that looks like it validated.
-      // A retired key resolves to the live project, and the request above has
-      // already said so on stderr. What is stored is the LIVE key, so this
-      // checkout stops sending the old one.
-      const project = await request('GET', `/api/v1/projects/${encodeURIComponent(key)}`)
-      map[dir] = project.key
-
-      // Claim the repository too, so a second clone, a moved directory and a
-      // worktree all resolve without being mapped again. Soft: an older server
-      // has no such route, and that is no reason to refuse the local mapping.
-      if (repo) {
-        const linked = await request(
-          'POST',
-          `/api/v1/projects/${project.key}/repos`,
-          { remote: repo, rootCommit: gitRootCommit(dir) },
-          { soft: true },
-        )
-        if (linked) claimed = { linked: repo, to: project.key }
-      }
-    }
-
-    mkdirSync(dirname(PROJECT_MAP_PATH), { recursive: true })
-    writeFileSync(PROJECT_MAP_PATH, `${JSON.stringify(map, null, 2)}\n`)
-    emit({ path: dir, project: map[dir] ?? null, repo, ...(claimed ?? {}) })
-  },
-
   async reconcile() {
     const body = { dryRun: Boolean(flags['dry-run']) }
     if (flags.older) body.olderThanMinutes = Number(flags.older)
@@ -5307,8 +4342,7 @@ if (!commands[command]) {
  */
 const TASK_VERBS = new Set([
   'claim', 'beat', 'release', 'checkpoint', 'block', 'unblock', 'log', 'comment', 'done',
-  'cancel', 'update', 'commit', 'push', 'handoff', 'run', 'attach', 'files', 'children', 'history', 'deps',
-  'blockedby', 'unblockedby',
+  'cancel', 'update', 'handoff', 'attach', 'files', 'children',
 ])
 if (/^[Ss]-\d+$/.test(positional[0] ?? '')) {
   if (command === 'show' || command === 'note' || command === 'attach' || command === 'files') {

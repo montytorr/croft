@@ -115,12 +115,3 @@ export const shouldClaimByWorking = (
   const status = task.status as string
   return status !== 'done' && status !== 'cancelled'
 }
-
-export const claimByWorking = async (
-  actor: Actor,
-  task: { id: string; status?: unknown; attempt?: unknown; claimed_by?: unknown },
-) => {
-  if (!shouldClaimByWorking(actor, task)) return null
-  const { row } = await takeTask(actor, task)
-  return row
-}

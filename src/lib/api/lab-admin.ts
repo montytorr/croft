@@ -21,8 +21,7 @@ export const isUuid = (value: string) => UUID.test(value)
 /**
  * Administrators, by role — a human session or an agent key its admin owns.
  * Stages and tags are shared configuration, not credentials, so an admin's
- * agent keeping them tidy is fine; the Cairn key is the exception (see
- * handoff.ts) and needs a signed-in human.
+ * agent keeping them tidy is fine.
  */
 export const isLabAdmin = (actor: Pick<Actor, 'role'>) => actor.role === 'admin'
 
@@ -263,9 +262,7 @@ export const deleteTag = async (id: string): Promise<Outcome<{ id: string; delet
 // lab project, because per-project refs would collide with a tracker's keys.
 // ---------------------------------------------------------------------------
 
-// `cairn_key` is the deprecated (0.7) alias: the target, when the tracker is `cairn`. Removed in 0.8.
-const LAB_PROJECT_COLUMNS =
-  "id, name, color, handoff_tracker, handoff_target, case when handoff_tracker = 'cairn' then handoff_target end as cairn_key, position"
+const LAB_PROJECT_COLUMNS = 'id, name, color, handoff_tracker, handoff_target, position'
 
 /** A lab project with how many subjects (archived ones included) are in it. */
 export type LabProjectListed = LabProject & { subjects: number }
@@ -278,8 +275,7 @@ export type LabProjectListed = LabProject & { subjects: number }
 export const listLabProjects = async (viewerId: string | null, db: Db = pool()): Promise<LabProjectListed[]> =>
   rows<LabProjectListed>(
     await db.query(
-      `select lp.id, lp.name, lp.color, lp.handoff_tracker, lp.handoff_target,
-              case when lp.handoff_tracker = 'cairn' then lp.handoff_target end as cairn_key, lp.position,
+      `select lp.id, lp.name, lp.color, lp.handoff_tracker, lp.handoff_target, lp.position,
               (select count(*) from subjects s
                 where s.project_id = lp.id
                   and ($1::uuid is null or croft_subject_visible(s.id, $1::uuid)))::int as subjects

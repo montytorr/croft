@@ -43,10 +43,9 @@ const croft = async (args) => {
       maxBuffer: 8 * 1024 * 1024,
     })
     // stderr as well, ahead of stdout. It carries what the CLI says ABOUT an
-    // answer rather than the answer — "AC-113 is now HOL-113, project AC was
-    // renamed HOL" (CROFT-264), "nothing found", what a digest withheld — and
-    // returning stdout alone meant an MCP caller asked for AC-113, got HOL-113
-    // and was never told why. The shell caller always saw both.
+    // answer rather than the answer — "nothing found", what a digest withheld —
+    // and returning stdout alone would hide it from an MCP caller. The shell
+    // caller always sees both.
     const text = [stderr.trim(), stdout.trim()].filter(Boolean).join('\n')
     return { text: text || 'ok', isError: false }
   } catch (error) {
@@ -236,11 +235,10 @@ const TOOLS = [
   },
   {
     name: 'croft_list',
-    description: 'List todos (project T), optionally filtered. For the board, use croft_subject_list.',
+    description: 'List todos, optionally filtered. For the board, use croft_subject_list.',
     inputSchema: {
       type: 'object',
       properties: {
-        project: { type: 'string', description: 'Todos live in project T.' },
         status: { type: 'string', enum: ['backlog', 'todo', 'doing', 'in-review', 'done', 'cancelled'] },
         type: { type: 'string', enum: ['feature', 'bug', 'improvement', 'chore', 'spike', 'docs'] },
         assignee: {
@@ -248,10 +246,9 @@ const TOOLS = [
           description: 'Whose tasks: "me" (the human behind this key), an email, a name or a user id.',
         },
       },
-      required: ['project'],
     },
     run: (a) => [
-      'list', '--project', a.project,
+      'list',
       ...(a.status ? ['--status', a.status] : []),
       ...(a.type ? ['--type', a.type] : []),
       ...(a.assignee ? ['--assignee', a.assignee] : []),
@@ -336,34 +333,6 @@ const TOOLS = [
       required: ['ref', 'resolution'],
     },
     run: (a) => ['done', a.ref, '--resolution', a.resolution, ...(a.kind ? ['--kind', a.kind] : [])],
-  },
-  {
-    name: 'croft_deps',
-    description:
-      'What blocks this task, and what it blocks. Check before claiming — a task ' +
-      'with open blockers is not ready to start whatever its status says.',
-    inputSchema: {
-      type: 'object',
-      properties: { ref: { type: 'string' } },
-      required: ['ref'],
-    },
-    run: (a) => ['deps', a.ref],
-  },
-  {
-    name: 'croft_link',
-    description:
-      'Record that one task must finish before another. Prefer this over writing ' +
-      '"waiting on T-40" in a note: a link is visible from both tasks.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        ref: { type: 'string' },
-        blockedBy: { type: 'string', description: 'The task that must finish first.' },
-        remove: { type: 'boolean', description: 'Remove the link instead of adding it.' },
-      },
-      required: ['ref', 'blockedBy'],
-    },
-    run: (a) => [a.remove ? 'unblockedby' : 'blockedby', a.ref, a.blockedBy],
   },
   {
     name: 'croft_comment',

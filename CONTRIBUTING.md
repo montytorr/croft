@@ -19,10 +19,10 @@ implements `{ name, available, create, show }` there, with a test double in
 
 See [`README.md`](./README.md#running-it-locally). You need Node 22+ and PostgreSQL 17+.
 
-The code Croft inherited from Cairn once ran on Supabase, and no longer does — the runtime
-moved to the native PostgreSQL driver, and `migrations/` used to be `supabase/migrations/`.
-A reference to Supabase that reads as a requirement rather than as history is stale, and a
-PR fixing it is welcome.
+**History.** Croft started as a fork of Cairn and has since dropped what a lab does not use:
+the runtime is the native PostgreSQL driver (no Supabase), and the task tracker's projects,
+dependencies, mentions and git evidence are gone. A reference to any of them that reads as a
+requirement is stale, and a PR fixing it is welcome.
 
 ## Before opening a PR
 
@@ -66,10 +66,9 @@ ProseMirror, so writing an untouched body can rewrite what an agent authored. Se
 **A backfill must not advertise itself as user activity.** `tasks`, `projects` and
 `task_comments` carry a `before update` touch trigger that sets `updated_at = now()` on
 every row it sees. A migration that rewrites a column for bookkeeping therefore stamps
-every row it touches as just-edited. In Cairn, migration 049 qualified legacy actor ids across the
-table and flattened `updated_at` on 3023 tasks to one timestamp, which destroyed recency
-ordering and blinded every staleness view until it was repaired from a backup. Disable
-the trigger around the statement, and turn it back on in the same transaction:
+every row it touches as just-edited. One such migration once flattened `updated_at` on
+thousands of tasks to a single timestamp, which destroyed recency ordering and blinded every
+staleness view until it was repaired from a backup. Disable the trigger around the statement, and turn it back on in the same transaction:
 
 ```sql
 alter table tasks disable trigger tasks_touch;
@@ -101,9 +100,7 @@ see [`LICENSE-MIT-HISTORY`](./LICENSE-MIT-HISTORY).
 You read the licence that was in the repository when you wrote the patch, and we are not
 going to claim you agreed to one that arrived afterwards. If you would rather your
 contribution were under the current licence instead, say so on the pull request and it
-will be recorded there. This is not hypothetical: Cairn's [#43](https://github.com/montytorr/cairn/pull/43)
-was opened twenty-one minutes before the licence changed, which is how we found that a
-date and a tag were two different lines and neither one covered an open branch.
+will be recorded there.
 
 If you contributed under MIT and would rather your work were **not** relicensed, say so in
 an issue and it will be honoured.

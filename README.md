@@ -46,7 +46,6 @@ leaves the lab:
 
 Tracker adapters (`cairn`, and `github` via `gh`) live in one delimited section of `cli/croft.mjs`;
 supporting another tracker means adding one there.
-`croft push T-41` without a sha is the deprecated (0.7) spelling of `handoff`, removed in 0.8.
 
 ## Running it locally
 
@@ -115,7 +114,7 @@ croft handoff T-41  /  croft sync               # hand over to a task tracker, p
 croft context --brief                           # the lab in five lines
 ```
 
-`croft --help` lists the lab verbs, `croft help --all` the inherited task verbs; [`AGENTS.md`](./AGENTS.md) is how agents are expected to
+`croft --help` lists the lab verbs, `croft help --all` the rest of the todo verbs; [`AGENTS.md`](./AGENTS.md) is how agents are expected to
 use them, and [`docs/openclaw.md`](./docs/openclaw.md) covers OpenClaw.
 
 ## Licence
