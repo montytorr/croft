@@ -15,22 +15,12 @@ const cli = join(process.cwd(), 'cli', 'croft.mjs')
 
 type Seen = { auth?: string; path?: string; body?: string }[]
 
-/**
- * The routing cache refresh (`GET /api/v1/projects`) is answered
- * with `projects` and kept out of `seen`, so each test counts the commands it
- * ran and nothing else.
- */
-const serve = (seen: Seen, status = 200, projects: string[] = []) =>
+const serve = (seen: Seen, status = 200) =>
   new Promise<{ server: Server; url: string }>((resolve) => {
     const server = createServer((req, res) => {
       let body = ''
       req.on('data', (c) => { body += c })
       req.on('end', () => {
-        if (req.method === 'GET' && req.url === '/api/v1/projects') {
-          res.writeHead(200, { 'content-type': 'application/json' })
-          res.end(JSON.stringify({ success: true, data: projects.map((key) => ({ key, former_keys: [] })) }))
-          return
-        }
         seen.push({ auth: req.headers.authorization, path: req.url, body })
         res.writeHead(status, { 'content-type': 'application/json' })
         res.end(JSON.stringify(status === 200
@@ -204,7 +194,6 @@ describe('several instances on one machine', () => {
 
   it('adds an instance and adopts this machine\'s existing files into it', async () => {
     await writeFile(join(home, '.croft', 'env'), `CROFT_BASE_URL=${a}\nCROFT_API_KEY_CLAUDE_CODE=crn_personal\n`)
-    await writeFile(join(home, '.croft', 'projects.json'), '{"/x":"ACME"}')
     await mkdir(join(home, '.croft', 'ownership'))
     await writeFile(join(home, '.croft', 'outbox.jsonl'), '')
 
@@ -212,7 +201,7 @@ describe('several instances on one machine', () => {
     expect(added.code).toBe(0)
     expect(added.stdout).toContain('instance personal')
     const dir = join(home, '.croft', 'instances', 'personal')
-    for (const file of ['env', 'projects.json', 'ownership', 'outbox.jsonl']) {
+    for (const file of ['env', 'ownership', 'outbox.jsonl']) {
       expect(existsSync(join(dir, file))).toBe(true)
       expect(existsSync(join(home, '.croft', file))).toBe(false)
     }

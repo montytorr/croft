@@ -2,7 +2,6 @@ import { admin, pool } from '@/lib/db/client'
 import type { Actor } from './auth'
 import { diffTaskEvents, recordActivity } from './activity'
 import { subjectRef, type SubjectVisibility } from '@/lib/lab/types'
-import { issuedUnderFormerKey, lookupFormerKey, renameDay, type KeyRename } from './project-keys'
 import { fail } from './response'
 import { isTaskVisible } from './visibility'
 
@@ -67,19 +66,6 @@ export const parseRef = (raw: string): TaskRef | null => {
 
 export type TaskRow = Record<string, unknown> & { id: string }
 
-/**
- * What a ref resolved to, and how.
- *
- * `renamed` is set when the ref's key is one the project used to have: the
- * task is the right one, and the caller is owed an explanation of why its ref
- * looks different (CROFT-264). `neverIssued` is the other half of the same
- * rule — the key is retired, a task with that number exists under the live
- * key, but it was created after the rename, so the old ref never named it.
- */
-export type ResolvedTask =
-  | { task: TaskRow; renamed: KeyRename | null; requestedRef: string; neverIssued?: undefined }
-  | { task: null; renamed: KeyRename | null; requestedRef: string; neverIssued?: string }
-
 /** "HOL-113", from a row with either embedding of its project. */
 export const refOfRow = (row: Record<string, unknown>) => {
   const embedded = (row.project ?? row.projects) as { key?: string } | { key?: string }[] | undefined
@@ -88,17 +74,18 @@ export const refOfRow = (row: Record<string, unknown>) => {
 }
 
 /**
- * Resolves a ref to a task in the shared workspace, saying whether it went
- * through a retired key.
+ * Resolves a ref to a task in the shared workspace.
+ *
+ * Hidden is missing: a todo of a subject the caller cannot see answers exactly
+ * as a ref that names nothing.
  */
-export const resolveTask = async (
+export const findTask = async (
   actor: Pick<Actor, 'userId'>,
   raw: string,
   fields = TASK_FIELDS,
-): Promise<ResolvedTask> => {
-  const requestedRef = decodeURIComponent(raw).trim().toUpperCase()
+): Promise<TaskRow | null> => {
   const ref = parseRef(raw)
-  if (!ref) return { task: null, renamed: null, requestedRef }
+  if (!ref) return null
 
   // Key-based refs need the embedded project relation even when callers request
   // a narrow projection. `status` rides along so `refuseArchived` works for
@@ -118,68 +105,12 @@ export const resolveTask = async (
       : await query.eq('number', ref.number).eq('projects.key', ref.key).maybeSingle()
 
   // A PostgREST error is NOT "no such task" — maybeSingle() reports zero rows
-  // as data: null with no error. Swallowing it here is how adding a second
-  // tasks->projects path (task_projects, file_touches) turned every lookup in
-  // the product into "No task CROFT-64." for a PGRST201 ambiguity that named
-  // its own fix in the response body.
+  // as data: null with no error.
   if (error) throw new Error(`task lookup failed: ${error.message}`)
-  if (data) {
-    // Hidden is missing: a todo of a subject the caller cannot see answers
-    // exactly as a ref that names nothing. Not tried under a former key
-    // either — a live-key hit is never also a retired-key hit.
-    const task = data as unknown as TaskRow
-    return (await isTaskVisible(task.subject_id, actor.userId))
-      ? { task, renamed: null, requestedRef }
-      : { task: null, renamed: null, requestedRef }
-  }
-
-  // Not found under that key — but the key may be one the project used to
-  // have. Refs escape into commit messages and other agents' notes, which a
-  // rename cannot reach, so a retired key still resolves. Tried second rather
-  // than first: a live key is never also a retired one, and the common path
-  // should not pay for the rare one.
-  if ('id' in ref) return { task: null, renamed: null, requestedRef }
-  const former = await lookupFormerKey(ref.key)
-  if (!former) return { task: null, renamed: null, requestedRef }
-
-  // created_at decides whether the old ref was ever issued, so it is read even
-  // when the caller asked for a narrower projection.
-  const withCreated = /\bcreated_at\b/.test(select) ? select : `${select}, created_at`
-  const { data: byFormer, error: formerError } = await admin()
-    .from('tasks')
-    .select(withCreated)
-    .eq('project_id', former.projectId)
-    .eq('number', ref.number)
-    .maybeSingle()
-
-  if (formerError) throw new Error(`task lookup failed: ${formerError.message}`)
-  if (!byFormer) return { task: null, renamed: former.rename, requestedRef }
-
-  const task = byFormer as unknown as TaskRow
-  // Before the never-issued check: "did you mean T-5?" would name it.
-  if (!(await isTaskVisible(task.subject_id, actor.userId))) {
-    return { task: null, renamed: former.rename, requestedRef }
-  }
-  if (!issuedUnderFormerKey(former.rename, task.created_at)) {
-    return {
-      task: null,
-      renamed: former.rename,
-      requestedRef,
-      neverIssued: refOfRow(task) ?? `${former.rename.to}-${ref.number}`,
-    }
-  }
-  return { task, renamed: former.rename, requestedRef }
+  if (!data) return null
+  const task = data as unknown as TaskRow
+  return (await isTaskVisible(task.subject_id, actor.userId)) ? task : null
 }
-
-/**
- * Resolves a ref to a task in the shared workspace.
- *
- * The task alone, for the many callers that only act on it. Anything that
- * shows a task back to the caller should use `resolveTask` and pass the
- * rename on.
- */
-export const findTask = async (actor: Pick<Actor, 'userId'>, raw: string, fields = TASK_FIELDS) =>
-  (await resolveTask(actor, raw, fields)).task
 
 /** A task row's embedded project, whichever alias or shape fetched it. */
 const embeddedProject = (row: Record<string, unknown>) => {
@@ -191,29 +122,12 @@ const embeddedProject = (row: Record<string, unknown>) => {
 }
 
 /**
- * Refuses a write to a task whose HOME project is archived (security review
- * F1).
+ * Refuses a write to a task whose HOME project is archived. Nothing in the API
+ * archives a project any more; this guards a row archived by hand.
  *
- * Archiving is what moving a project to another Croft instance leaves behind
- * here: a frozen copy. Nothing stopped a CLI still routed to this instance by
- * a stale cache from closing, noting, or claiming a task in that copy — reads
- * worked, and so, silently, did every write. This is the one place that
- * refuses them, called right after a task is resolved and before anything
- * mutates.
- *
- * Reads stay allowed — the record should still be legible from either side —
- * only writes are refused.
- *
- * Only the task's HOME project (`project_id`) is checked. `task_projects`
- * rows only widen where a task is listed, not where it lives, so a task filed
- * at home in an active project but also linked into an archived one must
- * still be writable.
- *
- * Call this with the row `findTask`/`resolveTask` already returned — it reads
- * the embedded project rather than querying again, so it costs nothing extra
- * as long as the caller's field selection carries `project`/`projects` with
- * `status` (TASK_FIELDS and TASK_LIST_FIELDS both do; `resolveTask`'s
- * fallback embed for narrower field lists does too).
+ * Call this with the row `findTask` already returned: it reads the embedded
+ * project rather than querying again. Reads stay allowed, only writes are
+ * refused.
  */
 export const refuseArchived = (task: TaskRow) => {
   const project = embeddedProject(task)
@@ -225,36 +139,9 @@ export const refuseArchived = (task: TaskRow) => {
 
   return fail(
     'conflict',
-    `${ref} lives in ${key}, which is archived — most likely because it moved to another Croft ` +
-      `instance and this is the copy left behind. If it moved, point the CLI at the other one ` +
-      `with --instance <the other instance>. To write here instead, restore ${key} first: ` +
-      `\`croft project restore ${project.key ?? key}\`.`,
+    `${ref} lives in ${key}, which is archived. Restore the project before writing to it.`,
     { project: project.key ?? null, projectStatus: 'archived' },
   )
-}
-
-/**
- * What a response says about how a ref was reached. Empty for a current ref,
- * so nothing changes for the common case.
- */
-export const renameFields = (resolved: Pick<ResolvedTask, 'renamed' | 'requestedRef'>) =>
-  resolved.renamed
-    ? { requested_ref: resolved.requestedRef, renamed_from: resolved.renamed }
-    : {}
-
-/** The 404 for a ref that did not resolve, naming the rename when there was one. */
-export const noSuchTaskMessage = (raw: string, resolved: ResolvedTask) => {
-  const { renamed, neverIssued } = resolved
-  if (!renamed) return `No task ${raw}.`
-  const day = renameDay(renamed.at)
-  if (neverIssued) {
-    return (
-      `No task ${resolved.requestedRef}. Project ${renamed.key} was renamed ${renamed.to} on ${day}, ` +
-      `and ${neverIssued} was created after that, so ${resolved.requestedRef} was never issued. ` +
-      `Did you mean ${neverIssued}?`
-    )
-  }
-  return `No task ${resolved.requestedRef}. Project ${renamed.key} was renamed ${renamed.to} on ${day}.`
 }
 
 /**
@@ -337,14 +224,12 @@ export type TaskSubject = {
   title: string
   /**
    * The subject's lab project, and where its todos go: `croft handoff T-n`
-   * with no `--to` uses `handoff_tracker` and `handoff_target`. `cairn_key`
-   * is the deprecated (0.7) alias. Removed in 0.8.
+   * with no `--to` uses `handoff_tracker` and `handoff_target`.
    */
   project: {
     name: string
     handoff_tracker: string | null
     handoff_target: string | null
-    cairn_key: string | null
   } | null
   /**
    * Who can see the subject, and so the todo (v0.4). `croft handoff` refuses a
@@ -381,7 +266,6 @@ export const subjectOfTask = async (subjectId: unknown, viewerId: string): Promi
             name: row.project_name,
             handoff_tracker: row.handoff_tracker,
             handoff_target: row.handoff_target,
-            cairn_key: row.handoff_tracker === 'cairn' ? row.handoff_target : null,
           },
     visibility: row.visibility,
   }

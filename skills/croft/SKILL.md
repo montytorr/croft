@@ -54,7 +54,7 @@ A subject filed by mistake is deleted (`croft subject delete S-n --confirm S-n`)
 - `S-12` — a subject. Used only with `croft subject …`.
 - `T-41` — a todo, always under a subject. Worked here with `show`, `claim`, `note`,
   `checkpoint`, `release`, `done --resolution`, `cancel`. `croft help --all` lists the
-  inherited task verbs (`beat`, `log`, `update`, `deps`, `history`…), which also work.
+  rest (`beat`, `log`, `update`, `comment`, `block`, `children`, labels).
 
 Single-letter keys on purpose: they never collide with a tracker's refs.
 
@@ -140,14 +140,10 @@ croft sync      # pull every handed-off todo's status back
 rest, and when the task closes it notes the subject ("<ref> done: <resolution>") once. Then
 decide the subject's stage, often `rolled out` with a conclusion.
 
-`croft push T-41 <sha> [--branch B]` records a git push on the todo as evidence, like `croft
-commit` and `croft run`. None of those executes anything. (`push T-41` with no sha is the
-deprecated spelling of `handoff`.)
-
 ## Briefing
 
 ```bash
-croft context --brief   # a few lines: stage counts, your active subjects, the rule
+croft context --brief   # (or bare `croft context`) a few lines: stage counts, your active subjects, the rule
 ```
 
 A SessionStart hook prints this. Where a lab project has a hand-off target it adds a line

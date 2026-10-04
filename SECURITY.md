@@ -99,11 +99,11 @@ its members list). The rule:
   stay visible to their members only, until the owner is restored. An agent key sees what
   its human sees.
 - A todo inherits its subject's visibility, with everything hanging off it: notes,
-  comments, attachments, activity (tombstones of deleted todos included), mentions it makes
-  of other tasks, and dependencies. A task with no subject is visible to everyone.
+  comments, attachments and activity (tombstones of deleted todos included). A task with
+  no subject is visible to everyone.
 - **Hidden is the same as missing.** A subject or todo you cannot see answers exactly as
   one that does not exist — the same `not_found`, the same message — on reads, on writes,
-  and on every path that resolves a ref first (dependencies, duplicate-of, parent,
+  and on every path that resolves a ref first (duplicate-of, parent,
   hand-off links, attachments by id). Search, activity, labels, the brief, lab-project counts
   and the live-update pulse count and rank only what the viewer can see; the pulse the
   event stream sends is a sha256 hash of that viewer's fingerprint, never the counts.
@@ -127,9 +127,9 @@ its members list). The rule:
 
 What this does **not** hide, by design:
 
-- **Numbering gaps.** Subjects and todos are numbered workspace-wide (`S-12`, `CAI-42`). An
+- **Numbering gaps.** Subjects and todos are numbered workspace-wide (`S-12`, `T-41`). An
   outsider who sees S-11 and S-13 can infer that S-12 exists, and a new todo's number
-  says how many tasks the project has ever had. Only the number leaks — never the title,
+  says how many todos the workspace has ever had. Only the number leaks — never the title,
   owner or content.
 - **Signed file URLs already issued.** Attachment links are signed for up to an hour.
   Removing someone from a members list, or making a subject private again, stops them
@@ -139,18 +139,13 @@ What this does **not** hide, by design:
   by everyone; a tag created on a private subject exists for the whole workspace.
 - **Counts in refusals and admin screens.** An administrator's "in use" counts (a stage,
   tag or lab project that subjects still use, a person's open tasks) are workspace-wide;
-  refusing to delete a task that still has children or dependants says how many, hidden
-  ones included; and a project holding tasks you cannot see refuses to be deleted by you
-  (deleting it would delete them), saying how many. They reveal a number, never a title
-  or content.
-- **Waiting on hidden work.** A task blocked by a todo you cannot see is still held back
-  from `croft next`, though its dependency list shows you nothing.
+  refusing to delete a task that still has children says how many, hidden ones included.
+  They reveal a number, never a title or content.
 - **The maintenance sweep.** An administrator's `maintenance` key releases quiet claims
   across the workspace, private todos included, and reports those by ref alone — not who
   held them or when they last moved.
-- **Workspace-wide operations.** Archiving a project freezes every task in it, private
-  todos included, until someone restores it; handing a disabled person's open tasks to
-  someone else moves their private todos too, to someone who may not be able to see them.
+- **Workspace-wide operations.** Handing a disabled person's open tasks to someone else
+  moves their private todos too, to someone who may not be able to see them.
 - **Timing.** Changes that affect only what someone else can see do not move your pulse,
   but a request's latency is not constant-time.
 
@@ -164,11 +159,10 @@ What this does **not** hide, by design:
   tracker. The agent reports a handed-off todo's status through the same Croft visibility
   checks as other todo writes. A todo handed off to a tracker cannot be claimed or closed
   in Croft (409 `handed_off`) until it is taken back.
-- The session briefing (`croft context --brief`) sends no working directory: the server
-  never used it. `croft context` sends the working directory and the git remote, and every
-  request carries the hostname, so a shared instance learns how every member's machine is
-  laid out. `CROFT_SHARE_LOCATION=off` (environment or `~/.croft/env`) keeps all three on
-  the machine; `croft map` and `--project` still route work to a project.
+- The session briefing (`croft context --brief`) sends no working directory or git remote,
+  but every request carries the hostname, so a shared instance learns how every member's
+  machine is laid out. `CROFT_SHARE_LOCATION=off` (environment or `~/.croft/env`) keeps the
+  hostname on the machine.
 - The agent-files job `croft setup` installs overwrites the CLI, the session hook and the
   skill every 15 minutes (hourly on Linux). It syncs the tag of the release setup installed,
   never a branch, over https only; it fetches every file before writing any, and never
@@ -188,7 +182,7 @@ What this does **not** hide, by design:
 - Failed logins, forgot-password requests and reset attempts are limited per address (and
   per account or email address), in memory: several replicas each keep their own count.
 - Workspace isolation is not tenant isolation: a member who must not see another member's
-  projects needs a separate Croft deployment.
+  work needs a separate Croft deployment.
 - **Orphaned private subjects stay hidden.** A private subject whose owner was hard-deleted
   from the database has no owner and no members, and so no viewer: it stays hidden for good.
   That is accepted. Disabling (the only removal the web offers) keeps the owner, so restoring

@@ -4,21 +4,9 @@ import { ok, fail } from '@/lib/api/response'
 import { failFromDb } from '@/lib/api/db-errors'
 import { admin } from '@/lib/db/client'
 import { diffTaskEvents, recordActivity } from '@/lib/api/activity'
-import {
-  findTask,
-  noSuchTaskMessage,
-  RELEASED_CLAIM,
-  refOfRow,
-  refuseArchived,
-  renameFields,
-  resolveParent,
-  resolveTask,
-  subjectOfTask,
-} from '@/lib/api/tasks'
-import { formerKeysByProject, formerRefsOf, projectsForKeys, resolveProject } from '@/lib/api/project-keys'
+import { findTask, RELEASED_CLAIM, refOfRow, refuseArchived, resolveParent, subjectOfTask } from '@/lib/api/tasks'
 import { buildDigest } from '@/lib/api/digest'
 import { refuseHandedOff } from '@/lib/api/handoff-shape'
-import { mentionsOf } from '@/lib/api/mentions'
 import { viewerOf, withoutHiddenLinks } from '@/lib/api/visibility'
 import { peopleByIds, resolveAssignee, withAssignee } from '@/lib/api/people'
 import { removeAttachments } from '@/lib/attachments'
@@ -27,28 +15,13 @@ import { isTerminal, updateTaskSchema, RESOLUTION_KINDS } from '@/schemas/task'
 
 export const dynamic = 'force-dynamic'
 
-/**
- * One task, and — when the ref went through a key the project used to have —
- * how it was reached.
- *
- * `requested_ref` and `renamed_from` appear only then. AC-113 answered with
- * HOL-113 and nothing else, and an agent whose commit message said AC-113 had
- * no way to tell it had the same task (CROFT-264). `former_refs` lists the refs
- * this task was actually issued under, which excludes keys retired before the
- * task existed.
- */
+/** One task. `?view=digest` is the cheap read: the answer, the durable notes, a clipped body. */
 export const GET = route<{ ref: string }>({
   handler: async ({ actor, params, url }) => {
-    const resolved = await resolveTask(actor, params.ref)
-    if (!resolved.task) return fail('not_found', noSuchTaskMessage(params.ref, resolved), renameFields(resolved))
-    const task = await withoutHiddenLinks(await withAssignee(resolved.task), actor.userId)
+    const found = await findTask(actor, params.ref)
+    if (!found) return fail('not_found', `No task ${params.ref}.`)
+    const task = await withoutHiddenLinks(await withAssignee(found), actor.userId)
 
-    const formerKeys = (await formerKeysByProject([String(task.project_id)])).get(String(task.project_id)) ?? []
-    const former_refs = formerRefsOf(
-      { number: task.number as number, created_at: task.created_at as string | null },
-      formerKeys,
-    )
-    const told = { ...renameFields(resolved), ...(former_refs.length > 0 ? { former_refs } : {}) }
     // A todo says which subject it is part of, by ref, so nobody has to map a uuid.
     const subject = await subjectOfTask(task.subject_id, actor.userId)
 
@@ -58,19 +31,11 @@ export const GET = route<{ ref: string }>({
       // Only on the tasks that have them: the digest is the cheapest view.
       const lab = {
         ...(subject ? { subject } : {}),
-        ...(task.handoff
-          ? {
-              handoff: task.handoff,
-              cairn_ref: task.cairn_ref,
-              cairn_status: task.cairn_status,
-              cairn_synced_at: task.cairn_synced_at,
-            }
-          : {}),
+        ...(task.handoff ? { handoff: task.handoff } : {}),
       }
-      return ok({ ...(await buildDigest(task, viewerOf(actor))), ...lab, ...told })
+      return ok({ ...(await buildDigest(task, viewerOf(actor))), ...lab })
     }
-    const mentioned = await mentionsOf(task.id as string, 50, viewerOf(actor))
-    return ok({ ...task, subject, ...told, mentioned_in: mentioned.mentions, mentioned_in_total: mentioned.total })
+    return ok({ ...task, subject })
   },
 })
 
@@ -234,74 +199,7 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
       patch.resolved_by = null
     }
 
-    // Moving happens before the field update so a failure here does not leave
-    // half a change applied. It is its own operation, not a column: the
-    // number comes from the target project's counter.
-    let moved: { ref: string; from: string } | null = null
-    if (body.project) {
-      // Through a retired key too: moving work "to AC" means to the project
-      // AC became, not "no such project".
-      const target = (await resolveProject(body.project))?.project
-
-      if (!target) return fail('not_found', `No project ${body.project}.`)
-
-      const current = task.project as { key?: string } | { key?: string }[] | undefined
-      const from = (Array.isArray(current) ? current[0] : current)?.key ?? ''
-
-      if (target.id !== (task.project_id ?? null) && from !== target.key) {
-        const { data: result, error: moveError } = await admin().rpc('move_task', {
-          p_owner: actor.userId,
-          p_task: task.id,
-          p_project: target.id,
-        })
-        if (moveError) return fail('internal_error', moveError.message)
-        const row = (result as { number: number; project_key: string }[] | null)?.[0]
-        if (row) moved = { ref: `${row.project_key}-${row.number}`, from }
-      }
-    }
-
-    // Secondary project links. Replaced wholesale, because an explicit list is
-    // a statement about where this work belongs, not an addition to it.
-    let alsoProjects: string[] | null = null
-    if (body.alsoProjects !== undefined) {
-      const requested = [...new Set((body.alsoProjects ?? []).map((k) => k.toUpperCase()))]
-
-      // A retired key links the project it became, and is reported under its
-      // live key so the response does not repeat the old one back as current.
-      const { found, missing } = await projectsForKeys(requested)
-      if (missing.length > 0) return fail('not_found', `No such project: ${missing.join(', ')}`)
-      const byLive = new Map([...found.values()].map((p) => [p.key, p.id]))
-      const keys = [...byLive.keys()]
-
-      const { error: clearError } = await admin()
-        .from('task_projects')
-        .delete()
-        .eq('task_id', task.id)
-      if (clearError) return fail('internal_error', clearError.message)
-
-      if (keys.length > 0) {
-        const { error: linkError } = await admin()
-          .from('task_projects')
-          .insert(keys.map((k) => ({ task_id: task.id, project_id: byLive.get(k)! })))
-        if (linkError) {
-          // The trigger refuses a link to the task's own home project, which
-          // would list it twice in one place.
-          return fail('validation_failed', linkError.message)
-        }
-      }
-      alsoProjects = keys
-    }
-
     if (Object.keys(patch).length === 0) {
-      if (alsoProjects) return ok({ ...(await withoutHiddenLinks(task, actor.userId)), alsoProjects })
-      if (moved) {
-        return ok({
-          ...(await withoutHiddenLinks(task, actor.userId)),
-          ref: moved.ref,
-          moved,
-          note: `Ref changed from ${moved.from}-${task.number} to ${moved.ref}; anything referring to the old one is now stale.`,
-        })
-      }
       return fail('validation_failed', 'No fields to update.')
     }
 
@@ -348,8 +246,7 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
       ], actor.userId, actor.host)
     }
 
-    const named = await withAssignee(data)
-    return ok(alsoProjects ? { ...named, alsoProjects } : named)
+    return ok(await withAssignee(data))
   },
 })
 
@@ -368,9 +265,6 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
  * things that depend on it first, which is the point: that is a decision per
  * item rather than one cascade nobody reviewed.
  */
-// Counting on the filter column rather than `id`: task_deps is a composite
-// key and has no id, so asking for one returns an error and a count of zero —
-// a guard that reports "nothing depends on this" for every task alike.
 const countForOthers = async (table: string, taskId: string, actorId: string) => {
   const { count, error } = await admin()
     .from(table)
@@ -404,22 +298,16 @@ export const DELETE = route<{ ref: string }>({
     // of its author's own became permanently undeletable, because delete
     // refused a work log and nothing could remove one. That left junk no
     // mechanism could clear, which is worse than the friction was worth.
-    const [children, notes, comments, dependants, dependencies] = await Promise.all([
+    const [children, notes, comments] = await Promise.all([
       countFor('tasks', 'parent_id', task.id),
       countForOthers('task_notes', task.id, actor.actorId),
       countForOthers('task_comments', task.id, actor.actorId),
-      // Both directions: something pointing AT this task loses its dependency
-      // silently, which is the failure that is hardest to notice afterwards.
-      countFor('task_deps', 'blocking_id', task.id),
-      countFor('task_deps', 'blocked_id', task.id),
     ])
 
     const holding = [
       children && `${children} child task${children === 1 ? '' : 's'}`,
       notes && `${notes} work-log note${notes === 1 ? '' : 's'} from somebody else`,
       comments && `${comments} comment${comments === 1 ? '' : 's'} from somebody else`,
-      dependants && `${dependants} task${dependants === 1 ? '' : 's'} depending on it`,
-      dependencies && `${dependencies} dependenc${dependencies === 1 ? 'y' : 'ies'} of its own`,
     ].filter(Boolean) as string[]
 
     if (holding.length > 0) {
@@ -428,7 +316,7 @@ export const DELETE = route<{ ref: string }>({
         `${ref} has ${holding.join(', ')}. Delete is for tasks that should never have ` +
           `existed; this one has a history. Cancel it instead — \`status: cancelled\` with a ` +
           `resolution keeps the record and the reason — or detach what it holds first.`,
-        { holding, children, notes, comments, dependants, dependencies },
+        { holding, children, notes, comments },
       )
     }
 

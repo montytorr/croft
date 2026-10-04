@@ -3,9 +3,8 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 /**
- * The board toolbar opens five filter popovers. See
- * src/lib/overflow-guard.test.ts: setting one overflow axis to `auto` forces
- * the other from `visible` to `auto`, which is exactly what clipped the bulk
+ * The board toolbar opens five filter popovers. Setting one overflow axis to `auto` forces
+ * the other from `visible` to `auto`, which is exactly what clipped a floating
  * bar's own menus out of existence (CROFT, 2026-09-10/11). The toolbar row
  * must wrap rather than scroll, so it never becomes that scroll container.
  */

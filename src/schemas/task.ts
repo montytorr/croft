@@ -135,6 +135,9 @@ export const createTaskSchema = taskFields
   })
 
 /** Partial update. No defaults, so absent fields stay absent. */
+/** A field a removed feature used to take: absent is fine, present is refused with `message`. */
+const removedField = (message: string) => z.unknown().optional().refine((value) => value === undefined, { message })
+
 export const updateTaskSchema = taskFields.partial().extend({
   resolution: z.string().max(100_000).optional(),
   resolutionKind: resolutionKind.optional(),
@@ -151,16 +154,11 @@ export const updateTaskSchema = taskFields.partial().extend({
   /** `null` clears it — the one field on `taskFields` that can be unset rather than just left alone. */
   dueDate: z.string().date().nullable().optional(),
   /**
-   * Move the task to another project, by key or uuid. Per-project numbering
-   * means the ref changes, so this is handled apart from the field updates.
+   * Removed in 0.8, refused rather than ignored: a 0.7 CLI's `update --project`
+   * would otherwise answer 200 and change nothing.
    */
-  project: z.string().min(1).max(60).optional(),
-  /**
-   * Additional projects this task also belongs to, by key. Replaces the set;
-   * `[]` or `null` clears it. The home project is not one of these -- it keeps
-   * the ref, and these only widen where the task appears.
-   */
-  alsoProjects: z.array(z.string().min(1).max(10)).max(20).nullable().optional(),
+  project: removedField('Moving a todo between projects was removed in 0.8: Croft has one todo list. Update the CLI (croft setup).'),
+  alsoProjects: removedField('Linking a todo to other projects was removed in 0.8. Update the CLI (croft setup).'),
 })
 
 export const createNoteSchema = z.object({
@@ -168,53 +166,6 @@ export const createNoteSchema = z.object({
   kind: noteKind.default('note'),
   facts: z.array(z.string().min(1).max(500)).max(50).optional(),
 })
-
-export const ACTIVITY_EVIDENCE_EVENTS = ['git_commit', 'git_push', 'run_result'] as const
-export const activityEvidenceEvent = z.enum(ACTIVITY_EVIDENCE_EVENTS)
-
-/**
- * Structured delivery evidence agents can attach to a task timeline.
- *
- * Every field was optional, so `{event:'git_commit'}` was accepted and stored a
- * row asserting that a commit happened while naming no commit. The CLI asks for
- * a sha positionally and so never produced one, but the CLI is not the
- * contract — the API is, and it is what the MCP facade and anything else writes
- * against. Evidence that cannot be checked is worse than no evidence, because
- * it still renders in the timeline as though something was proved.
- */
-export const createActivityEvidenceSchema = z
-  .object({
-    event: activityEvidenceEvent,
-    sha: z.string().regex(/^[0-9a-f]{7,64}$/i).optional(),
-    repo: z.string().min(1).max(300).optional(),
-    branch: z.string().min(1).max(250).optional(),
-    message: z.string().max(500).optional(),
-    url: z.string().url().max(2_000).optional(),
-    remote: z.string().min(1).max(250).optional(),
-    command: z.string().min(1).max(2_000).optional(),
-    status: z.enum(['passed', 'failed', 'skipped']).optional(),
-    exitCode: z.number().int().min(-255).max(255).optional(),
-    durationMs: z.number().int().min(0).max(86_400_000).optional(),
-    // 4KB, not 50. Nothing reads this back — the timeline renders the status,
-    // the command and the exit code — so it is kept for diagnosing a failure,
-    // and a stored blob fifty times larger than that is paid for on every read
-    // of a task that never displays it.
-    output: z.string().max(4_000).optional(),
-    metadata: z.record(z.string(), z.unknown()).optional(),
-  })
-  .superRefine((value, ctx) => {
-    const require = (field: 'sha' | 'command' | 'status', why: string) => {
-      if (value[field] === undefined) {
-        ctx.addIssue({ code: 'custom', path: [field], message: why })
-      }
-    }
-    if (value.event === 'git_commit') require('sha', 'a git_commit must name the commit it records')
-    if (value.event === 'git_push') require('sha', 'a git_push must name the commit it pushed')
-    if (value.event === 'run_result') {
-      require('command', 'a run_result must name the command that ran')
-      require('status', 'a run_result must say whether it passed, failed or was skipped')
-    }
-  })
 
 /** `CAI-42` — the identifier agents actually use in prose. */
 export const taskRefSchema = z

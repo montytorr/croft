@@ -1,5 +1,4 @@
 import { admin, pool } from '@/lib/db/client'
-import { issuedUnderFormerKey, lookupFormerKey, type KeyRename } from './project-keys'
 import { subjectByRefQuery } from './subjects'
 
 /**
@@ -13,8 +12,7 @@ import { subjectByRefQuery } from './subjects'
  * expensive wrong answer this system can give.
  *
  * That was answered for years by trying the precise query first and widening
- * only when it came back thin, which is the shape `search_tasks` still has.
- * CROFT-247 measured what it cost in `search_all`: an AND over every content
+ * only when it came back thin. CROFT-247 measured what it cost in `search_all`: an AND over every content
  * word of a 9-13 word question matched the expected row 3 times in 22 live
  * searches, and the rows it DID match — long descriptions that happen to
  * contain every word somewhere — were enough to switch the widened arm off.
@@ -56,37 +54,6 @@ export const widenedTerms = (query: string): string[] | null => {
   return terms.length >= 2 ? terms : null
 }
 
-export type SearchRow = {
-  id: string
-  number: number
-  title: string
-  type: string
-  status: string
-  priority: string
-  resolution: string | null
-  resolution_kind: string | null
-  description: string | null
-  claimed_by: string | null
-  updated_at: string
-  external_ref: string | null
-  project_key: string
-  rank: number
-  coverage: number
-  widened: boolean
-  /** Set only when the query was a ref through a retired key (CROFT-264). */
-  requested_ref?: string
-  renamed_from?: KeyRename
-}
-
-/**
- * Ranking happens in Postgres, via the search_tasks function.
- *
- * ts_rank needs the tsvector and tsquery together, and PostgREST cannot order
- * by an expression it did not select — so ordering here would mean ordering by
- * something other than relevance. Doing exactly that (recency) dropped
- * measured recall from 75% to 6%: widening returns many more rows, and a
- * recency sort buries the exact match among them.
- */
 /**
  * A ref is an exact address, not a phrase to match.
  *
@@ -145,11 +112,7 @@ type ExactTask = {
   claimed_by: string | null
   external_ref: string | null
   updated_at: string
-  created_at?: string
   project: { key: string } | { key: string }[] | null
-  /** How the ref reached it, when that was through a retired key. */
-  requested_ref?: string
-  renamed_from?: KeyRename
 }
 
 /**
@@ -170,26 +133,16 @@ const visibleTaskFilter = async (viewerId: string): Promise<string> => {
 const keyOfProject = (project: ExactTask['project']) =>
   (Array.isArray(project) ? project[0]?.key : project?.key) ?? null
 
-/**
- * The task a ref names, including through a key the project used to have —
- * the whole point of retaining former keys is that old refs keep resolving.
- */
-const tasksByNumber = async (
-  viewerId: string,
-  q: string,
-  project?: string,
-): Promise<ExactTask[]> => {
+/** Tasks that carry a bare number as their number, newest first, capped. */
+const tasksByNumber = async (viewerId: string, q: string): Promise<ExactTask[]> => {
   const match = NUMBER_QUERY.exec(q)
   if (!match?.[1]) return []
 
-  let query = admin()
+  const { data } = await admin()
     .from('tasks')
     .select(EXACT_COLUMNS)
     .eq('number', Number(match[1]))
     .or(await visibleTaskFilter(viewerId))
-  if (project) query = query.eq('projects.key', project.toUpperCase())
-
-  const { data } = await query
     .order('updated_at', { ascending: false })
     .limit(BARE_NUMBER_LIMIT)
   return (data ?? []) as unknown as ExactTask[]
@@ -198,42 +151,16 @@ const tasksByNumber = async (
 const taskByRef = async (viewerId: string, q: string): Promise<ExactTask | null> => {
   const match = REF_QUERY.exec(q)
   if (!match?.[1] || !match[2]) return null
-  const key = match[1].toUpperCase()
-  const number = Number(match[2])
-
-  const columns = EXACT_COLUMNS
-  const visible = await visibleTaskFilter(viewerId)
 
   const { data } = await admin()
     .from('tasks')
-    .select(columns)
-    .eq('projects.key', key)
-    .eq('number', number)
-    .or(visible)
+    .select(EXACT_COLUMNS)
+    .eq('projects.key', match[1].toUpperCase())
+    .eq('number', Number(match[2]))
+    .or(await visibleTaskFilter(viewerId))
     .maybeSingle()
 
-  if (data) return data as unknown as ExactTask
-
-  const former = await lookupFormerKey(key)
-  if (!former) return null
-
-  const { data: byFormer } = await admin()
-    .from('tasks')
-    .select(`${columns}, created_at`)
-    .eq('project_id', former.projectId)
-    .eq('number', number)
-    .or(visible)
-    .maybeSingle()
-
-  const task = (byFormer as unknown as ExactTask | null) ?? null
-  if (!task) return null
-  // HOL-114, filed after AC became HOL, was never AC-114. Answering the old
-  // spelling with it would invent a ref, so the exact path stays out of it and
-  // the ordinary search answers instead.
-  if (!issuedUnderFormerKey(former.rename, task.created_at)) return null
-  // Said, not just done: the caller asked for AC-113 and is handed HOL-113,
-  // and without this cannot tell it is the same task.
-  return { ...task, requested_ref: `${key}-${number}`, renamed_from: former.rename }
+  return (data as unknown as ExactTask | null) ?? null
 }
 
 const asSearchAllRow = (task: ExactTask): SearchAllRow => ({
@@ -251,113 +178,12 @@ const asSearchAllRow = (task: ExactTask): SearchAllRow => ({
   // Above every ranked hit on purpose: an exact address outranks a mention.
   rank: Number.POSITIVE_INFINITY,
   widened: false,
-  ...(task.renamed_from ? { requested_ref: task.requested_ref, renamed_from: task.renamed_from } : {}),
 })
 
 /**
- * How many ranked rows an assignee filter chooses from. `search_tasks` applies
- * its limit inside the ranking, so narrowing its answer afterwards would return
- * two of someone's tasks out of twenty hits rather than twenty of theirs. A
- * larger pool keeps the order — the precise head is capped by p_min_precise,
- * not p_limit, so the first rows are the same rows — and the filter stays
- * here rather than in a fourth rewrite of the function's text (CROFT-310).
- */
-const ASSIGNEE_POOL = 200
-
-/**
- * Only the tasks one person is assigned. The filter a caller sets is a
- * statement about what they want back, exact addresses included.
- */
-export const searchTasks = async (
-  userId: string,
-  q: string,
-  { assignee, ...filters }: { project?: string; type?: string; status?: string; assignee?: string },
-  limit: number,
-): Promise<{ rows: SearchRow[]; widened: boolean }> => {
-  if (!assignee) return rankTasks(userId, q, filters, limit)
-
-  const { rows } = await rankTasks(userId, q, filters, Math.max(limit, ASSIGNEE_POOL))
-  if (rows.length === 0) return { rows, widened: false }
-  const { data } = await admin()
-    .from('tasks')
-    .select('id')
-    .in('id', rows.map((row) => row.id))
-    .eq('assignee_user_id', assignee)
-  const theirs = new Set(((data ?? []) as { id: string }[]).map((task) => task.id))
-  const kept = rows.filter((row) => theirs.has(row.id)).slice(0, limit)
-  return { rows: kept, widened: kept.some((row) => row.widened) }
-}
-
-const rankTasks = async (
-  userId: string,
-  q: string,
-  filters: { project?: string; type?: string; status?: string },
-  limit: number,
-): Promise<{ rows: SearchRow[]; widened: boolean }> => {
-  const { data, error } = await admin().rpc('search_tasks', {
-    p_owner: userId,
-    p_query: q,
-    p_terms: widenedTerms(q),
-    p_project: filters.project ?? null,
-    p_type: filters.type ?? null,
-    p_status: filters.status ?? null,
-    p_limit: limit,
-  })
-
-  if (error) throw new Error(error.message)
-
-  const rows = (data ?? []) as SearchRow[]
-
-  // Same rule on the task-only path, which is what the UI uses the moment a
-  // type or status filter is set — and what `croft check --tasks` uses.
-  const byRef = await taskByRef(userId, q)
-  const addressed = byRef ? [byRef] : await tasksByNumber(userId, q, filters.project)
-  if (addressed.length === 0) return { rows, widened: rows.some((r) => r.widened) }
-
-  // A filter the caller set is a statement about what they want back; an exact
-  // address does not override it.
-  const kept = addressed.filter((task) => {
-    const key = keyOfProject(task.project)
-    if (filters.project && filters.project.toUpperCase() !== key) return false
-    if (filters.type && filters.type !== task.type) return false
-    if (filters.status && filters.status !== task.status) return false
-    return true
-  })
-  if (kept.length === 0) return { rows, widened: rows.some((r) => r.widened) }
-
-  const heads: SearchRow[] = kept.map((task) => ({
-    id: task.id,
-    number: task.number,
-    title: task.title,
-    type: task.type,
-    status: task.status,
-    priority: task.priority,
-    resolution: task.resolution,
-    resolution_kind: task.resolution_kind,
-    description: task.description,
-    claimed_by: task.claimed_by,
-    updated_at: task.updated_at,
-    external_ref: task.external_ref,
-    project_key: keyOfProject(task.project) ?? '',
-    rank: Number.POSITIVE_INFINITY,
-    coverage: 1,
-    widened: false,
-    ...(task.renamed_from ? { requested_ref: task.requested_ref, renamed_from: task.renamed_from } : {}),
-  }))
-
-  const headIds = new Set(heads.map((h) => h.id))
-  const deduped = [...heads, ...rows.filter((r) => !headIds.has(r.id))]
-  return { rows: deduped.slice(0, limit), widened: rows.some((r) => r.widened) }
-}
-
-/**
- * The unified index: tasks, work-log notes and subjects.
- *
- * `search_tasks` above is kept because the UI and the duplicate probe both
- * want tasks and only tasks. This is what `croft check` calls, because the
- * agent asking "has this been done or debugged" does not care which table the
- * answer happens to live in — and for two years the answer most likely to
- * exist, a work-log note, was the one table nothing searched.
+ * The unified index: tasks, work-log notes and subjects. What `croft check`
+ * calls, because the agent asking "has this been done or debugged" does not
+ * care which table the answer happens to live in.
  */
 export type SearchAllRow = {
   kind: 'task' | 'note' | 'subject'
@@ -373,21 +199,19 @@ export type SearchAllRow = {
   body_bytes: number
   rank: number
   widened: boolean
-  requested_ref?: string
-  renamed_from?: KeyRename
 }
 
 export const searchAll = async (
   userId: string,
   q: string,
-  filters: { project?: string; kinds?: string[] },
+  filters: { kinds?: string[] },
   limit: number,
 ): Promise<{ rows: SearchAllRow[]; widened: boolean }> => {
   const { data, error } = await admin().rpc('search_all', {
     p_owner: userId,
     p_query: q,
     p_terms: widenedTerms(q),
-    p_project: filters.project ?? null,
+    p_project: null,
     p_kinds: filters.kinds && filters.kinds.length > 0 ? filters.kinds : null,
     p_limit: limit,
   })
@@ -402,12 +226,12 @@ export const searchAll = async (
   const addressed = wantsTasks
     ? await (async () => {
         const byRef = await taskByRef(userId, q)
-        return byRef ? [byRef] : await tasksByNumber(userId, q, filters.project)
+        return byRef ? [byRef] : await tasksByNumber(userId, q)
       })()
     : []
 
   // `S-12` names a subject the same way `CAI-42` names a task.
-  const wantsSubjects = !filters.project && (!filters.kinds || filters.kinds.includes('subject'))
+  const wantsSubjects = (!filters.kinds || filters.kinds.includes('subject'))
   const subject = wantsSubjects ? await subjectByRefQuery(q, userId) : null
   const exactSubject: SearchAllRow[] = subject
     ? [{

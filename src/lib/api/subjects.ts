@@ -124,7 +124,6 @@ const SUBJECT_SELECT = `
          case when lp.id is null then null
               else json_build_object('id', lp.id, 'name', lp.name, 'color', lp.color,
                                      'handoff_tracker', lp.handoff_tracker, 'handoff_target', lp.handoff_target,
-                                     'cairn_key', case when lp.handoff_tracker = 'cairn' then lp.handoff_target end,
                                      'position', lp.position)
          end as project,
          case when u.id is null then null
@@ -880,7 +879,7 @@ export const addSubjectNote = async (
 // Todos: ordinary tasks in the `T` project, pointed at their subject.
 // ---------------------------------------------------------------------------
 
-type TodoRow = Omit<SubjectTodo, 'ref' | 'handoff' | 'cairn_ref' | 'cairn_status'> & { key: string }
+type TodoRow = Omit<SubjectTodo, 'ref' | 'handoff'> & { key: string }
 
 /** Open ones first, then the order the project's list uses. */
 export const listSubjectTodos = async (subjectId: string): Promise<SubjectTodo[]> => {
@@ -990,8 +989,6 @@ export const createSubjectTodo = async (
       status: task.status,
       claimed_by: task.claimed_by,
       handoff: task.handoff,
-      cairn_ref: task.cairn_ref,
-      cairn_status: task.cairn_status,
       updated_at: task.updated_at,
       assignee: { id: task.assignee.id, name: task.assignee.name },
     },

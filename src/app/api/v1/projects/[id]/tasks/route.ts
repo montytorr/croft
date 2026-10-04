@@ -51,12 +51,8 @@ const listQuery = z.object({
 
 export const GET = route<{ id: string }>({
   handler: async ({ actor, params, url }) => {
-    // By uuid, live key, or a key the project used to have. `croft list
-    // --project AC` said "No project AC." about a project that had only been
-    // renamed; it now lists HOL and says so in `renamed_from` (CROFT-264).
-    const resolved = await resolveProject(params.id)
-    if (!resolved) return fail('not_found', `No project ${params.id}.`)
-    const { project, renamed } = resolved
+    const project = await resolveProject(params.id)
+    if (!project) return fail('not_found', `No project ${params.id}.`)
 
     const parsed = listQuery.safeParse(Object.fromEntries(url.searchParams))
     if (!parsed.success) return fail('validation_failed', 'Bad query parameters.')
@@ -71,19 +67,7 @@ export const GET = route<{ id: string }>({
       await visibleTasksOr(actor.userId),
     )
 
-    // A task filed elsewhere can still belong here. Its home project keeps the
-    // ref; these links only widen where it shows up, so the list is the union.
-    const { data: guests, error: guestError } = await admin()
-      .from('task_projects')
-      .select('task_id')
-      .eq('project_id', project.id)
-    if (guestError) return fail('internal_error', guestError.message)
-
-    const guestIds = (guests ?? []).map((g) => g.task_id as string)
-    query =
-      guestIds.length > 0
-        ? query.or(`project_id.eq.${project.id},id.in.(${guestIds.join(',')})`)
-        : query.eq('project_id', project.id)
+    query = query.eq('project_id', project.id)
 
     if (status) query = query.eq('status', status)
     if (type) query = query.eq('type', type)
@@ -139,15 +123,10 @@ export const GET = route<{ id: string }>({
       limit,
       // `subject_ref` for the CLI's pairing; `subject` (ref, title, lab project) for the lab's lists.
       tasks: await withTaskSubjects(await withAssignees(withHandoffs(withSubjectRefs(data ?? [])) as unknown as (Record<string, unknown> & { id: string })[]), actor.userId),
-      ...(renamed ? { renamed_from: renamed } : {}),
     })
   },
 })
 
-/**
- * Croft holds lab work: a todo belongs to a subject, and is filed through the
- * subject's own route. A task with no subject has no place here.
- */
 /**
  * Croft holds lab work: a todo belongs to a subject. A new task here is either
  * a sub-task, which takes its parent's subject, or refused with
@@ -157,9 +136,8 @@ export const POST = route<{ id: string }, z.infer<typeof createTaskSchema>>({
   schema: createTaskSchema,
   secretFields: ['title', 'description'],
   handler: async ({ actor, params, body }) => {
-    const resolved = await resolveProject<{ id: string; key: string; status: string }>(params.id, 'id, key, status')
-    if (!resolved) return fail('not_found', `No project ${params.id}.`)
-    const { project, renamed } = resolved
+    const project = await resolveProject<{ id: string; key: string; status: string }>(params.id, 'id, key, status')
+    if (!project) return fail('not_found', `No project ${params.id}.`)
 
     const parent = body.parentRef ? await findTask(actor, body.parentRef, 'id, subject_id') : null
     if (body.parentRef && !parent) return fail('not_found', `No task ${body.parentRef}.`)
@@ -174,6 +152,6 @@ export const POST = route<{ id: string }, z.infer<typeof createTaskSchema>>({
 
     const created = await createTaskInProject(actor, project, body, { subjectId })
     if (!created.ok) return created.response
-    return ok({ ...created.task, ...(renamed ? { renamed_from: renamed } : {}) }, { status: 201 })
+    return ok(created.task, { status: 201 })
   },
 })

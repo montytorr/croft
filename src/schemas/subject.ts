@@ -164,13 +164,13 @@ export const updateTagSchema = z
 
 const labProjectName = z.string().trim().min(1).max(40)
 
-/** A tracker's name as data: `cairn`, `github`. Lower-cased; an empty string reads as none. */
+/** A tracker's name as data: `linear`, `github`. Lower-cased; an empty string reads as none. */
 export const HANDOFF_TRACKER = /^[a-z][a-z0-9-]{1,31}$/
 const handoffTrackerName = z
   .string()
   .trim()
   .transform((v) => v.toLowerCase())
-  .pipe(z.string().regex(/^(?:[a-z][a-z0-9-]{1,31})?$/, 'expected a tracker name like cairn or github (2-32 characters, a letter first)'))
+  .pipe(z.string().regex(/^(?:[a-z][a-z0-9-]{1,31})?$/, 'expected a tracker name like linear or github (2-32 characters, a letter first)'))
   .transform((v) => v || null)
 
 /** A place in the tracker: a project key, an `owner/repo`. An empty string reads as none. */
@@ -178,33 +178,13 @@ export const HANDOFF_TARGET = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$/
 const handoffTargetName = z
   .string()
   .trim()
-  .pipe(z.string().regex(/^(?:[A-Za-z0-9][A-Za-z0-9._/-]{0,99})?$/, 'expected a target like CAIRN or owner/repo (1-100 characters)'))
+  .pipe(z.string().regex(/^(?:[A-Za-z0-9][A-Za-z0-9._/-]{0,99})?$/, 'expected a target like PROJ or owner/repo (1-100 characters)'))
   .transform((v) => v || null)
 
-/**
- * Deprecated (0.7): `cairnKey` means tracker `cairn` and that target. Upper-cased.
- * Removed in 0.8.
- */
-export const CAIRN_KEY = /^[A-Z][A-Z0-9]{1,9}$/
-const cairnKey = z
-  .string()
-  .trim()
-  .transform((v) => v.toUpperCase())
-  .pipe(
-    z
-      .string()
-      .regex(/^(?:[A-Z][A-Z0-9]{1,9})?$/, 'expected a Cairn project key like CAIRN (2-10 characters, a letter first)'),
-  )
-  .transform((v) => v || null)
+type HandoffFields = { handoffTracker?: string | null; handoffTarget?: string | null }
 
-type HandoffFields = { handoffTracker?: string | null; handoffTarget?: string | null; cairnKey?: string | null }
-
-/** Tracker and target travel together, and `cairnKey` is the same thing said the old way. */
+/** Tracker and target travel together: both, or neither (null clears). */
 const handoffPair = (value: HandoffFields, ctx: z.RefinementCtx) => {
-  if (value.cairnKey !== undefined && (value.handoffTracker !== undefined || value.handoffTarget !== undefined)) {
-    ctx.addIssue({ code: 'custom', message: 'Send handoffTracker and handoffTarget, or the deprecated cairnKey, not both.' })
-    return
-  }
   const touched = value.handoffTracker !== undefined || value.handoffTarget !== undefined
   if (touched && (value.handoffTracker == null) !== (value.handoffTarget == null)) {
     ctx.addIssue({
@@ -222,8 +202,6 @@ export const createLabProjectSchema = z
     /** Where `croft handoff` sends this project's todos: the tracker, and a target in it. */
     handoffTracker: handoffTrackerName.nullable().optional(),
     handoffTarget: handoffTargetName.nullable().optional(),
-    /** Deprecated (0.7): tracker `cairn` and this key. Removed in 0.8. */
-    cairnKey: cairnKey.nullable().optional(),
     position: z.number().int().min(0).max(10_000).optional(),
   })
   .superRefine(handoffPair)
@@ -235,8 +213,6 @@ export const updateLabProjectSchema = z
     /** Both `null` clears the hand-off. */
     handoffTracker: handoffTrackerName.nullable(),
     handoffTarget: handoffTargetName.nullable(),
-    /** Deprecated (0.7): `null` clears both. Removed in 0.8. */
-    cairnKey: cairnKey.nullable(),
     position: z.number().int().min(0).max(10_000),
   })
   .partial()
@@ -245,12 +221,11 @@ export const updateLabProjectSchema = z
 
 /**
  * What a lab project body says about the hand-off: `undefined` leaves it,
- * `null` clears it, a pair sets it. `cairnKey` is read as tracker `cairn`.
+ * `null` clears it, a pair sets it.
  */
 export const handoffOfProjectBody = (
   body: HandoffFields,
 ): undefined | null | { tracker: string; target: string } => {
-  if (body.cairnKey !== undefined) return body.cairnKey === null ? null : { tracker: 'cairn', target: body.cairnKey }
   if (body.handoffTracker === undefined && body.handoffTarget === undefined) return undefined
   if (!body.handoffTracker || !body.handoffTarget) return null
   return { tracker: body.handoffTracker, target: body.handoffTarget }
@@ -275,21 +250,5 @@ export const handoffSchema = z.object({
    * that is refused with `subject_not_published`: the tracker has no notion of
    * who may see what.
    */
-  force: z.boolean().optional(),
-})
-
-/** Cairn's own ref shape: a key of two to ten characters. Deprecated (0.7). */
-export const CAIRN_REF = /^[A-Z][A-Z0-9]{1,9}-\d{1,6}$/
-
-/** Deprecated (0.7): `POST /tasks/{ref}/cairn-link`, the old body. Removed in 0.8. */
-export const cairnLinkSchema = z.object({
-  cairnRef: z
-    .string()
-    .trim()
-    .transform((v) => v.toUpperCase())
-    .pipe(z.string().regex(CAIRN_REF, 'expected a Cairn task ref like CAIRN-331')),
-  cairnStatus: z.string().trim().min(1).max(40).optional(),
-  cairnResolution: z.string().trim().max(20_000).optional(),
-  cairnResolutionKind: z.string().trim().min(1).max(40).optional(),
   force: z.boolean().optional(),
 })

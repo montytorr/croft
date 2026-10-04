@@ -326,15 +326,6 @@ describe('lab projects', () => {
     expect(stdout.split('\n').slice(0, 4)).toEqual(['#2', 'project\thandoff\tsubjects', 'Trig\tcairn:TRIG\t4', 'Croft\t\t0'])
   })
 
-  it('project list is where the task containers went', async () => {
-    const seen: Seen[] = []
-    const base = await serve(() => [{ id: 'x', key: 'T', title: 'Todos', status: 'active', former_keys: [] }], seen)
-    const { code, stdout } = await run(['project', 'list', '--archived'], base)
-    expect(code).toBe(0)
-    expect(seen[0]!.path).toBe('/api/v1/projects?archived=1')
-    expect(stdout).toContain('T\tTodos')
-  })
-
   it('subject add and list carry --project, and the row shows it', async () => {
     const seen: Seen[] = []
     const base = await serve(() => subject({ project: trig }), seen)
@@ -393,12 +384,6 @@ describe('todo refs and subject refs on the task verbs', () => {
     expect(seen).toHaveLength(before)
   })
 
-  it('a single-letter project key is a key', async () => {
-    const seen: Seen[] = []
-    const base = await serve(() => ({ key: 'L', title: 'Lab' }), seen)
-    expect((await run(['project', 'create', 'L', 'Lab'], base)).code).toBe(0)
-    expect(seen[0]!.body).toMatchObject({ key: 'L' })
-  })
 })
 
 describe('croft check', () => {
@@ -585,15 +570,6 @@ describe('croft handoff', () => {
     expect((await gh.calls())[1].args.slice(0, 3)).toEqual(['issue', 'create', '--repo=acme/other'])
   })
 
-  it('reads the older server\'s project key as a hand-off to cairn', async () => {
-    const dir = await tempDir('croft-tracker-')
-    const cairn = await fakeCairn(dir)
-    const base = await serve((req) => (req.method === 'GET' ? { ...todo, subject: { ref: 'S-12', project: { name: 'Trig', cairn_key: 'TRIG' } } } : linked))
-    const { code, stderr } = await run(['handoff', 'T-41'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
-    expect(code, stderr).toBe(0)
-    expect((await cairn.calls())[0].args.slice(0, 4)).toEqual(['add', 'Ship the index', '--project', 'TRIG'])
-  })
-
   it('refuses, saying what is missing, when there is no target to go to', async () => {
     const dir = await tempDir('croft-tracker-')
     const cairn = await fakeCairn(dir)
@@ -735,59 +711,6 @@ describe('croft handoff', () => {
     expect(stderr).toContain('croft handoff T-41 --link CAIRN-331 --tracker cairn')
   })
 
-  it('falls back to the old link route on a 0.6 server, for the cairn tracker', async () => {
-    const dir = await tempDir('croft-tracker-')
-    const cairn = await fakeCairn(dir)
-    const seen: Seen[] = []
-    const base = await serve((req) => {
-      if (req.method === 'GET') return todo
-      if (req.path.endsWith('/handoff')) return { status: 404, payload: '<html>not found</html>' }
-      return { cairn_ref: 'CAIRN-331' }
-    }, seen)
-    const { code, stderr } = await run(['handoff', 'T-41', '--tracker', 'cairn', '--to', 'CAIRN', '--force'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
-    expect(code, stderr).toBe(0)
-    expect(posts(seen, '/api/v1/tasks/T-41/cairn-link')[0]!.body).toEqual({ cairnRef: 'CAIRN-331', force: true })
-  })
-
-  it('still answers the 0.6 server\'s paired todo as already handed off', async () => {
-    const base = await serve(() => ({ ...todo, cairn_ref: 'CAIRN-300', cairn_status: 'doing' }))
-    const { code, stderr } = await run(['handoff', 'T-41', '--tracker', 'cairn', '--to', 'CAIRN'], base)
-    expect(code).toBe(1)
-    expect(stderr).toContain('already handed off to cairn as CAIRN-300')
-  })
-})
-
-describe('croft push', () => {
-  const todo = { id: 'a', number: 41, project: { key: 'T' }, title: 'Ship the index', type: 'spike', description: 'Build it behind a flag.', subject: { ref: 'S-12' } }
-
-  it('without a sha is the deprecated alias of handoff, and says so', async () => {
-    const dir = await tempDir('croft-tracker-')
-    const cairn = await fakeCairn(dir)
-    const seen: Seen[] = []
-    const base = await serve((req) => (req.method === 'GET' ? todo : {}), seen)
-    const { code, stderr } = await run(['push', 'T-41', '--to', 'CAIRN'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
-    expect(code, stderr).toBe(0)
-    expect(stderr).toContain('`push T-41` without a sha is deprecated (0.7), removed in 0.8: use `croft handoff T-41`')
-    expect((await cairn.calls())[0].args.slice(0, 4)).toEqual(['add', 'Ship the index', '--project', 'CAIRN'])
-    expect(posts(seen, '/api/v1/tasks/T-41/handoff')[0]!.body).toMatchObject({ tracker: 'cairn', ref: 'CAIRN-331' })
-  })
-
-  it('--link keeps working as the alias', async () => {
-    const seen: Seen[] = []
-    const base = await serve((req) => (req.method === 'GET' ? todo : {}), seen)
-    const { code, stderr } = await run(['push', 'T-41', '--link', 'CAIRN-331'], base, { env: { CROFT_TRACKER: 'cairn' } })
-    expect(code, stderr).toBe(0)
-    expect(posts(seen, '/api/v1/tasks/T-41/handoff')[0]!.body).toEqual({ tracker: 'cairn', ref: 'CAIRN-331' })
-  })
-
-  it('with a sha still records a git push, unchanged and without a notice', async () => {
-    const seen: Seen[] = []
-    const base = await serve(() => ({ event: 'git_push' }), seen)
-    const { code, stderr } = await run(['push', 'T-41', 'abc1234'], base)
-    expect(code).toBe(0)
-    expect(stderr).toBe('')
-    expect(posts(seen, '/api/v1/tasks/T-41/activity')[0]!.body).toEqual({ event: 'git_push', sha: 'abc1234' })
-  })
 })
 
 describe('subject visibility', () => {
@@ -969,23 +892,6 @@ describe('croft sync', () => {
     expect(stdout).toContain('T-44\tcairn\tCAIRN-331\tdone\tunchanged')
   })
 
-  it('reads a 0.6 server\'s paired todos and posts to its old link route', async () => {
-    const dir = await tempDir('croft-tracker-')
-    const cairn = await fakeCairn(dir)
-    const seen: Seen[] = []
-    const base = await serve((req) => {
-      if (req.path.endsWith('/handoff')) return { status: 404, payload: '<html>not found</html>' }
-      if (req.path.endsWith('/cairn-link')) return { ref: 'T-41', status: 'done', noted: true, closed: true }
-      return listing([
-        { number: 41, project: { key: 'T' }, status: 'todo', subject_ref: 'S-12', cairn_ref: 'CAIRN-331', cairn_status: 'doing' },
-        { number: 43, project: { key: 'T' }, status: 'todo', subject_ref: 'S-12', cairn_ref: null, cairn_status: null },
-      ])(req)
-    }, seen)
-    const { code, stdout, stderr } = await run(['sync'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
-    expect(code, stderr).toBe(0)
-    expect(posts(seen, '/cairn-link').map((s) => s.body)).toEqual([{ cairnRef: 'CAIRN-331', cairnStatus: 'done', cairnResolution: 'shipped' }])
-    expect(stdout).toContain('T-41\tcairn\tCAIRN-331\tdone\twas doing · noted · closed')
-  })
 })
 
 describe('croft context --brief', () => {
@@ -1066,6 +972,14 @@ describe('croft context --brief', () => {
     ])
   })
 
+  it('is what bare `croft context` prints', async () => {
+    const base = await serve((req) => (req.path === '/api/v1/stages' ? stages : { counts: { exploring: 1 }, mine: [] }))
+    const bare = await run(['context'], base)
+    expect(bare.code).toBe(0)
+    expect(bare).toEqual(await run(['context', '--brief'], base))
+    expect(bare.stdout).toContain('Croft — lab: 1 exploring')
+  })
+
   it('is silent, exit 0, when the lab has nothing open', async () => {
     const base = await serve((req) => (req.path === '/api/v1/stages' ? stages : { counts: { done: 4 }, mine: [] }))
     expect(await run(['context', '--brief'], base)).toEqual({ code: 0, stdout: '', stderr: '' })
@@ -1107,18 +1021,26 @@ describe('the CLI surface', () => {
     }
   })
 
-  it('keeps the inherited task verbs and every product name under help --all', async () => {
+  it('keeps the other todo verbs under help --all, and every product name out of the short help', async () => {
     const short = (await run(['help'], 'http://127.0.0.1:9')).stdout
     const all = (await run(['help', '--all'], 'http://127.0.0.1:9')).stdout
-    for (const verb of ['croft blockedby', 'croft beat', 'croft labels', 'croft route add', 'croft reconcile', 'croft replay', 'croft map']) {
+    for (const verb of ['croft children', 'croft beat', 'croft labels', 'croft route add', 'croft reconcile', 'croft replay']) {
       expect(short).not.toContain(verb)
       expect(all).toContain(verb)
     }
     expect(all.startsWith(short.trimEnd())).toBe(true)
-    expect(all).toContain('inherited task verbs')
+    expect(all).toContain('more todo verbs')
     // The product names live in the adapter section alone; help lists adapters from it.
     expect(short).toContain('adapters: cairn, github')
     expect(short).not.toMatch(/Cairn|CAIRN/)
+  })
+
+  it('refuses the verbs removed in 0.8 as unknown commands', async () => {
+    for (const verb of ['next', 'deps', 'blockedby', 'unblockedby', 'commit', 'run', 'history', 'push', 'project', 'map']) {
+      const { code, stderr } = await run([verb], 'http://127.0.0.1:9')
+      expect(code).toBe(1)
+      expect(stderr).toContain(`unknown command "${verb}"`)
+    }
   })
 
   it('refuses the memory verbs as unknown commands', async () => {

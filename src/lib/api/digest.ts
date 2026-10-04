@@ -1,5 +1,4 @@
 import { admin } from '@/lib/db/client'
-import { mentionsOf } from './mentions'
 import { isTaskVisible, restrictTo, visibleTasksOr, type Viewer } from './visibility'
 
 /** Roughly four characters per token. Order-of-magnitude, on purpose. */
@@ -11,9 +10,6 @@ const tokens = (text: string | null | undefined) => Math.ceil((text?.length ?? 0
  * 90th percentile is 5KB, so passing it through whole would save nothing.
  */
 const BODY_BUDGET = 800
-
-/** Mentions shown in a digest. The rest are one request away. */
-const MENTION_BUDGET = 5
 
 /**
  * A cheap read of an expensive task.
@@ -45,7 +41,7 @@ const refOf = async (id: unknown, viewerId: string): Promise<string | null> => {
 
 export const buildDigest = async (task: Record<string, unknown>, viewer: Viewer) => {
   const visible = await visibleTasksOr(viewer.id)
-  const [{ data: notes }, { count: childCount }, { count: childClosed }, duplicateOf, parent, mentioned] =
+  const [{ data: notes }, { count: childCount }, { count: childClosed }, duplicateOf, parent] =
     await Promise.all([
       admin()
         .from('task_notes')
@@ -67,7 +63,6 @@ export const buildDigest = async (task: Record<string, unknown>, viewer: Viewer)
       ),
       refOf(task.duplicate_of, viewer.id),
       refOf(task.parent_id, viewer.id),
-      mentionsOf(task.id as string, MENTION_BUDGET, viewer),
     ])
 
   const all = (notes ?? []) as { kind: string; note: string; actor_id: string; created_at: string }[]
@@ -119,20 +114,6 @@ export const buildDigest = async (task: Record<string, unknown>, viewer: Viewer)
     duplicateOf,
     parent,
     children: childCount ? { total: childCount, closed: childClosed ?? 0 } : null,
-
-    // Where other tasks named this one, decisions and findings first
-    // (CROFT-267). The case it exists for: a closure elsewhere that says "do
-    // not read this as permission for <this task>", which nothing here
-    // mentioned before.
-    mentionedIn: mentioned.mentions.map((m) => ({
-      ref: m.ref,
-      status: m.status,
-      source: m.kind ? `${m.source}:${m.kind}` : m.source,
-      by: m.by,
-      at: m.at,
-      excerpt: m.excerpt,
-    })),
-    mentionedInTotal: mentioned.total,
 
     /** What this view withheld, and what asking for it costs. */
     omitted: {

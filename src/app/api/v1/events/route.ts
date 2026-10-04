@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto'
 import { authenticate } from '@/lib/api/auth'
 import { admin } from '@/lib/db/client'
-import { liveProjectKey } from '@/lib/api/project-keys'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,9 +28,7 @@ export const GET = async (req: Request) => {
   if (!actor) return new Response('Unauthorized', { status: 401 })
 
   const url = new URL(req.url)
-  // Once, up front: the pulse compares against the live key, and a page still
-  // subscribed under a retired one would otherwise never see a change.
-  const { key: projectKey } = await liveProjectKey(url.searchParams.get('project'))
+  const projectKey = url.searchParams.get('project')
 
   /**
    * One query, covering every store the UI can show.

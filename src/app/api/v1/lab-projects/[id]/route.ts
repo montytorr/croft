@@ -6,7 +6,7 @@ import { handoffOfProjectBody, updateLabProjectSchema } from '@/schemas/subject'
 
 export const dynamic = 'force-dynamic'
 
-/** `handoffTracker` and `handoffTarget` null (or `cairnKey: null`, deprecated) clear the hand-off; an omitted field is left as it is. */
+/** `handoffTracker` and `handoffTarget` null clear the hand-off; an omitted field is left as it is. */
 export const PATCH = route<{ id: string }, z.infer<typeof updateLabProjectSchema>>({
   schema: updateLabProjectSchema,
   handler: async ({ actor, params, body }) => {

@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 /**
  * CROFT_SHARE_LOCATION=off keeps a machine's layout on the machine: no
  * working directory, no git remote, no hostname in any request. Run from this
- * checkout, a git repository with a remote, so `context` would find both.
+ * checkout, a git repository with a remote.
  */
 
 const servers: Server[] = []
@@ -65,34 +65,28 @@ const leaks = (seen: Seen[]) =>
   })
 
 describe('CROFT_SHARE_LOCATION', () => {
-  it('sends location by default, as before', async () => {
+  it('sends the hostname by default, as before', async () => {
     const seen: Seen[] = []
     const base = await serve(seen)
-    await run(['context', '--brief', '--cwd', '/tmp/repo'], base)
-    await run(['context'], base)
-    expect(leaks(seen).some((l) => l.startsWith('cwd'))).toBe(true)
+    await run(['subject', 'list'], base)
+    expect(leaks(seen).some((l) => l.startsWith('host header'))).toBe(true)
   })
 
-  it('the brief never sends the directory, even with location shared; context --cwd still does', async () => {
+  it('the brief never sends the directory, even with location shared', async () => {
     const seen: Seen[] = []
     const base = await serve(seen)
     await run(['context', '--brief', '--cwd', '/tmp/repo'], base)
     const brief = seen.filter((s) => s.url.startsWith('/api/v1/subjects/brief'))
     expect(brief.length).toBe(1)
     expect(new URL(brief[0]!.url, 'http://x').searchParams.has('cwd')).toBe(false)
-
-    await run(['context', '--cwd', '/tmp/repo'], base)
-    const context = seen.find((s) => s.url.startsWith('/api/v1/context'))
-    expect(new URL(context!.url, 'http://x').searchParams.get('cwd')).toBe('/tmp/repo')
   })
 
-  it('off: no cwd, no repo, no hostname, for the brief and the full context', async () => {
+  it('off: no cwd, no repo, no hostname, for the brief and a listing', async () => {
     const seen: Seen[] = []
     const base = await serve(seen)
     await run(['context', '--brief', '--cwd', '/tmp/repo'], base, { CROFT_SHARE_LOCATION: 'off' })
-    await run(['context'], base, { CROFT_SHARE_LOCATION: 'off' })
     await run(['subject', 'list'], base, { CROFT_SHARE_LOCATION: 'off' })
-    expect(seen.length).toBeGreaterThanOrEqual(3)
+    expect(seen.length).toBeGreaterThanOrEqual(2)
     expect(leaks(seen)).toEqual([])
   })
 

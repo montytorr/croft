@@ -26,7 +26,6 @@ import { GET as showSubjectRoute } from '@/app/api/v1/subjects/[ref]/route'
 import { POST as addTodoRoute } from '@/app/api/v1/subjects/[ref]/todos/route'
 import { POST as publishRoute } from '@/app/api/v1/subjects/[ref]/publish/route'
 import { GET as showTaskRoute, PATCH as patchTaskRoute } from '@/app/api/v1/tasks/[ref]/route'
-import { DELETE as deleteProjectRoute } from '@/app/api/v1/projects/[id]/route'
 import { POST as reconcileRoute } from '@/app/api/v1/reconcile/route'
 import { getTask } from '@/lib/data'
 import { addSubjectMember, resolveSubject, updateSubject } from '@/lib/api/subjects'
@@ -177,29 +176,6 @@ describe('a lab task that points at a private todo', () => {
   })
 })
 
-describe('deleting a project', () => {
-  it('refuses an outsider or an administrator a project holding a private todo they cannot see', async () => {
-    as(A)
-    // Inserted, not created through the API: Croft refuses any task project but its todo list.
-    await q('insert into projects (owner_user_id, key, title) values ($1, $2, $3)', [A, KEY, `Audit ${RUN}`])
-    const moved = await call(patchTaskRoute, 'PATCH', `/tasks/${TP.ref}`, { ref: TP.ref }, { project: KEY })
-    expect(moved.status).toBe(200)
-    Object.assign(TP, { ref: moved.json.data.ref })
-    expect(TP.ref.startsWith(`${KEY}-`)).toBe(true)
-
-    for (const who of [C, D]) {
-      as(who)
-      const deleted = await call(deleteProjectRoute, 'DELETE', `/projects/${KEY}?confirm=${KEY}`, { id: KEY })
-      expect(deleted.status).not.toBe(200)
-      expect(JSON.stringify(deleted.json)).not.toContain(WORD)
-      expect((await q('select 1 from tasks where id = $1', [TP.id])).rowCount).toBe(1)
-    }
-
-    as(A)
-    expect((await call(showTaskRoute, 'GET', `/tasks/${TP.ref}`, { ref: TP.ref })).status).toBe(200)
-  })
-})
-
 describe('changing who sees a subject from a stale read', () => {
   it('never takes a subject out of the lab, however the requests interleave', async () => {
     as(A)
@@ -283,6 +259,8 @@ describe('the maintenance sweep', () => {
     // Planted rather than updated: a trigger bumps updated_at on every write,
     // which reads as life. A todo of P's, claimed and quiet since 2000.
     const holder = `claude-code · ${emailOf(A)}`
+    // Inserted, not created through the API: Croft refuses any task project but its todo list.
+    await q('insert into projects (owner_user_id, key, title) values ($1, $2, $3)', [A, KEY, `Audit ${RUN}`])
     const counter = await q(`update projects set task_counter = task_counter + 1 where key = $1 returning id, task_counter`, [KEY])
     const { id: projectId, task_counter: number } = counter.rows[0]
     const quiet = randomUUID()

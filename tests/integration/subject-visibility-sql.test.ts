@@ -242,7 +242,7 @@ describe('schema', () => {
   })
 })
 
-describe('search_all and search_tasks', () => {
+describe('search_all', () => {
   const searchAll = async (viewer: string, limit = 50) =>
     (await q('select * from search_all($1, $2, null, null, null, $3, 3)', [viewer, WORD, limit])).rows
 
@@ -270,19 +270,6 @@ describe('search_all and search_tasks', () => {
     const outsider = await searchAll(users.c, 1)
     expect(outsider).toHaveLength(1)
     expect(HIDDEN_FROM_C).not.toContain(outsider[0].id)
-  })
-
-  it('does the same on the task-only path', async () => {
-    const rows = async (viewer: string, limit: number) =>
-      (await q('select id from search_tasks($1, $2, null, $3, null, null, $4, 3)', [viewer, WORD, KEY, limit])).rows.map(
-        (r) => r.id as string,
-      )
-    expect(await rows(users.a, 1)).toEqual([tasks.priv])
-    const outsider = await rows(users.c, 1)
-    expect(outsider).toHaveLength(1)
-    expect(HIDDEN_FROM_C).not.toContain(outsider[0])
-    expect(await rows(users.c, 50)).not.toContain(tasks.members)
-    expect(await rows(users.b, 50)).toContain(tasks.members)
   })
 })
 
@@ -373,9 +360,9 @@ describe('installed definitions', () => {
          from pg_proc p join pg_namespace n on n.oid = p.pronamespace
         where n.nspname = 'public'
           and p.proname = any($1::text[])`,
-      [['search_tasks', 'search_all', 'activity_feed', 'list_labels', 'rename_label', 'croft_pulse']],
+      [['search_all', 'activity_feed', 'list_labels', 'rename_label', 'croft_pulse']],
     )
-    expect(rows).toHaveLength(6)
+    expect(rows).toHaveLength(5)
     for (const row of rows) {
       expect(row.definition, row.proname).toContain('croft_visible_subjects(p_owner)')
       expect(row.definition, row.proname).not.toMatch(/\w+\.owner_user_id\s*=\s*p_owner/i)

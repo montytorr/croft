@@ -113,8 +113,6 @@ here is refused with `handed_off`; `--undo` is the way back. `sync` skips tracke
 adapter here, and notes the subject once when a task closes ("<ref> done: …"); then decide
 the subject's stage, often `rolled out` with a conclusion.
 
-`croft push T-41 <sha>` records a git push as evidence, like `croft commit` and `croft run`.
-
 **When not to file:** work that isn't lab work; anything a subject already covers; a question
 reading a file answers; a fact that expires; progress narration.
 
@@ -132,7 +130,7 @@ reading a file answers; a fact that expires; progress narration.
 
 `croft context --brief` prints the lab in five lines: subjects per stage, yours in flight,
 the one rule (plus `croft handoff T-n` where a lab project has a target). A SessionStart
-hook runs it. `croft help --all` lists the inherited verbs, `croft next` among them.
+hook runs it. `croft help --all` lists the rest: `log`, `block`, `update`, `comment`, labels.
 
 ## 8. Output and exit codes
 

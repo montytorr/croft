@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import {
   createNoteSchema,
-  createActivityEvidenceSchema,
   createTaskSchema,
   updateTaskSchema,
   NOTE_KINDS,
@@ -11,7 +10,6 @@ import {
   TASK_TYPES,
 } from '@/schemas/task'
 import {
-  cairnLinkSchema,
   handoffSchema,
   createStageSchema,
   createSubjectNoteSchema,
@@ -140,15 +138,9 @@ const labProjectSchema = {
       example: 'owner/repo',
       description: 'Where in that tracker: a project key, an `owner/repo`.',
     },
-    cairn_key: {
-      type: ['string', 'null'],
-      example: 'TRIG',
-      deprecated: true,
-      description: 'Deprecated (0.7): `handoff_target` when `handoff_tracker` is `cairn`, else null. Removed in 0.8.',
-    },
     position: { type: 'integer' },
   },
-  required: ['id', 'name', 'color', 'handoff_tracker', 'handoff_target', 'cairn_key', 'position'],
+  required: ['id', 'name', 'color', 'handoff_tracker', 'handoff_target', 'position'],
 }
 
 const labProjectListedSchema = {
@@ -272,8 +264,6 @@ const subjectTodoSchema = {
     status: { type: 'string', enum: [...TASK_STATUSES] },
     claimed_by: { type: ['string', 'null'] },
     handoff: { ...handoffSchemaObject, description: 'Where the todo was handed off to, or null.' },
-    cairn_ref: { type: ['string', 'null'], example: 'CAIRN-331', deprecated: true, description: 'Deprecated (0.7): `handoff.ref` when the tracker is `cairn`. Removed in 0.8.' },
-    cairn_status: { type: ['string', 'null'], deprecated: true, description: 'Deprecated (0.7): `handoff.status` when the tracker is `cairn`. Removed in 0.8.' },
     updated_at: { type: 'string', format: 'date-time' },
   },
 }
@@ -358,44 +348,6 @@ const taskSummary = {
   },
 }
 
-/**
- * How a lookup was reached when it went through a key the project no longer
- * has. Present only then — a current key or ref changes nothing (CROFT-264).
- */
-const keyRename = {
-  type: 'object',
-  description:
-    'Present only when the key asked for is one the project used to have. The answer ' +
-    'is for the live project; this says so, so a caller holding an old ref can tell ' +
-    'it reached the same thing.',
-  properties: {
-    key: { type: 'string', example: 'AC', description: 'The retired key that was asked for.' },
-    to: { type: 'string', example: 'HOL', description: 'The live key — use this from now on.' },
-    at: { type: 'string', format: 'date-time', description: 'When `key` was retired.' },
-    by: { type: ['string', 'null'], description: 'Who retired it; null for renames recorded before this was kept.' },
-  },
-  required: ['key', 'to', 'at', 'by'],
-}
-
-const formerKey = {
-  type: 'object',
-  properties: {
-    key: { type: 'string', example: 'AC' },
-    retired_at: { type: 'string', format: 'date-time' },
-    retired_by: { type: ['string', 'null'] },
-    new_key: {
-      type: ['string', 'null'],
-      description: 'What the key was renamed to at the time, which after a second rename is not the live key.',
-    },
-  },
-}
-
-const formerKeys = {
-  type: 'array',
-  items: formerKey,
-  description: 'Keys this project used to have, oldest first. Refs under each still resolve.',
-}
-
 export const openapiSpec = () => ({
   openapi: '3.1.0',
   info: {
@@ -453,24 +405,15 @@ export const openapiSpec = () => ({
           'Searches tasks, work-log notes and lab subjects at once. Returns an index, never ' +
           'bodies. Hits carrying an answer rank first. ' +
           'Matching is keyword-based (Postgres FTS ANDs terms, widening to OR when the ' +
-          'precise pass comes back thin), so a paraphrase can still miss. ' +
-          'A `type`, `status` or `assignee` filter is a statement about tasks and narrows to them.',
+          'precise pass comes back thin), so a paraphrase can still miss.',
         parameters: [
           { name: 'q', in: 'query', required: true, schema: { type: 'string' } },
-          { name: 'project', in: 'query', schema: { type: 'string' } },
           {
             name: 'kinds',
             in: 'query',
             description: 'Comma-separated subset of task,note,subject. Default: all.',
             schema: { type: 'string', example: 'task,subject' },
           },
-          { name: 'tasksOnly', in: 'query', schema: { type: 'boolean', default: false } },
-          { name: 'type', in: 'query', schema: { type: 'string', enum: [...TASK_TYPES] } },
-          { name: 'status', in: 'query', schema: { type: 'string', enum: [...TASK_STATUSES] } },
-          { name: 'assignee', in: 'query', schema: { type: 'string' },
-            description:
-              'Only tasks owned by: `me`, an email, a display name or a user id. Chosen from ' +
-              'the best 200 matches, so a subject with more hits than that can miss some.' },
           { name: 'limit', in: 'query', schema: { type: 'integer', default: 20, maximum: 100 } },
         ],
         responses: {
@@ -478,7 +421,6 @@ export const openapiSpec = () => ({
             type: 'object',
             properties: {
               count: { type: 'integer' },
-              renamed_from: { ...keyRename, description: 'Set when `project` was a retired key; the search ran on the live one.' },
               results: {
                 type: 'array',
                 items: {
@@ -499,11 +441,6 @@ export const openapiSpec = () => ({
                         'on a note, a conclusion on a subject.',
                     },
                     tokens: { type: 'integer', description: 'Rough cost of opening this.' },
-                    requestedRef: {
-                      type: 'string',
-                      description: 'Exact-ref hit only, when the ref asked for used a retired key (e.g. AC-113 for HOL-113).',
-                    },
-                    renamedFrom: keyRename,
                   },
                 },
               },
@@ -513,124 +450,10 @@ export const openapiSpec = () => ({
         },
       },
     },
-    '/projects': {
-      get: {
-        summary: 'List projects',
-        description:
-          'Archived projects are omitted unless `?archived=1`. Each carries `former_keys`, ' +
-          'last in the row: the keys it used to have, which still resolve.',
-        parameters: [
-          { name: 'archived', in: 'query', schema: { type: 'string', enum: ['1'] } },
-        ],
-        responses: {
-          '200': okResponse('Projects.', {
-            type: 'array',
-            items: { type: 'object', properties: { key: { type: 'string' }, former_keys: formerKeys } },
-          }),
-          '401': errorResponse,
-        },
-      },
-      post: {
-        summary: 'Create a project (refused)',
-        description:
-          "Croft's only task project is its todo list, which it creates itself: any other key is " +
-          'refused with 403 `forbidden`. Group subjects with lab projects instead.',
-        requestBody: body({
-          type: 'object',
-          properties: {
-            key: { type: 'string', pattern: '^[A-Z][A-Z0-9]{0,9}$', example: 'CAI' },
-            title: { type: 'string' },
-            description: { type: 'string' },
-          },
-          required: ['key', 'title'],
-        }),
-        responses: { '201': okResponse('Created.'), '403': errorResponse, '409': errorResponse },
-      },
-    },
-    '/projects/{id}': {
-      parameters: [
-        { name: 'id', in: 'path', required: true, schema: { type: 'string' },
-          description: 'Project key (CAI), a key it used to have, or uuid. A retired key acts on the live project and the response carries `renamed_from`.' },
-      ],
-      get: {
-        summary: 'Read a project, with its task count and former keys',
-        responses: {
-          '200': okResponse('Project.', {
-            type: 'object',
-            properties: {
-              key: { type: 'string' },
-              task_count: { type: 'integer' },
-              former_keys: formerKeys,
-              renamed_from: keyRename,
-            },
-          }),
-          '404': errorResponse,
-        },
-      },
-      patch: {
-        summary: 'Rename a project, or change its key',
-        requestBody: body({
-          type: 'object',
-          properties: {
-            title: { type: 'string' },
-            description: { type: ['string', 'null'] },
-            key: {
-              type: 'string',
-              description:
-                'Changing this changes every task ref. The former key is retained and keeps resolving, so refs already written into commits and notes still find the task; the response carries `former_key`, and the retirement records who made it and what the key became (`former_keys`). A key retired by another project is refused, because reusing it would make those refs ambiguous. `croft project rekey <KEY> <NEW>` is the CLI for this.',
-            },
-            status: { type: 'string', enum: ['active', 'archived'] },
-          },
-        }),
-        responses: { '200': okResponse('Updated.'), '400': errorResponse },
-      },
-      delete: {
-        summary: 'Delete a project and every task in it',
-        description:
-          'Irreversible, and it destroys recorded resolutions. Requires ' +
-          '`?confirm=<PROJECT_KEY>`; without it the call fails and reports how many ' +
-          'tasks would be lost.',
-        parameters: [{ name: 'confirm', in: 'query', schema: { type: 'string' } }],
-        responses: { '200': okResponse('Deleted.'), '400': errorResponse },
-      },
-    },
-    '/projects/{id}/repos': {
-      parameters: [
-        { name: 'id', in: 'path', required: true, schema: { type: 'string' },
-          description: 'Project key (CAI) or uuid.' },
-      ],
-      get: { summary: 'List the repositories claimed by a project', responses: { '200': okResponse('Repositories.') } },
-      post: {
-        summary: 'Claim a repository for this project',
-        description:
-          'How `/context` resolves a project without anything stored on the machine ' +
-          'asking. The remote is normalised server-side, so ssh and https spellings of ' +
-          'one repository reach one row. Idempotent, so a fresh clone can re-run it.',
-        requestBody: body({
-          type: 'object',
-          properties: {
-            remote: { type: 'string', description: 'Origin remote, any spelling.' },
-            rootCommit: {
-              type: 'string',
-              description:
-                'Optional. Repairs a claim after a rename or transfer. Never an identity ' +
-                'on its own: a fork shares it, and a shallow clone reports the wrong one.',
-            },
-          },
-          required: ['remote'],
-        }),
-        responses: { '200': okResponse('Claimed.'), '400': errorResponse },
-      },
-      delete: {
-        summary: 'Release a repository claim',
-        parameters: [{ name: 'remote', in: 'query', required: true, schema: { type: 'string' } }],
-        responses: { '200': okResponse('Released.'), '400': errorResponse },
-      },
-    },
     '/projects/{id}/tasks': {
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' },
-          description: 'Project key, a key it used to have, or UUID. A retired key lists the live project and the response carries `renamed_from`.' },
+          description: 'Project key or UUID. Only the todo project `T` exists.' },
       ],
       get: {
         summary: 'List tasks in a project',
@@ -652,16 +475,15 @@ export const openapiSpec = () => ({
         ],
         description:
           'Each row also carries `handoff` (`{tracker, ref, url, status, synced_at}`, or null: the task a todo was ' +
-          'handed off to in another tracker; the deprecated `cairn_ref` and `cairn_status` mirror it for tracker ' +
-          '`cairn`), `subject_ref` (`S-12`, or null): the lab pairs todos off this list — and `subject` ' +
+          'handed off to in another tracker), `subject_ref` (`S-12`, or null): the lab pairs todos off this list — and `subject` ' +
           '(`{ref, number, title, project: {name, color} | null}`, or null).',
         responses: { '200': okResponse('Tasks.'), '404': errorResponse },
       },
       post: {
-        summary: 'Create a task (refused: a todo belongs to a subject)',
+        summary: 'Create a sub-task (a todo belongs to a subject)',
         description:
-          'Croft holds lab work, so a task without a subject is refused with 422 `subject_required`. ' +
-          'File a todo under its subject instead: `POST /subjects/{ref}/todos`.',
+          'Only a sub-task is filed here, with `parentRef`: it takes its parent\'s subject. Anything else is ' +
+          'refused with 422 `subject_required`; file a todo under its subject with `POST /subjects/{ref}/todos`.',
         requestBody: body(json(createTaskSchema)),
         responses: {
           '400': errorResponse,
@@ -679,12 +501,7 @@ export const openapiSpec = () => ({
           'and decisions from the log, a clipped body, and a count of what was withheld ' +
           'with the token cost of fetching it. Measured against real data, the median body ' +
           'is 2KB and the 90th percentile 5KB, so the body is what a digest has to clip. ' +
-          'A ref through a key the project used to have (AC-113 after AC became HOL) returns ' +
-          'the task with `requested_ref` and `renamed_from`; a current ref has neither. ' +
-          '`former_refs` lists the refs the task was actually issued under — only keys retired ' +
-          'after it was created, so a task filed after a rename claims none. A retired-key ref ' +
-          'to a task created after the rename is a 404 that names the live ref, because that ' +
-          'old ref was never issued. The digest names the `assignee` and `createdBy`, the actor ' +
+          'The digest names the `assignee` and `createdBy`, the actor ' +
           'that filed it.',
         parameters: [
           { name: 'view', in: 'query', schema: { type: 'string', enum: ['full', 'digest'], default: 'full' } },
@@ -694,14 +511,6 @@ export const openapiSpec = () => ({
             ...taskSummary,
             properties: {
               ...taskSummary.properties,
-              requested_ref: { type: 'string', example: 'AC-113', description: 'The ref as asked for, when it used a retired key.' },
-              renamed_from: keyRename,
-              former_refs: {
-                type: 'array',
-                items: { type: 'string' },
-                example: ['AC-113'],
-                description: 'Refs this task was issued under before its project was renamed.',
-              },
               subject: {
                 type: ['object', 'null'],
                 description: 'The lab subject a todo is part of; null for an ordinary task. In the digest only when set.',
@@ -715,18 +524,14 @@ export const openapiSpec = () => ({
                       "The subject's lab project. `croft handoff T-n` with no `--to` sends the todo to its `handoff_target` in its `handoff_tracker`.",
                     properties: {
                       name: { type: 'string', example: 'Trig' },
-                      handoff_tracker: { type: ['string', 'null'], example: 'cairn' },
+                      handoff_tracker: { type: ['string', 'null'], example: 'github' },
                       handoff_target: { type: ['string', 'null'], example: 'TRIG' },
-                      cairn_key: { type: ['string', 'null'], example: 'TRIG', deprecated: true, description: 'Deprecated (0.7). Removed in 0.8.' },
                     },
                   },
                 },
               },
               subject_id: { type: ['string', 'null'], format: 'uuid' },
               handoff: { ...handoffSchemaObject, description: 'The task this todo was handed off to in another tracker, which owns its status. In the digest only when set.' },
-              cairn_ref: { type: ['string', 'null'], example: 'CAIRN-331', deprecated: true, description: 'Deprecated (0.7): `handoff.ref` when the tracker is `cairn`. Removed in 0.8.' },
-              cairn_status: { type: ['string', 'null'], deprecated: true, description: 'Deprecated (0.7): `handoff.status` when the tracker is `cairn`. Removed in 0.8.' },
-              cairn_synced_at: { type: ['string', 'null'], format: 'date-time', deprecated: true, description: 'Deprecated (0.7): `handoff.synced_at` when the tracker is `cairn`. Removed in 0.8.' },
             },
           }),
           '404': errorResponse,
@@ -737,14 +542,10 @@ export const openapiSpec = () => ({
         description:
           'Omitted fields are left alone. Moving to `done` or `cancelled` requires ' +
           '`resolution`, otherwise the request is refused with `resolution_required`. ' +
-          '`project` moves the task: per-project numbering means it is renumbered and ' +
-          'its ref changes, so anything referring to the old ref goes stale. `assignee` ' +
+          '`assignee` ' +
           'reassigns it (`me`, an email, a display name or a user id) and is never cleared; ' +
           '`dueDate: null` clears the due date. An agent\'s changed `description` meets the same ' +
-          'readable-markdown check as on create. Every write here, including moving the task ' +
-          'elsewhere, is refused with 409 if its current project is archived — most likely the ' +
-          'copy left behind by a move to another Croft instance; restore the project first, or ' +
-          'point the CLI at the other instance. A todo handed off to another tracker keeps its title and body ' +
+          'readable-markdown check as on create. A todo handed off to another tracker keeps its title and body ' +
           'editable, but a change of `status` is refused with 409 `handed_off` until it is taken back ' +
           '(`DELETE /tasks/{ref}/handoff`) or the tracker ends it.',
         requestBody: body(json(updateTaskSchema)),
@@ -759,9 +560,8 @@ export const openapiSpec = () => ({
         summary: 'Delete a task permanently',
         description:
           'For junk that should never have existed. Refused if the task has children, ' +
-          'notes, comments or dependencies in either direction — cancel it instead, which ' +
-          'keeps the record and the reason. Requires `?confirm=<REF>`. Also refused with 409 ' +
-          'if the task\'s project is archived (see PATCH).',
+          'notes or comments from somebody else — cancel it instead, which ' +
+          'keeps the record and the reason. Requires `?confirm=<REF>`.',
         parameters: [{ name: 'confirm', in: 'query', required: true, schema: { type: 'string' },
           description: 'The task ref, repeated back.' }],
         responses: {
@@ -777,9 +577,7 @@ export const openapiSpec = () => ({
       post: {
         summary: 'Claim a task',
         description:
-          'A 409 means another agent holds it, or that the task\'s project is archived — most ' +
-          'likely the copy left behind by a move to another Croft instance. Pick different work, ' +
-          'or restore the project / point the CLI at the other instance. A todo handed off to another tracker ' +
+          'A 409 means another agent holds it. Pick different work. A todo handed off to another tracker ' +
           'is refused with 409 `handed_off`: its status is that tracker\'s.',
         responses: { '200': okResponse('Claimed.'), '409': errorResponse },
       },
@@ -829,61 +627,6 @@ export const openapiSpec = () => ({
         responses: { '200': okResponse('{count, closed, children}.'), '404': errorResponse },
       },
     },
-    '/tasks/{ref}/activity': {
-      parameters: [refParam],
-      get: {
-        summary: 'The audit trail: what changed, when, and who changed it',
-        description:
-          'Distinct from /notes, which is what an agent chose to say. This is what ' +
-          'actually happened, whether anyone narrated it or not. Newest first.',
-        parameters: [{ name: 'limit', in: 'query', schema: { type: 'integer', default: 100 } }],
-        responses: { '200': okResponse('Events.'), '404': errorResponse },
-      },
-      post: {
-        summary: 'Record git delivery or command-run evidence',
-        description:
-          'Appends a structured git_commit, git_push, or run_result event to the task history.',
-        requestBody: body(json(createActivityEvidenceSchema)),
-        responses: { '201': okResponse('Evidence recorded.'), '404': errorResponse, '409': errorResponse },
-      },
-    },
-    '/tasks/{ref}/dependencies': {
-      parameters: [refParam],
-      get: {
-        summary: 'List what blocks this task, and what it blocks',
-        description:
-          'Check this before claiming: a task whose blockers are open is not ready to start.',
-        responses: { '200': okResponse('Relations, each with a `direction`.') },
-      },
-      post: {
-        summary: 'Link two tasks',
-        description:
-          "`blocked-by` (the default) means the other task must finish first. " +
-          'Direct cycles and self-links are refused.',
-        requestBody: body({
-          type: 'object',
-          properties: {
-            ref: { type: 'string', description: 'The other task, as a ref or uuid.' },
-            direction: { type: 'string', enum: ['blocked-by', 'blocks'], default: 'blocked-by' },
-          },
-          required: ['ref'],
-        }),
-        responses: { '201': okResponse('Linked.'), '400': errorResponse, '404': errorResponse, '409': errorResponse },
-      },
-      delete: {
-        summary: 'Remove a link',
-        description: 'Arguments go in the query string; DELETE bodies are not read.',
-        parameters: [
-          { name: 'ref', in: 'query', required: true, schema: { type: 'string' } },
-          {
-            name: 'direction',
-            in: 'query',
-            schema: { type: 'string', enum: ['blocked-by', 'blocks'], default: 'blocked-by' },
-          },
-        ],
-        responses: { '200': okResponse('Removed.'), '404': errorResponse, '409': errorResponse },
-      },
-    },
     '/tasks/{ref}/notes/{id}': {
       parameters: [
         refParam,
@@ -911,8 +654,7 @@ export const openapiSpec = () => ({
         summary: 'Append to the work log',
         description:
           'Idempotent on content — a retry after a timeout returns `{duplicate:true}` ' +
-          'as a success rather than creating a second note. Record dead ends too. Refused with ' +
-          '409 if the task\'s project is archived (see PATCH /tasks/{ref}).',
+          'as a success rather than creating a second note. Record dead ends too.',
         requestBody: body(json(createNoteSchema)),
         responses: {
           '201': okResponse('Created.'),
@@ -977,30 +719,6 @@ export const openapiSpec = () => ({
         responses: { '302': { description: 'To a fresh `/api/files` preview.' }, '401': errorResponse, '404': errorResponse },
       },
     },
-    '/activity': {
-      get: {
-        summary: 'One timeline of everything that happened',
-        description:
-          'A union across tasks filed, what changed on them, work-log notes and comments ' +
-          '— ordered together rather than per-store, because the newest rows *of each kind* are not the newest rows. ' +
-          'Paged by `before`, a keyset cursor: the feed grows from the head, so an OFFSET ' +
-          'page drifts as soon as an agent writes anything. The response hands back ' +
-          '`nextBefore` so the caller does not have to dig for it.',
-        parameters: [
-          { name: 'before', in: 'query', schema: { type: 'string', format: 'date-time' } },
-          { name: 'project', in: 'query', schema: { type: 'string' } },
-          { name: 'actor', in: 'query', schema: { type: 'string' } },
-          {
-            name: 'kinds',
-            in: 'query',
-            description: 'Comma-separated subset of task,event,note,comment.',
-            schema: { type: 'string', example: 'note,comment' },
-          },
-          { name: 'limit', in: 'query', schema: { type: 'integer', default: 50, maximum: 200 } },
-        ],
-        responses: { '200': okResponse('The timeline.'), '400': errorResponse },
-      },
-    },
     '/events': {
       get: {
         summary: 'Change stream (SSE)',
@@ -1011,127 +729,6 @@ export const openapiSpec = () => ({
           'poll that cheap is not worth a websocket.',
         parameters: [{ name: 'project', in: 'query', schema: { type: 'string' } }],
         responses: { '200': okResponse('An event stream.') },
-      },
-    },
-    '/tasks/{ref}/mentions': {
-      parameters: [
-        { name: 'ref', in: 'path', required: true, schema: { type: 'string' } },
-        { name: 'limit', in: 'query', schema: { type: 'integer', default: 50, maximum: 200 } },
-      ],
-      get: {
-        summary: 'Where other tasks named this one',
-        description:
-          'Every note, comment, description and resolution on another task that writes this ' +
-          'task\'s ref — through a retired key too — with the text around it. Decisions, ' +
-          'findings and resolutions first, then handoffs and descriptions, then the rest; ' +
-          'newest first within each. Indexed from what was written, not guessed: a mention is ' +
-          'something somebody wrote. The digest carries the first five as `mentionedIn`.',
-        responses: { '200': okResponse('{ total, mentions }.'), '404': errorResponse },
-      },
-    },
-    '/next': {
-      get: {
-        summary: 'What to pick up next, ranked',
-        description:
-          'Finishing beats starting: work you already hold, then work dropped with a ' +
-          'checkpoint, then dropped without one, then in-review, todo and backlog. ' +
-          'Anything blocked, waiting on an unfinished task, or actively held by another ' +
-          'agent is absent rather than ranked last. Each pick carries the reason it won. ' +
-          'Inside a tier, work assigned to the caller\'s user ranks before anyone else\'s, ' +
-          'which stays offered but says whose it is in `reason`; every pick carries `assignee` ' +
-          '(a name). ' +
-          'A `project` that is a retired key ranks the live project and returns `renamed_from`; ' +
-          'one that names no project at all is a 404 rather than "nothing open".',
-        parameters: [
-          { name: 'project', in: 'query', schema: { type: 'string' } },
-          { name: 'limit', in: 'query', schema: { type: 'integer' },
-            description: 'How many runners-up to return (default 5).' },
-          { name: 'assignee', in: 'query', schema: { type: 'string' },
-            description: 'Only tasks owned by: `me`, an email, a display name or a user id.' },
-        ],
-        responses: { '200': okResponse('A pick, the runners-up, and what was considered.') },
-      },
-    },
-    '/context': {
-      get: {
-        summary: 'The briefing a session opens with',
-        description:
-          'What you are still holding, what is in flight around you, your user\'s open work ' +
-          'here that nobody is on, and claims nobody is acting on. Index only, never bodies. ' +
-          'Read by a hook that has milliseconds and no way to recover from a failure, ' +
-          'so it stays cheap and must never be why a session does not start.',
-        parameters: [
-          { name: 'cwd', in: 'query', schema: { type: 'string' } },
-          { name: 'project', in: 'query', schema: { type: 'string' } },
-          { name: 'file', in: 'query', schema: { type: 'string' },
-            description: 'Accepted for older hooks and ignored: the file index is gone.' },
-          { name: 'scope', in: 'query', schema: { type: 'string', enum: ['all', 'project'] },
-            description: 'Defaults to all. Project scope limits held work and stale claims; requires a resolved project.' },
-          { name: 'repo', in: 'query', schema: { type: 'string' },
-            description:
-              'Origin remote. Resolves the project where a path cannot: a second clone, ' +
-              'a moved directory, a worktree. Outranks `cwd`, yields to `project`.' },
-        ],
-        responses: {
-          '200': okResponse('The briefing.', {
-            type: 'object',
-            properties: {
-              project: { type: ['string', 'null'], description: 'Always the live key.' },
-              projectRenamed: { ...keyRename, description: 'Set when `project` was a retired key.' },
-              held: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    ref: { type: 'string' },
-                    was: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description: 'Refs from before a rename in the last 30 days, e.g. ["AC-113"] beside HOL-113.',
-                    },
-                  },
-                },
-              },
-              inFlight: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    ref: { type: 'string' },
-                    assignee: {
-                      type: 'string',
-                      description: 'Whose it is, present only when that is not the caller\'s user.',
-                    },
-                  },
-                },
-              },
-              unattended: {
-                type: 'object',
-                description:
-                  'The caller\'s user\'s todo, backlog and doing tasks in this project with no ' +
-                  'live claim, not already in `held` or `inFlight`. Most urgent first, at most 5; ' +
-                  '`more` counts the rest.',
-                properties: {
-                  tasks: {
-                    type: 'array',
-                    items: {
-                      type: 'object',
-                      properties: {
-                        ref: { type: 'string' },
-                        title: { type: 'string' },
-                        status: { type: 'string' },
-                        priority: { type: 'string' },
-                      },
-                    },
-                  },
-                  more: { type: 'integer' },
-                },
-              },
-            },
-          }),
-          '400': errorResponse,
-          '404': errorResponse,
-        },
       },
     },
     '/reconcile': {
@@ -1501,9 +1098,8 @@ export const openapiSpec = () => ({
         summary: 'Add a lab project (administrators)',
         description:
           'Names are unique in any case. `handoffTracker` and `handoffTarget` say where `croft handoff` sends ' +
-          'the project\'s todos (a tracker like `cairn` or `github`, and a target in it: a project key, ' +
-          'an `owner/repo`): both or neither. Deprecated (0.7): `cairnKey` means tracker `cairn` and that ' +
-          'target. Removed in 0.8.',
+          'the project\'s todos (a tracker like `linear` or `github`, and a target in it: a project key, ' +
+          'an `owner/repo`): both or neither.',
         requestBody: body(json(createLabProjectSchema)),
         responses: { '201': okResponse('The lab project.', labProjectSchema), '400': errorResponse, '403': errorResponse, '409': errorResponse },
       },
@@ -1525,7 +1121,7 @@ export const openapiSpec = () => ({
       patch: {
         summary: 'Rename, recolour, re-key or move a lab project (administrators)',
         description:
-          'Null `handoffTracker` and `handoffTarget` (or the deprecated `cairnKey: null`) clear the hand-off; ' +
+          'Null `handoffTracker` and `handoffTarget` clear the hand-off; ' +
           'an omitted field is left as it is.',
         requestBody: body(json(updateLabProjectSchema)),
         responses: {
@@ -1564,18 +1160,6 @@ export const openapiSpec = () => ({
           'Clears the link, writes a `handoff` note `T-41 taken back from <tracker> (<ref>)` on the subject, ' +
           'and returns the todo. Nothing is done in the other tracker. 409 `conflict` when the todo is not handed off.',
         responses: { '200': okResponse('The todo.'), '404': errorResponse, '409': errorResponse },
-      },
-    },
-    '/tasks/{ref}/cairn-link': {
-      parameters: [{ name: 'ref', in: 'path', required: true, schema: { type: 'string', example: 'T-41' } }],
-      post: {
-        deprecated: true,
-        summary: 'Deprecated (0.7): hand off to `cairn`. Removed in 0.8',
-        description:
-          'The old body shape of `POST /tasks/{ref}/handoff`, with tracker `cairn`: `cairnRef`, `cairnStatus`, ' +
-          '`cairnResolution`, `cairnResolutionKind`, `force`. Kept so 0.6 CLIs keep working.',
-        requestBody: body(json(cairnLinkSchema)),
-        responses: { '200': okResponse('The link.'), '400': errorResponse, '404': errorResponse, '409': errorResponse },
       },
     },
     '/people': {

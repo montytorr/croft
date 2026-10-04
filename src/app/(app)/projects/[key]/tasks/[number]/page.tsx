@@ -4,9 +4,9 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import {
-  currentUser, getDuplicateOf, getParent, getTask, listActivity, listAlsoProjects,
-  listTaskAttachments, listProjects,
-  listChildren, listComments, listNotes, listRelations,
+  currentUser, getDuplicateOf, getParent, getTask, listActivity,
+  listTaskAttachments,
+  listChildren, listComments, listNotes,
 } from '@/lib/data'
 import { MarkdownEditor } from '@/components/markdown-editor'
 import { MarkdownView } from '@/components/markdown'
@@ -23,12 +23,7 @@ import { CommentsPanel } from './comments-panel'
 import { AttachmentsPanel } from './attachments-panel'
 import { ActivityPanel } from './activity-panel'
 import { ChildrenPanel } from './children-panel'
-import { MentionsPanel } from './mentions-panel'
-import { mentionsOf } from '@/lib/api/mentions'
 import { MobileNavButton } from '@/components/mobile-nav-context'
-import { RedirectNotice } from '@/components/redirect-notice'
-import { listFormerKeyRecords } from '@/lib/data'
-import { formerRefsOf, renameLine, renamesOf, taskRedirectNotice } from '@/lib/project-rename'
 import { LABEL, PANE } from './styles'
 import { getSubject } from '@/lib/lab/data'
 import { ProjectLabel } from '@/components/lab/project-label'
@@ -91,13 +86,10 @@ const Dot = () => (
 
 const TaskPage = async ({
   params,
-  searchParams,
 }: {
   params: Promise<{ key: string; number: string }>
-  searchParams: Promise<{ from?: string }>
 }) => {
   const { key, number } = await params
-  const { from } = await searchParams
   const user = await currentUser()
   if (!user) redirect('/login')
 
@@ -105,62 +97,29 @@ const TaskPage = async ({
   if (!Number.isInteger(parsed)) notFound()
 
   const viewer: Viewer = { id: user.id, role: user.role }
-  const [task, formerKeys] = await Promise.all([
-    cachedTask(user.id, key, parsed, user.role),
-    listFormerKeyRecords(),
-  ])
-
-  // The key may be one this project used to have. Refs escape into commit
-  // messages and PR titles, which a rename cannot reach, so an old link lands
-  // on the task and the address bar corrects itself to the live ref — saying
-  // so on arrival, through `from`, because a silent swap of AC-113 for
-  // HOL-113 leaves the reader unsure they found the same task.
-  if (!task) {
-    const retired = formerKeys.find((row) => row.key === key.toUpperCase() && row.current)
-    if (retired) {
-      const was = `${retired.key}-${parsed}`
-      redirect(`/projects/${retired.current}/tasks/${parsed}?from=${encodeURIComponent(was)}`)
-    }
-    notFound()
-  }
+  const task = await cachedTask(user.id, key, parsed, user.role)
+  if (!task) notFound()
 
   const [
-    notes, comments, attachments, relations, duplicateOf, activity, children, parent,
-    alsoProjects, allProjects, mentioned, subject,
+    notes, comments, attachments, duplicateOf, activity, children, parent,
+    subject,
   ] = await Promise.all([
     listNotes(task.id, viewer),
     listComments(task.id, viewer),
     // With a kind each and a stable content_url, so previews never expire on an open page.
     listTaskAttachments(task.id, viewer),
-    listRelations(task.id, viewer),
     task.duplicate_of ? getDuplicateOf(task.duplicate_of, viewer) : Promise.resolve(null),
     listActivity(task.id, viewer),
     listChildren(task.id, viewer),
     task.parent_id ? getParent(task.parent_id, viewer) : Promise.resolve(null),
-    listAlsoProjects(task.id, viewer),
-    listProjects(user.id, {}, viewer),
-    mentionsOf(task.id, 8, viewer),
     // For the subject's lab project on the chip above the title.
     task.subject ? getSubject(task.subject.number, viewer).catch(() => null) : Promise.resolve(null),
   ])
-
-  // What this task used to be called. An alias that only resolves is half an
-  // answer: the lookup would succeed and the screen would show CAI-42, so a
-  // reader holding ACME-42 from a commit message still could not tell they had
-  // found the right task. Showing both is what lets them connect it by eye.
-  // Only keys retired after the task was filed: HOL-114 postdates AC, and a
-  // label saying it "was AC-114" names a ref that never existed.
-  const renames = renamesOf(
-    formerKeys.filter((row) => row.project_id === task.project.id),
-    task.project.key,
-  )
-  const formerRefs = formerRefsOf(renames, task)
 
   // The Croft ref, never the imported one. Preferring external_ref showed a
   // migrated task as LEGACY-1234 — an identifier that resolves nowhere in this
   // system, on the page whose whole job is to tell you what you are looking at.
   const ref = `${task.project.key}-${task.number}`
-  const arrivedFrom = taskRedirectNotice(from, renames, { ...task, ref })
 
   return (
     <div className="flex h-dvh flex-col">
@@ -219,24 +178,6 @@ const TaskPage = async ({
             ({task.external_ref})
           </span>
         ) : null}
-        {/* Beside the imported ref, not instead of it — a project imported
-            from Linear and later renamed has both, and they answer different
-            questions. Shown on a phone too: an old ref arriving from a commit
-            message is no less confusing on a small screen. */}
-        {formerRefs.length > 0 ? (
-          <span
-            className="text-fg-subtle min-w-0 shrink truncate text-[0.6875rem] tabular"
-            title={formerRefs
-              .map(({ ref: was, rename }) => `Was ${was} · ${renameLine(rename)}. ${was} still resolves here.`)
-              .join('\n')}
-          >
-            (was {formerRefs.map((r) => r.ref).join(', ')})
-            <span className="sr-only">
-              {' — '}
-              {formerRefs.map((r) => renameLine(r.rename)).join('; ')}
-            </span>
-          </span>
-        ) : null}
         <span className="text-fg hidden max-w-[38ch] truncate text-[0.8125rem] sm:block">
           {task.title}
         </span>
@@ -282,8 +223,6 @@ const TaskPage = async ({
             </div>
 
             <EditableTitle taskId={task.id} initial={task.title} />
-
-            <RedirectNotice message={arrivedFrom} />
 
             {/* First thing on the page when it applies: a reader who opens a
                 duplicate wants redirecting, not reading. */}
@@ -359,12 +298,10 @@ const TaskPage = async ({
                 what a reader wants next: the split, then the evidence, then
                 the conversation, then the audit trail. */}
             <div className="[&>*+*]:border-border flex flex-col [&>*]:py-4 [&>*+*]:border-t">
-              <MentionsPanel total={mentioned.total} mentions={mentioned.mentions} />
               <ChildrenPanel
                 taskRef={`${task.project.key}-${task.number}`}
                 projectKey={task.project.key}
                 items={children}
-                projects={allProjects.map((p) => ({ key: p.key, title: p.title }))}
               />
               <AttachmentsPanel taskId={task.id} attachments={attachments} />
               <NotesPanel taskId={task.id} notes={notes} />
@@ -389,9 +326,6 @@ const TaskPage = async ({
           <Properties
             task={task}
             project={task.project}
-            relations={relations}
-            alsoProjects={alsoProjects}
-            projects={allProjects.map((p) => ({ key: p.key, title: p.title }))}
             parent={parent}
           />
         </div>

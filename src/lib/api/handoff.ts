@@ -22,7 +22,7 @@ import { closeTask } from './tasks'
 
 export { TERMINAL_HANDOFF_STATUSES }
 
-/** `CAIRN-331 done: <resolution>`: the line an ended hand-off leaves in the subject's log. */
+/** `LIN-331 done: <resolution>`: the line an ended hand-off leaves in the subject's log. */
 export const handoffOutcomeNote = (ref: string, status: string, resolution: string | null | undefined) =>
   `${ref} ${status}${resolution?.trim() ? `: ${resolution.trim()}` : ''}`
 
@@ -152,20 +152,12 @@ export const linkHandoff = async (
       })
     : { noted: false, closed: false }
 
-  const shaped = withHandoff(row) as unknown as {
-    handoff: Handoff | null
-    cairn_ref: string | null
-    cairn_status: string | null
-    cairn_synced_at: string | null
-  }
+  const shaped = withHandoff(row) as unknown as { handoff: Handoff | null }
   return {
     ref: task.ref,
     id: row.id,
     subject_id: row.subject_id,
     handoff: shaped.handoff,
-    cairn_ref: shaped.cairn_ref,
-    cairn_status: shaped.cairn_status,
-    cairn_synced_at: shaped.cairn_synced_at,
     // The todo's own status, after any close this link caused.
     status: outcome.closed ? input.status : row.status,
     ...outcome,

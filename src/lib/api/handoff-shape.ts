@@ -37,10 +37,8 @@ export const handoffOf = (source: object | null | undefined): Handoff | null => 
 }
 
 /**
- * Raw `handoff_*` columns become the `handoff` object. The deprecated
- * `cairn_ref` / `cairn_status` ride along (null unless the tracker is
- * `cairn`) for 0.6 CLIs. Deprecated (0.7), removed in 0.8. A row that was
- * not selected with the columns passes through untouched.
+ * Raw `handoff_*` columns become the `handoff` object. A row that was not
+ * selected with the columns passes through untouched.
  */
 export const withHandoff = <T>(row: T): T => {
   if (!row || typeof row !== 'object' || !('handoff_ref' in row)) return row
@@ -52,15 +50,7 @@ export const withHandoff = <T>(row: T): T => {
     handoff_synced_at: _syncedAt,
     ...rest
   } = row as HandoffColumns & Record<string, unknown>
-  const handoff = handoffOf(row as HandoffColumns)
-  const legacy = handoff?.tracker === 'cairn'
-  return {
-    ...rest,
-    handoff,
-    cairn_ref: legacy ? handoff.ref : null,
-    cairn_status: legacy ? handoff.status : null,
-    cairn_synced_at: legacy ? handoff.synced_at : null,
-  } as T
+  return { ...rest, handoff: handoffOf(row as HandoffColumns) } as T
 }
 
 export const withHandoffs = <T>(rows: readonly T[]): T[] => rows.map(withHandoff)

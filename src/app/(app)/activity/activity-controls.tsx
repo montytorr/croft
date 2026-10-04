@@ -13,16 +13,12 @@ const KINDS = [
 ]
 
 export const ActivityControls = ({
-  project,
   actor,
   kinds,
-  projects,
   actors,
 }: {
-  project: string
   actor: string
   kinds: string
-  projects: { key: string; title: string }[]
   actors: string[]
 }) => {
   const router = useRouter()
@@ -33,7 +29,7 @@ export const ActivityControls = ({
   // have not seen the start of.
   const push = (next: Record<string, string>) => {
     const params = new URLSearchParams()
-    for (const [k, v] of Object.entries({ project, actor, kinds, ...next })) if (v) params.set(k, v)
+    for (const [k, v] of Object.entries({ actor, kinds, ...next })) if (v) params.set(k, v)
     start(() => router.replace(`/activity?${params}`))
   }
 
@@ -53,20 +49,6 @@ export const ActivityControls = ({
         {KINDS.map((k) => (
           <option key={k.value} value={k.value}>
             {k.label}
-          </option>
-        ))}
-      </Select>
-
-      <Select
-        size="sm"
-        value={project}
-        onChange={(e) => push({ project: e.target.value })}
-        aria-label="Filter by project"
-      >
-        <option value="">All projects</option>
-        {projects.map((p) => (
-          <option key={p.key} value={p.key}>
-            {p.title}
           </option>
         ))}
       </Select>

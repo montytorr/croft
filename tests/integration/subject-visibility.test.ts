@@ -10,8 +10,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
  * leak, so it is deliberately exhaustive rather than elegant.
  *
  * A owns a private subject P in a lab project, with a private todo TP (notes,
- * a comment, a label, a file, a claim, a mention of a lab todo, a parent and
- * a dependency on that lab todo), a closed private todo, a deleted one, a
+ * a comment, a label, a file, a claim, a mention of a lab todo and a parent),
+ * a closed private todo, a deleted one, a
  * human note, a subject file and a log. B is added as a member later. C is an
  * outsider. D is an administrator.
  *
@@ -46,29 +46,17 @@ import { GET as taskNotesRoute, POST as addTaskNoteRoute } from '@/app/api/v1/ta
 import { DELETE as deleteTaskNoteRoute } from '@/app/api/v1/tasks/[ref]/notes/[id]/route'
 import { GET as commentsRoute, POST as addCommentRoute } from '@/app/api/v1/tasks/[ref]/comments/route'
 import { GET as taskFilesRoute, POST as uploadTaskFileRoute } from '@/app/api/v1/tasks/[ref]/attachments/route'
-import { GET as taskActivityRoute, POST as addEvidenceRoute } from '@/app/api/v1/tasks/[ref]/activity/route'
 import { GET as childrenRoute } from '@/app/api/v1/tasks/[ref]/children/route'
-import {
-  DELETE as removeDependencyRoute,
-  GET as dependenciesRoute,
-  POST as addDependencyRoute,
-} from '@/app/api/v1/tasks/[ref]/dependencies/route'
-import { GET as mentionsRoute } from '@/app/api/v1/tasks/[ref]/mentions/route'
 import { POST as claimRoute } from '@/app/api/v1/tasks/[ref]/claim/route'
 import { POST as releaseRoute } from '@/app/api/v1/tasks/[ref]/release/route'
 import { POST as beatRoute } from '@/app/api/v1/tasks/[ref]/beat/route'
 import { POST as blockRoute } from '@/app/api/v1/tasks/[ref]/block/route'
 import { POST as checkpointRoute } from '@/app/api/v1/tasks/[ref]/checkpoint/route'
-import { POST as cairnLinkRoute } from '@/app/api/v1/tasks/[ref]/cairn-link/route'
 import { DELETE as undoHandoffRoute, POST as handoffRoute } from '@/app/api/v1/tasks/[ref]/handoff/route'
 import { GET as attachmentRoute, DELETE as deleteAttachmentRoute } from '@/app/api/v1/attachments/[id]/route'
 import { GET as contentRoute } from '@/app/api/v1/attachments/[id]/content/route'
 import { GET as projectTasksRoute } from '@/app/api/v1/projects/[id]/tasks/route'
-import { GET as projectRoute } from '@/app/api/v1/projects/[id]/route'
 import { GET as searchRoute } from '@/app/api/v1/search/route'
-import { GET as activityRoute } from '@/app/api/v1/activity/route'
-import { GET as contextRoute } from '@/app/api/v1/context/route'
-import { GET as nextRoute } from '@/app/api/v1/next/route'
 import { POST as reconcileRoute } from '@/app/api/v1/reconcile/route'
 import { GET as labProjectsRoute, POST as createLabProjectRoute } from '@/app/api/v1/lab-projects/route'
 import { GET as labelsRoute } from '@/app/api/v1/labels/route'
@@ -77,20 +65,15 @@ import {
   getParent,
   getTask,
   listActivity,
-  listAllTasks,
-  listAlsoProjects,
-  listAttachments,
   listChildren,
   listComments,
   listNotes,
-  listRelations,
   listTaskAttachments,
-  listTasks,
 } from '@/lib/data'
 import { listBoardTasks } from '@/lib/board-data'
+import { activityFeed } from '@/lib/api/activity-feed'
 import {
   getSubject,
-  listLabProjects,
   listLabTodos,
   listSubjectAttachments,
   listSubjectHumanNotes,
@@ -98,7 +81,6 @@ import {
   listSubjects,
   listSubjectTodos,
 } from '@/lib/lab/data'
-import { mentionsOf } from '@/lib/api/mentions'
 import type { Viewer } from '@/lib/api/visibility'
 
 const databaseUrl = process.env.DATABASE_URL
@@ -192,7 +174,6 @@ const TP = { id: '', ref: '' }
 const TP2 = { id: '', ref: '' }
 const TP3 = { ref: '' }
 const TL = { id: '', ref: '' }
-let tProjectId = ''
 let humanNoteId = ''
 let taskNoteId = ''
 let subjectFileId = ''
@@ -208,12 +189,8 @@ const countsFor = async (id: string) => {
   const labProjects = await call(labProjectsRoute, 'GET', '/lab-projects')
   const labels = await call(labelsRoute, 'GET', '/labels')
   const tasks = await call(projectTasksRoute, 'GET', '/projects/T/tasks?limit=1', { id: 'T' })
-  const project = await call(projectRoute, 'GET', '/projects/T', { id: 'T' })
-  const next = await call(nextRoute, 'GET', '/next?project=T')
   const board = await listBoardTasks(id, { includeClosed: true }, viewer(id))
   const boardOpen = await listBoardTasks(id, {}, viewer(id))
-  const all = await listAllTasks(id, {}, viewer(id))
-  const page = tProjectId ? await listTasks(tProjectId, {}, viewer(id)) : null
   const label = (labels.json.data as { label?: string; name?: string; count?: number; n?: number }[]).find(
     (l) => (l.label ?? l.name) === LABEL,
   )
@@ -223,13 +200,8 @@ const countsFor = async (id: string) => {
     labProject: (labProjects.json.data as { id: string; subjects: number }[]).find((p) => p.id === labProjectId)?.subjects,
     label: label ?? null,
     tasksCount: tasks.status === 200 ? (tasks.json.data.count as number) : null,
-    taskCount: project.status === 200 ? (project.json.data.task_count as number) : null,
-    considered: next.status === 200 ? (next.json.data.considered as number) : null,
     boardTotal: board.tasks.length,
     boardClosedHidden: boardOpen.closedHidden,
-    allClosedHidden: all.closedHidden,
-    pageTotal: page?.total ?? null,
-    pageClosedHidden: page?.closedHidden ?? null,
   }
 }
 
@@ -281,7 +253,6 @@ describe('setup', () => {
     const todo = await call(addTodoRoute, 'POST', `/subjects/${L.ref}/todos`, { ref: L.ref }, { title: `Lab todo ${RUN}` })
     expect(todo.status).toBe(201)
     Object.assign(TL, { id: todo.json.data.id, ref: todo.json.data.ref })
-    tProjectId = (await q(`select id from projects where key = 'T'`)).rows[0].id
 
     before = await countsFor(C)
   })
@@ -337,12 +308,11 @@ describe('setup', () => {
     taskNoteId = note.json.data.id ?? note.json.data.note?.id
     expect((await call(addCommentRoute, 'POST', `/tasks/${TP.ref}/comments`, { ref: TP.ref }, { content: `Comment on ${WORD}.` })).status).toBe(201)
     expect((await call(patchTaskRoute, 'PATCH', `/tasks/${TP.ref}`, { ref: TP.ref }, { labels: [LABEL], parentRef: TL.ref })).status).toBe(200)
-    expect((await call(addDependencyRoute, 'POST', `/tasks/${TL.ref}/dependencies`, { ref: TL.ref }, { ref: TP.ref, direction: 'blocked-by' })).status).toBe(201)
     expect((await call(patchTaskRoute, 'PATCH', `/tasks/${TP2.ref}`, { ref: TP2.ref }, { status: 'done', resolution: `Closed ${WORD}.` })).status).toBe(200)
     const deleted = await call(deleteTaskRoute, 'DELETE', `/tasks/${TP3.ref}?confirm=${TP3.ref}`, { ref: TP3.ref })
     expect(deleted.status).toBe(200)
 
-    // In flight and holding a claim nobody is acting on: context and next both look.
+    // In flight and holding a claim nobody is acting on: the maintenance sweep looks.
     await q(
       `update tasks set status = 'doing', claimed_by = $2, claimed_at = '2000-01-01', heartbeat_at = '2000-01-01'
         where id = $1`,
@@ -429,19 +399,12 @@ describe('an outsider (C) and an administrator (D) get not_found from every task
           ['GET comments', call(commentsRoute, 'GET', `/tasks/${ref}/comments`, { ref })],
           ['POST comment', call(addCommentRoute, 'POST', `/tasks/${ref}/comments`, { ref }, { content: 'x' })],
           ['GET files', call(taskFilesRoute, 'GET', `/tasks/${ref}/attachments`, { ref })],
-          ['GET activity', call(taskActivityRoute, 'GET', `/tasks/${ref}/activity`, { ref })],
-          ['POST evidence', call(addEvidenceRoute, 'POST', `/tasks/${ref}/activity`, { ref }, { event: 'git_commit', sha: 'abcdef1' })],
           ['GET children', call(childrenRoute, 'GET', `/tasks/${ref}/children`, { ref })],
-          ['GET dependencies', call(dependenciesRoute, 'GET', `/tasks/${ref}/dependencies`, { ref })],
-          ['POST dependency', call(addDependencyRoute, 'POST', `/tasks/${ref}/dependencies`, { ref }, { ref: TL.ref })],
-          ['DELETE dependency', call(removeDependencyRoute, 'DELETE', `/tasks/${ref}/dependencies?ref=${TL.ref}`, { ref })],
-          ['GET mentions', call(mentionsRoute, 'GET', `/tasks/${ref}/mentions`, { ref })],
           ['POST claim', call(claimRoute, 'POST', `/tasks/${ref}/claim`, { ref }, {})],
           ['POST release', call(releaseRoute, 'POST', `/tasks/${ref}/release`, { ref }, { force: true })],
           ['POST beat', call(beatRoute, 'POST', `/tasks/${ref}/beat`, { ref }, {})],
           ['POST block', call(blockRoute, 'POST', `/tasks/${ref}/block`, { ref }, { reason: 'x' })],
           ['POST checkpoint', call(checkpointRoute, 'POST', `/tasks/${ref}/checkpoint`, { ref }, { summary: 'x' })],
-          ['POST cairn-link', call(cairnLinkRoute, 'POST', `/tasks/${ref}/cairn-link`, { ref }, { cairnRef: 'CAIRN-1', force: true })],
           ['POST handoff', call(handoffRoute, 'POST', `/tasks/${ref}/handoff`, { ref }, { tracker: 'github', ref: 'o/r#1', force: true })],
           ['DELETE handoff', call(undoHandoffRoute, 'DELETE', `/tasks/${ref}/handoff`, { ref })],
         ]
@@ -459,12 +422,6 @@ describe('an outsider (C) and an administrator (D) get not_found from every task
   it('refuses a hidden todo named in a body exactly as an unknown one', async () => {
     for (const who of [C, D]) {
       as(who)
-      const dependency = await call(addDependencyRoute, 'POST', `/tasks/${TL.ref}/dependencies`, { ref: TL.ref }, { ref: TP.ref })
-      expect(dependency.status).toBe(404)
-      expect(dependency.json).toEqual(missingTask(TP.ref))
-      const unlink = await call(removeDependencyRoute, 'DELETE', `/tasks/${TL.ref}/dependencies?ref=${TP.ref}&direction=blocked-by`, { ref: TL.ref })
-      expect(unlink.status).toBe(404)
-      expect(unlink.json).toEqual(missingTask(TP.ref))
       const duplicate = await call(patchTaskRoute, 'PATCH', `/tasks/${TL.ref}`, { ref: TL.ref }, { duplicateOf: TP.ref })
       expect(duplicate.status).toBe(404)
       expect(duplicate.json).toEqual(missingTask(TP.ref))
@@ -476,39 +433,26 @@ describe('an outsider (C) and an administrator (D) get not_found from every task
     }
   })
 
-  it('does not name the private todo from the lab todo it mentions, hangs under and blocks', async () => {
+  it('does not name the private todo from the lab todo it hangs under', async () => {
     for (const who of [C, D]) {
       as(who)
-      const mentions = await call(mentionsRoute, 'GET', `/tasks/${TL.ref}/mentions`, { ref: TL.ref })
-      expect(mentions.json.data).toEqual({ total: 0, mentions: [] })
       const shown = await call(showTaskRoute, 'GET', `/tasks/${TL.ref}`, { ref: TL.ref })
       expect(shown.status).toBe(200)
-      expect(shown.json.data.mentioned_in_total).toBe(0)
       expect(JSON.stringify(shown.json.data)).not.toContain(WORD)
       const digest = await call(showTaskRoute, 'GET', `/tasks/${TL.ref}?view=digest`, { ref: TL.ref })
-      expect(digest.json.data).toMatchObject({ mentionedInTotal: 0, mentionedIn: [], children: null })
+      expect(digest.json.data).toMatchObject({ children: null })
       expect(JSON.stringify(digest.json.data)).not.toContain(TP.ref)
       const children = await call(childrenRoute, 'GET', `/tasks/${TL.ref}/children`, { ref: TL.ref })
       expect(children.json.data).toEqual({ count: 0, closed: 0, children: [] })
-      const deps = await call(dependenciesRoute, 'GET', `/tasks/${TL.ref}/dependencies`, { ref: TL.ref })
-      expect(deps.json.data).toEqual([])
 
-      expect(await mentionsOf(TL.id, 10, viewer(who))).toEqual({ total: 0, mentions: [] })
       expect(await listChildren(TL.id, viewer(who))).toEqual([])
-      expect(await listRelations(TL.id, viewer(who))).toEqual([])
     }
 
-    // …and A, who can see it, does get all three.
+    // …and A, who can see it, does get it.
     as(A)
-    const mentions = await call(mentionsRoute, 'GET', `/tasks/${TL.ref}/mentions`, { ref: TL.ref })
-    expect(mentions.json.data.total).toBe(1)
-    expect(mentions.json.data.mentions[0].ref).toBe(TP.ref)
     const children = await call(childrenRoute, 'GET', `/tasks/${TL.ref}/children`, { ref: TL.ref })
     expect(children.json.data.count).toBe(1)
-    const deps = await call(dependenciesRoute, 'GET', `/tasks/${TL.ref}/dependencies`, { ref: TL.ref })
-    expect(deps.json.data.map((d: { ref: string }) => d.ref)).toEqual([TP.ref])
     expect((await listChildren(TL.id, viewer(A))).map((c) => c.id)).toEqual([TP.id])
-    expect((await listRelations(TL.id, viewer(A))).map((r) => r.id)).toEqual([TP.id])
   })
 
   it('left the private todo exactly as A wrote it', async () => {
@@ -519,7 +463,6 @@ describe('an outsider (C) and an administrator (D) get not_found from every task
       title: `${WORD} private todo`,
       labels: [LABEL],
       blocked_reason: null,
-      cairn_ref: null,
       subject: { ref: P.ref, visibility: 'private' },
     })
     const notes = await call(taskNotesRoute, 'GET', `/tasks/${TP.ref}/notes`, { ref: TP.ref })
@@ -558,7 +501,7 @@ describe('files by id', () => {
   })
 })
 
-describe('lists, search, activity and briefings', () => {
+describe('lists, search and activity', () => {
   it('leaves the subject off the board, the list and the page loaders', async () => {
     for (const who of [C, D]) {
       as(who)
@@ -585,22 +528,13 @@ describe('lists, search, activity and briefings', () => {
       expect(await getParent(TP.id, v)).toBeNull()
       expect(await listNotes(TP.id, v)).toEqual([])
       expect(await listComments(TP.id, v)).toEqual([])
-      expect(await listAttachments(TP.id, v)).toEqual([])
       expect(await listTaskAttachments(TP.id, v)).toEqual([])
       expect(await listActivity(TP.id, v)).toEqual([])
-      expect(await listAlsoProjects(TP.id, v)).toEqual([])
       expect(await listChildren(TP.id, v)).toEqual([])
-      expect(await listRelations(TP.id, v)).toEqual([])
 
       const everything = await listBoardTasks(who, { includeClosed: true }, v)
       expect(everything.tasks.map((t) => t.id)).not.toContain(TP.id)
       expect(everything.tasks.map((t) => t.id)).not.toContain(TP2.id)
-      const all = await listAllTasks(who, { includeClosed: true }, v)
-      expect([...all.tasks, ...all.recentlyClosed].map((t) => t.id)).not.toContain(TP.id)
-      expect(all.recentlyClosed.map((t) => t.id)).not.toContain(TP2.id)
-      const page = await listTasks(tProjectId, { includeClosed: true }, v)
-      expect([...page.tasks, ...page.recentlyClosed].map((t) => t.id)).not.toContain(TP.id)
-
       const api = await call(projectTasksRoute, 'GET', '/projects/T/tasks?limit=200', { id: 'T' })
       expect(api.json.data.tasks.map((t: { id: string }) => t.id)).not.toContain(TP.id)
       const byProject = await call(projectTasksRoute, 'GET', `/projects/T/tasks?project=${projectName}`, { id: 'T' })
@@ -636,13 +570,8 @@ describe('lists, search, activity and briefings', () => {
     expect(after.mine).not.toContain(P.id)
     // TP (open) and TP2 (closed); TP3 is gone.
     expect(a.tasksCount).toBe(after.tasksCount! + 2)
-    expect(a.taskCount).toBe(after.taskCount! + 2)
     expect(a.boardTotal).toBe(after.boardTotal + 2)
     expect(a.boardClosedHidden).toBe(after.boardClosedHidden + 1)
-    expect(a.allClosedHidden).toBe(after.allClosedHidden + 1)
-    expect(a.pageTotal).toBe(after.pageTotal! + 2)
-    expect(a.pageClosedHidden).toBe(after.pageClosedHidden! + 1)
-    expect(a.considered).toBe(after.considered! + 1)
   })
 
   it('finds nothing of it in search, by word or by ref', async () => {
@@ -656,9 +585,9 @@ describe('lists, search, activity and briefings', () => {
         expect(refs).not.toContain(TP.ref)
         expect(refs).not.toContain(TP2.ref)
         expect(JSON.stringify(unified.json.data.results)).not.toContain(WORD)
-        const tasksOnly = await call(searchRoute, 'GET', `/search?q=${encodeURIComponent(query)}&tasksOnly=true`, {})
-        expect(tasksOnly.json.data.results.map((r: { ref: string }) => r.ref)).not.toContain(TP.ref)
-        expect(JSON.stringify(tasksOnly.json.data.results)).not.toContain(WORD)
+        const tasks = await call(searchRoute, 'GET', `/search?q=${encodeURIComponent(query)}&kinds=task`, {})
+        expect(tasks.json.data.results.map((r: { ref: string }) => r.ref)).not.toContain(TP.ref)
+        expect(JSON.stringify(tasks.json.data.results)).not.toContain(WORD)
       }
       const word = await call(searchRoute, 'GET', `/search?q=${WORD}`, {})
       expect(word.json.data.count).toBe(0)
@@ -675,58 +604,24 @@ describe('lists, search, activity and briefings', () => {
     const hiddenRefs = [P.ref, TP.ref, TP2.ref, TP3.ref]
     for (const who of [C, D]) {
       as(who)
-      const feed = await call(activityRoute, 'GET', '/activity?limit=200', {})
-      expect(feed.status).toBe(200)
-      const rows = feed.json.data.results as { ref: string; title: string; detail: string | null }[]
+      const rows = await activityFeed(who, { limit: 200 })
       expect(rows.filter((r) => hiddenRefs.includes(r.ref))).toEqual([])
       expect(JSON.stringify(rows)).not.toContain(WORD)
-      const scoped = await call(activityRoute, 'GET', '/activity?limit=200&project=T', {})
-      expect(JSON.stringify(scoped.json.data.results)).not.toContain(WORD)
       expect(JSON.stringify(rows)).not.toContain(`"${TP.ref}"`)
-
-      // The lab todo's own history: the dependency on the private todo is
-      // recorded without naming it.
-      const tl = await call(taskActivityRoute, 'GET', `/tasks/${TL.ref}/activity`, { ref: TL.ref })
-      expect(tl.status).toBe(200)
-      expect(JSON.stringify(tl.json.data)).not.toContain(`"${TP.ref}"`)
       expect(JSON.stringify(await listActivity(TL.id, viewer(who)))).not.toContain(`"${TP.ref}"`)
     }
 
     as(A)
-    const feed = await call(activityRoute, 'GET', '/activity?limit=200', {})
-    const refs = (feed.json.data.results as { ref: string }[]).map((r) => r.ref)
+    const refs = (await activityFeed(A, { limit: 200 })).map((r) => r.ref)
     expect(refs).toContain(TP.ref)
-    // …where the private todo's own history carries the link, the other way round.
-    const tp = await listActivity(TP.id, viewer(A))
-    expect(tp.find((e) => e.event === 'dependency_added')?.data).toEqual({ other: TL.ref, direction: 'blocks' })
-    const tl = await listActivity(TL.id, viewer(A))
-    expect(tl.find((e) => e.event === 'dependency_added')?.data).toEqual({ other: null, direction: 'blocked-by' })
   })
 
-  it('leaves it out of the session briefing, next and reconcile', async () => {
+  it('leaves it out of reconcile', async () => {
     for (const who of [C, D]) {
-      as(who)
-      const context = await call(contextRoute, 'GET', '/context?project=T&scope=project', {})
-      expect(context.status).toBe(200)
-      expect(JSON.stringify(context.json.data)).not.toContain(TP.ref)
-      expect(JSON.stringify(context.json.data)).not.toContain(WORD)
-      const everywhere = await call(contextRoute, 'GET', '/context', {})
-      expect(JSON.stringify(everywhere.json.data)).not.toContain(WORD)
-
-      const next = await call(nextRoute, 'GET', '/next?project=T&limit=20', {})
-      expect(JSON.stringify(next.json.data)).not.toContain(TP.ref)
-      expect(JSON.stringify(next.json.data)).not.toContain(WORD)
-
       as(who, 'agent')
       const reconciled = await call(reconcileRoute, 'POST', '/reconcile', {}, { dryRun: true })
       expect(JSON.stringify(reconciled.json.data)).not.toContain(TP.ref)
     }
-
-    // Positive control: the owner's briefing does name it.
-    as(A)
-    const context = await call(contextRoute, 'GET', '/context?project=T&scope=project', {})
-    expect(context.json.data.inFlight.map((t: { ref: string }) => t.ref)).toContain(TP.ref)
-    expect(context.json.data.staleClaims.map((t: { ref: string }) => t.ref)).toContain(TP.ref)
   })
 
   it('does not move C\'s live-update pulse when A writes on the private todo', async () => {
@@ -777,8 +672,6 @@ describe('sharing with a member (B)', () => {
     expect(members.json.data).toMatchObject({ visibility: 'members', owner: { id: A }, members: [{ id: B }] })
     const found = await call(searchRoute, 'GET', `/search?q=${WORD}`, {})
     expect(found.json.data.results.map((r: { ref: string }) => r.ref)).toContain(P.ref)
-    const mentions = await call(mentionsRoute, 'GET', `/tasks/${TL.ref}/mentions`, { ref: TL.ref })
-    expect(mentions.json.data.total).toBe(1)
     expect((await countsFor(B)).labProject).toBe(1)
     expect((await listBoardTasks(B, {}, viewer(B))).tasks.map((t) => t.id)).toContain(TP.id)
   })
@@ -882,38 +775,28 @@ describe('handing off a todo whose subject is not in the lab', () => {
     const shown = await call(showTaskRoute, 'GET', `/tasks/${TP.ref}`, { ref: TP.ref })
     expect(shown.json.data.subject).toMatchObject({ ref: P.ref, visibility: 'members' })
 
-    const refused = await call(cairnLinkRoute, 'POST', `/tasks/${TP.ref}/cairn-link`, { ref: TP.ref }, { cairnRef: 'CAIRN-901' })
+    const refused = await call(handoffRoute, 'POST', `/tasks/${TP.ref}/handoff`, { ref: TP.ref }, { tracker: 'github', ref: 'o/r#9' })
     expect(refused.status).toBe(409)
     expect(refused.json).toMatchObject({ code: 'subject_not_published', subject: P.ref, visibility: 'members' })
-    expect(refused.json.error).toContain('cairn has no notion of who may see what')
+    expect(refused.json.error).toContain('github has no notion of who may see what')
     expect((await q('select handoff_ref from tasks where id = $1', [TP.id])).rows[0].handoff_ref).toBeNull()
 
-    const generic = await call(handoffRoute, 'POST', `/tasks/${TP.ref}/handoff`, { ref: TP.ref }, { tracker: 'github', ref: 'o/r#9' })
-    expect(generic.status).toBe(409)
-    expect(generic.json).toMatchObject({ code: 'subject_not_published', subject: P.ref, visibility: 'members' })
-    expect(generic.json.error).toContain('github has no notion of who may see what')
-
-    const forced = await call(cairnLinkRoute, 'POST', `/tasks/${TP.ref}/cairn-link`, { ref: TP.ref }, { cairnRef: 'CAIRN-901', force: true })
+    const forced = await call(handoffRoute, 'POST', `/tasks/${TP.ref}/handoff`, { ref: TP.ref }, { tracker: 'github', ref: 'o/r#9', force: true })
     expect(forced.status).toBe(200)
-    expect(forced.json.data.cairn_ref).toBe('CAIRN-901')
-    expect(forced.json.data.handoff).toMatchObject({ tracker: 'cairn', ref: 'CAIRN-901' })
+    expect(forced.json.data.handoff).toMatchObject({ tracker: 'github', ref: 'o/r#9' })
 
     // A lab todo needs no force.
-    const lab = await call(cairnLinkRoute, 'POST', `/tasks/${TL.ref}/cairn-link`, { ref: TL.ref }, { cairnRef: 'CAIRN-902' })
+    const lab = await call(handoffRoute, 'POST', `/tasks/${TL.ref}/handoff`, { ref: TL.ref }, { tracker: 'github', ref: 'o/r#10' })
     expect(lab.status).toBe(200)
   })
 
   it('accepts hand-off status reports only for todos the caller may see', async () => {
-    const body = { cairnRef: 'CAIRN-901', cairnStatus: 'todo', force: true }
-    const generic = { tracker: 'cairn', ref: 'CAIRN-901', status: 'todo', force: true }
+    const generic = { tracker: 'github', ref: 'o/r#9', status: 'todo', force: true }
     for (const outsider of [C, D]) {
       as(outsider)
-      const hidden = await call(cairnLinkRoute, 'POST', `/tasks/${TP.ref}/cairn-link`, { ref: TP.ref }, body)
-      expect(hidden.status).toBe(404)
-      expect(JSON.stringify(hidden.json)).not.toContain('CAIRN-901')
       const hiddenGeneric = await call(handoffRoute, 'POST', `/tasks/${TP.ref}/handoff`, { ref: TP.ref }, generic)
       expect(hiddenGeneric.status).toBe(404)
-      expect(JSON.stringify(hiddenGeneric.json)).not.toContain('CAIRN-901')
+      expect(JSON.stringify(hiddenGeneric.json)).not.toContain('o/r#9')
       expect((await call(undoHandoffRoute, 'DELETE', `/tasks/${TP.ref}/handoff`, { ref: TP.ref })).status).toBe(404)
     }
     as(A)
@@ -921,9 +804,7 @@ describe('handing off a todo whose subject is not in the lab', () => {
     expect(owner.status).toBe(200)
     expect(owner.json.data).toMatchObject({
       ref: TP.ref,
-      handoff: { tracker: 'cairn', ref: 'CAIRN-901', status: 'todo' },
-      cairn_ref: 'CAIRN-901',
-      cairn_status: 'todo',
+      handoff: { tracker: 'github', ref: 'o/r#9', status: 'todo' },
     })
   })
 

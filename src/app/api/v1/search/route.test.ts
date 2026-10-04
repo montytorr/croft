@@ -3,18 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   authenticate: vi.fn(),
   searchAll: vi.fn(),
-  searchTasks: vi.fn(),
-  resolveAssignee: vi.fn(),
 }))
-
-vi.mock('@/lib/api/people', () => ({ resolveAssignee: mocks.resolveAssignee }))
 
 vi.mock('@/lib/api/auth', () => ({ authenticate: mocks.authenticate }))
 
-vi.mock('@/lib/api/search', () => ({
-  searchAll: mocks.searchAll,
-  searchTasks: mocks.searchTasks,
-}))
+vi.mock('@/lib/api/search', () => ({ searchAll: mocks.searchAll }))
 
 // attachConclusions reads subjects directly; it is not what is under test
 // here, so it returns nothing.
@@ -32,7 +25,7 @@ const actor = {
   actorId: 'claude-code · cal@example.test',
   userDisplayName: 'Cal',
   role: 'admin',
-  rateKey: `search-refs-${Math.random()}`,
+  rateKey: `search-${Math.random()}`,
   sessionId: null,
 }
 
@@ -42,61 +35,29 @@ const search = (query: string) =>
     { params: Promise.resolve({}) },
   )
 
-const taskRow = (number: number) => ({
-  id: `id-${number}`,
-  number,
-  title: `task ${number}`,
-  type: 'bug',
-  status: 'open',
-  priority: 'medium',
-  resolution: null,
-  resolution_kind: null,
-  description: null,
-  claimed_by: null,
-  updated_at: '2026-09-21T00:00:00.000Z',
-  external_ref: 'LEGACY-373',
-  project_key: 'CROFT',
-  rank: 1,
-  coverage: 1,
-  widened: false,
-})
-
-describe('search by assignee (CROFT-310)', () => {
+describe('search', () => {
   beforeEach(() => {
     mocks.authenticate.mockReset().mockResolvedValue(actor)
-    mocks.searchAll.mockReset()
-    mocks.searchTasks.mockReset().mockResolvedValue({ rows: [taskRow(131)], widened: false })
-    mocks.resolveAssignee.mockReset()
+    mocks.searchAll.mockReset().mockResolvedValue({ rows: [], widened: false })
   })
 
-  it('resolves the person and narrows to their tasks, which selects the task path', async () => {
-    mocks.resolveAssignee.mockResolvedValue({
-      ok: true,
-      person: { id: 'user-julien', email: 'julien@example.test', name: 'Julien', active: true },
-    })
-
-    const response = await search('q=pool+timeouts&assignee=julien')
+  it('always searches the unified index, whatever task-only filters an older CLI still sends', async () => {
+    const response = await search('q=pool+timeouts&tasksOnly=1&type=bug&status=done&assignee=julien&project=T')
 
     expect(response.status).toBe(200)
-    expect(mocks.resolveAssignee).toHaveBeenCalledWith('julien', 'user-1')
-    // An assignee is a statement about tasks, like a type or a status: it is
-    // not silently dropped by the unified path.
-    expect(mocks.searchAll).not.toHaveBeenCalled()
-    expect(mocks.searchTasks).toHaveBeenCalledWith(
-      'user-1',
-      'pool timeouts',
-      expect.objectContaining({ assignee: 'user-julien' }),
-      20,
-    )
+    expect(mocks.searchAll).toHaveBeenCalledWith('user-1', 'pool timeouts', { kinds: undefined }, 20)
   })
 
-  it('refuses a name that matches nobody rather than reporting the subject as new', async () => {
-    mocks.resolveAssignee.mockResolvedValue({ ok: false, code: 'not_found', error: 'No user julian.' })
+  it('narrows to the kinds asked for', async () => {
+    await search('q=pool+timeouts&kinds=task,subject&limit=5')
 
-    const response = await search('q=pool+timeouts&assignee=julian')
+    expect(mocks.searchAll).toHaveBeenCalledWith('user-1', 'pool timeouts', { kinds: ['task', 'subject'] }, 5)
+  })
 
-    expect(response.status).toBe(404)
-    expect(mocks.searchTasks).not.toHaveBeenCalled()
+  it('asks for a query', async () => {
+    const response = await search('limit=5')
+
+    expect(response.status).toBe(400)
     expect(mocks.searchAll).not.toHaveBeenCalled()
   })
 })

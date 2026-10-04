@@ -40,20 +40,12 @@ export type BoardTask = {
   checkpoint_summary: string | null
   /** The project this task actually lives in — the whole point of this board. */
   project_key: string
-  /**
-   * Every project this task belongs to: its home first, then any secondary
-   * links. Supra-project work is filed once and shown everywhere it applies,
-   * so grouping by project must see all of them, not just the one that
-   * happens to own the ref.
-   */
+  /** The project the task lives in, as a one-element list (what the board filters read). */
   project_keys: string[]
   /** The subject a todo belongs to (ref, title, lab project). Null on an ordinary task. */
   subject: LabTodoSubject | null
   /** The task a todo was handed off to in another tracker, and what that tracker last said about it. */
   handoff: Handoff | null
-  /** Deprecated (0.7): `handoff.ref` / `handoff.status` when the tracker is `cairn`. Removed in 0.8. */
-  cairn_ref: string | null
-  cairn_status: string | null
 }
 
 export type BoardProject = { id: string; key: string; title: string }
@@ -82,7 +74,7 @@ export const listBoardTasks = async (
   // somebody else's private subject is not on the board, nor in its numbers.
   const visible = await visibleTasksOr(viewer.id)
 
-  const [projectsRes, tasksRes, totals, links] = await Promise.all([
+  const [projectsRes, tasksRes, totals] = await Promise.all([
     admin()
       .from('projects')
       .select('id, key, title')
@@ -95,32 +87,19 @@ export const listBoardTasks = async (
       return q.order('updated_at', { ascending: false }).limit(limit)
     })(),
     restrictTo(admin().from('tasks').select('id', { count: 'exact', head: true }), visible).in('status', closed),
-    admin().from('task_projects').select('task_id, project:projects(key)'),
   ])
 
-  type Row = Omit<BoardTask, 'project_key' | 'assignee' | 'subject' | 'handoff' | 'cairn_ref' | 'cairn_status'> & { project: { key: string } | { key: string }[] }
-
-  // Link rows are workspace-wide, just like the tasks and projects above.
-  const guestKeys = new Map<string, string[]>()
-  for (const row of (links.data ?? []) as unknown as {
-    task_id: string
-    project: { key: string } | { key: string }[] | null
-  }[]) {
-    const embedded = row.project
-    const key = Array.isArray(embedded) ? embedded[0]?.key : embedded?.key
-    if (!key) continue
-    guestKeys.set(row.task_id, [...(guestKeys.get(row.task_id) ?? []), key])
-  }
+  type Row = Omit<BoardTask, 'project_key' | 'assignee' | 'subject' | 'handoff'> & { project: { key: string } | { key: string }[] }
 
   const tasks = await withTaskSubjects(
     await withAssignees(
     ((tasksRes.data ?? []) as unknown as Row[]).map((t) => {
       const home = (Array.isArray(t.project) ? t.project[0]?.key : t.project?.key) ?? ''
       return {
-        ...(withHandoff(t) as unknown as Omit<Row, 'project'> & Pick<BoardTask, 'handoff' | 'cairn_ref' | 'cairn_status'>),
+        ...(withHandoff(t) as unknown as Omit<Row, 'project'> & Pick<BoardTask, 'handoff'>),
         preview: t.preview ? t.preview.slice(0, PREVIEW_CHARS) : null,
         project_key: home,
-        project_keys: [home, ...(guestKeys.get(t.id) ?? [])].filter(Boolean),
+        project_keys: [home].filter(Boolean),
       }
     }),
     ),

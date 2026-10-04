@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 /**
  * Handing a todo off to another tracker, through the real route handlers and a
  * real database: link, re-link and take back; the outcome closing the todo
- * once; the tracker owning a handed-off todo's status from then on; the
- * deprecated cairn-link route; and the two lab-only refusals.
+ * once; the tracker owning a handed-off todo's status from then on; and the
+ * lab-only refusal. Also what 0.8 removed: the routes and tables are gone.
  */
 
 const auth = vi.hoisted(() => ({ actor: null as null | Record<string, unknown> }))
@@ -25,8 +27,6 @@ import { POST as releaseRoute } from '@/app/api/v1/tasks/[ref]/release/route'
 import { POST as checkpointRoute } from '@/app/api/v1/tasks/[ref]/checkpoint/route'
 import { POST as taskNoteRoute } from '@/app/api/v1/tasks/[ref]/notes/route'
 import { DELETE as undoRoute, POST as handoffRoute } from '@/app/api/v1/tasks/[ref]/handoff/route'
-import { POST as cairnLinkRoute } from '@/app/api/v1/tasks/[ref]/cairn-link/route'
-import { POST as createProjectRoute } from '@/app/api/v1/projects/route'
 import { POST as createProjectTaskRoute } from '@/app/api/v1/projects/[id]/tasks/route'
 
 const databaseUrl = process.env.DATABASE_URL
@@ -35,7 +35,6 @@ if (!databaseUrl) throw new Error('DATABASE_URL is required for integration test
 const ORIGIN = 'https://croft.example.test'
 const RUN = randomUUID().replace(/[^a-z]/g, '').slice(0, 6)
 const userId = randomUUID()
-const KEY = `HO${RUN.toUpperCase()}`
 
 const asAgent = () => {
   auth.actor = {
@@ -111,7 +110,6 @@ afterAll(async () => {
     await q('delete from tasks where subject_id = any($1::uuid[])', [subjectIds])
     await q('delete from subjects where id = any($1::uuid[])', [subjectIds])
   }
-  await q('delete from projects where key = $1', [KEY])
   if (!todoProjectExisted) await q(`delete from projects where key = 'T' and owner_user_id = $1`, [userId])
   await q('delete from app_users where id = $1', [userId])
   await pool().end()
@@ -126,8 +124,6 @@ describe('linking, re-linking and taking back', () => {
     expect(first.json.data).toMatchObject({
       ref: todo,
       handoff: { tracker: 'github', ref: 'owner/repo#4', url: 'https://github.com/owner/repo/issues/4', status: 'todo' },
-      cairn_ref: null,
-      cairn_status: null,
       noted: false,
       closed: false,
     })
@@ -138,13 +134,13 @@ describe('linking, re-linking and taking back', () => {
     expect(again.handoff).toMatchObject({ tracker: 'github', ref: 'owner/repo#4', status: 'doing', url: 'https://github.com/owner/repo/issues/4' })
 
     // Re-linked elsewhere: nothing of the old link survives that was not sent.
-    const moved = await link(todo, { tracker: 'cairn', ref: 'CAIRN-5' })
-    expect(moved.json.data.handoff).toEqual({ tracker: 'cairn', ref: 'CAIRN-5', url: null, status: null, synced_at: expect.any(String) })
-    expect(moved.json.data).toMatchObject({ cairn_ref: 'CAIRN-5', cairn_status: null })
+    const moved = await link(todo, { tracker: 'linear', ref: 'LIN-5' })
+    expect(moved.json.data.handoff).toEqual({ tracker: 'linear', ref: 'LIN-5', url: null, status: null, synced_at: expect.any(String) })
+    expect(moved.json.data).not.toHaveProperty('cairn_ref')
 
     const notes = (await notesOf(labRef)).filter((n) => n.kind === 'handoff').map((n) => n.note)
     expect(notes).toContain(`${todo} handed off to github as owner/repo#4`)
-    expect(notes).toContain(`${todo} handed off to cairn as CAIRN-5`)
+    expect(notes).toContain(`${todo} handed off to linear as LIN-5`)
     expect(notes.filter((n) => n.includes('owner/repo#4'))).toHaveLength(1)
 
     // The raw columns never leak.
@@ -158,7 +154,7 @@ describe('linking, re-linking and taking back', () => {
 
     const undone = await call(undoRoute, 'DELETE', `/tasks/${todo}/handoff`, { ref: todo })
     expect(undone.status).toBe(200)
-    expect(undone.json.data).toMatchObject({ handoff: null, cairn_ref: null, status: 'todo' })
+    expect(undone.json.data).toMatchObject({ handoff: null, status: 'todo' })
     expect((await q(`select handoff_tracker, handoff_ref, handoff_url, handoff_status, handoff_synced_at from tasks where id = $1`, [undone.json.data.id])).rows[0]).toEqual({
       handoff_tracker: null,
       handoff_ref: null,
@@ -314,60 +310,20 @@ describe('a handed-off todo belongs to its tracker', () => {
   })
 })
 
-describe('the deprecated cairn-link route and alias fields', () => {
-  it('maps to tracker cairn, answers the old field names, and shows in the new ones too', async () => {
-    asAgent()
-    const todo = await fileTodo(labRef, 'Old CLI')
-    const linked = await call(cairnLinkRoute, 'POST', `/tasks/${todo}/cairn-link`, { ref: todo }, { cairnRef: 'cairn-331', cairnStatus: 'doing' })
-    expect(linked.status).toBe(200)
-    expect(linked.json.data).toMatchObject({
-      ref: todo,
-      cairn_ref: 'CAIRN-331',
-      cairn_status: 'doing',
-      handoff: { tracker: 'cairn', ref: 'CAIRN-331', status: 'doing' },
-    })
-
-    const shown = await show(todo)
-    expect(shown).toMatchObject({ cairn_ref: 'CAIRN-331', cairn_status: 'doing', handoff: { tracker: 'cairn', ref: 'CAIRN-331' } })
-    expect((await q('select handoff_tracker from tasks where id = $1', [shown.id])).rows[0].handoff_tracker).toBe('cairn')
-
-    // It is a hand-off like any other: status is the tracker's.
-    expect((await call(patchTaskRoute, 'PATCH', `/tasks/${todo}`, { ref: todo }, { status: 'doing' })).json.code).toBe('handed_off')
-
-    const ended = await call(cairnLinkRoute, 'POST', `/tasks/${todo}/cairn-link`, { ref: todo }, { cairnRef: 'CAIRN-331', cairnStatus: 'done', cairnResolution: 'Shipped.' })
-    expect(ended.json.data).toMatchObject({ status: 'done', noted: true, closed: true })
-    expect((await show(todo)).resolution).toBe('Closed in cairn as CAIRN-331: Shipped.')
-
-    // The old body shape still refuses a bad ref and a private subject the same way.
-    expect((await call(cairnLinkRoute, 'POST', `/tasks/${todo}/cairn-link`, { ref: todo }, { cairnRef: 'T-41' })).status).toBe(400)
-    const hidden = await fileTodo(privateRef, 'Old CLI, private')
-    const refused = await call(cairnLinkRoute, 'POST', `/tasks/${hidden}/cairn-link`, { ref: hidden }, { cairnRef: 'CAIRN-332' })
-    expect(refused.json.code).toBe('subject_not_published')
-  })
-
-  it('refreshes a link it already has without --force, and never overwrites another tracker', async () => {
+describe('a hand-off outside the first link', () => {
+  it('refreshes a link it already has without --force', async () => {
     asAgent()
     // A private subject's todo handed off with --force: each sync after that
     // refreshes the same link and must not be refused for it.
     const hidden = await fileTodo(privateRef, 'Forced once')
-    const forced = await call(handoffRoute, 'POST', `/tasks/${hidden}/handoff`, { ref: hidden }, { tracker: 'cairn', ref: 'CAIRN-340', force: true })
+    const forced = await call(handoffRoute, 'POST', `/tasks/${hidden}/handoff`, { ref: hidden }, { tracker: 'linear', ref: 'LIN-340', force: true })
     expect(forced.status).toBe(200)
-    const refreshed = await call(handoffRoute, 'POST', `/tasks/${hidden}/handoff`, { ref: hidden }, { tracker: 'cairn', ref: 'CAIRN-340', status: 'doing' })
+    const refreshed = await call(handoffRoute, 'POST', `/tasks/${hidden}/handoff`, { ref: hidden }, { tracker: 'linear', ref: 'LIN-340', status: 'doing' })
     expect(refreshed.status).toBe(200)
-    expect(refreshed.json.data.handoff).toMatchObject({ ref: 'CAIRN-340', status: 'doing' })
+    expect(refreshed.json.data.handoff).toMatchObject({ ref: 'LIN-340', status: 'doing' })
     // A different ref is leaving again, and needs --force again.
-    const moved = await call(handoffRoute, 'POST', `/tasks/${hidden}/handoff`, { ref: hidden }, { tracker: 'cairn', ref: 'CAIRN-341' })
+    const moved = await call(handoffRoute, 'POST', `/tasks/${hidden}/handoff`, { ref: hidden }, { tracker: 'linear', ref: 'LIN-341' })
     expect(moved.json.code).toBe('subject_not_published')
-    const legacyRefresh = await call(cairnLinkRoute, 'POST', `/tasks/${hidden}/cairn-link`, { ref: hidden }, { cairnRef: 'CAIRN-340', cairnStatus: 'in-review' })
-    expect(legacyRefresh.status).toBe(200)
-
-    // A 0.6 CLI's push only knows Cairn: it must not replace a GitHub hand-off.
-    const onGithub = await fileTodo(labRef, 'On GitHub')
-    expect((await call(handoffRoute, 'POST', `/tasks/${onGithub}/handoff`, { ref: onGithub }, { tracker: 'github', ref: 'acme/app#7' })).status).toBe(200)
-    const overwrite = await call(cairnLinkRoute, 'POST', `/tasks/${onGithub}/cairn-link`, { ref: onGithub }, { cairnRef: 'CAIRN-342' })
-    expect(overwrite.status).toBe(409)
-    expect(overwrite.json.code).toBe('conflict')
-    expect((await show(onGithub)).handoff).toMatchObject({ tracker: 'github', ref: 'acme/app#7' })
   })
 })
 
@@ -396,13 +352,67 @@ describe('lab only', () => {
     expect(row.subject_id).toBe(parentRow.subject_id)
     expect(row.subject_id).not.toBeNull()
   })
+})
 
-  it('refuses a new task project with 403 forbidden, and creates nothing', async () => {
+describe('removed in 0.8', () => {
+  const removedRoutes = [
+    'src/app/api/v1/context',
+    'src/app/api/v1/next',
+    'src/app/api/v1/activity',
+    'src/app/api/v1/projects/route.ts',
+    'src/app/api/v1/projects/[id]/route.ts',
+    'src/app/api/v1/projects/[id]/repos',
+    'src/app/api/v1/tasks/[ref]/activity',
+    'src/app/api/v1/tasks/[ref]/cairn-link',
+    'src/app/api/v1/tasks/[ref]/dependencies',
+    'src/app/api/v1/tasks/[ref]/mentions',
+  ]
+
+  it.each(removedRoutes)('%s is gone', (path) => {
+    expect(existsSync(join(process.cwd(), path))).toBe(false)
+  })
+
+  it('left no deprecated alias on a todo or a lab project', async () => {
     asAgent()
-    const refused = await call(createProjectRoute, 'POST', '/projects', {}, { key: KEY, title: 'Not welcome' })
-    expect(refused.status).toBe(403)
-    expect(refused.json.code).toBe('forbidden')
-    expect(refused.json.error).toBe("Croft's only task project is its todo list; group subjects with lab projects instead.")
-    expect((await q('select 1 from projects where key = $1', [KEY])).rowCount).toBe(0)
+    const todo = await fileTodo(labRef, 'No aliases')
+    await link(todo, { tracker: 'linear', ref: 'LIN-1', status: 'doing' })
+    const shown = await show(todo)
+    for (const field of ['cairn_ref', 'cairn_status', 'cairn_synced_at']) expect(shown).not.toHaveProperty(field)
+    const listed = await q('select column_name from information_schema.columns where table_name = $1', ['lab_projects'])
+    expect(listed.rows.map((r) => r.column_name)).not.toContain('cairn_key')
+  })
+
+  it('dropped the tables, functions and triggers behind the removed features, and left the rest', async () => {
+    const tables = await q(
+      `select table_name from information_schema.tables
+        where table_schema = current_schema() and table_name = any($1::text[])`,
+      [['task_mentions', 'project_repos', 'task_projects', 'project_former_keys', 'task_deps']],
+    )
+    expect(tables.rows).toEqual([])
+
+    const functions = await q(
+      `select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = current_schema() and p.proname = any($1::text[])`,
+      [[
+        'task_mentions_refresh', 'task_mentions_from_note', 'task_mentions_from_comment', 'task_mentions_from_task',
+        'guard_project_key_namespace', 'reject_home_project_link', 'project_rename_key', 'move_task', 'search_tasks',
+      ]],
+    )
+    expect(functions.rows).toEqual([])
+
+    // No function that stayed still names anything that went.
+    const dangling = await q(
+      `select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = current_schema() and p.prosrc ~* '(task_deps|task_mentions|task_projects|project_repos|project_former_keys|search_tasks|move_task)'`,
+    )
+    expect(dangling.rows).toEqual([])
+
+    // What the lab runs on is still there.
+    const kept = await q(
+      `select table_name from information_schema.tables
+        where table_schema = current_schema() and table_name = any($1::text[])`,
+      [['projects', 'tasks', 'task_notes', 'task_comments', 'task_activity_events', 'subjects']],
+    )
+    expect(kept.rows).toHaveLength(6)
   })
 })

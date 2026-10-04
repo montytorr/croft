@@ -24,7 +24,6 @@ export const activityFeed = async (
   userId: string,
   filters: {
     before?: string
-    project?: string
     actor?: string
     kinds?: string[]
     limit: number
@@ -34,7 +33,7 @@ export const activityFeed = async (
     p_owner: userId,
     p_before: filters.before ?? null,
     p_limit: filters.limit,
-    p_project: filters.project ?? null,
+    p_project: null,
     p_actor: filters.actor ?? null,
     p_kinds: filters.kinds && filters.kinds.length > 0 ? filters.kinds : null,
   })
