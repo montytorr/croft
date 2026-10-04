@@ -12,7 +12,7 @@ and adds one bootstrap file, `CROFT.md`:
 
 ```markdown
 ## Croft — the lab
-Exploring or proving an idea → croft check first; changing a repo for real → a Cairn task (croft push).
+Lab work (exploring, proving an idea, a subject's todos) → Croft: croft check first. Croft holds lab work only.
 
 <croft context --brief for the workspace: subjects per stage, yours in flight — five lines at most>
 ```
@@ -59,14 +59,6 @@ bundle. A hook anywhere else is enabled in config and never loaded, without an e
 `hooks.path` is the webhook URL path, not a hook directory. That is why the copy lives at a
 fixed path under `~/.croft` and is linked by OpenClaw's own command.
 
-## With Cairn on the same gateway
-
-When Cairn's `cairn-briefing` hook is enabled, Cairn's briefing carries Croft's block, and
-two briefings competing for the top of every session is how both get skimmed. So the
-installer does not link `croft-briefing` there and prints `briefing: carried by Cairn`; if
-it is already linked, it says to disable it (`hooks.internal.entries.croft-briefing.enabled:
-false`).
-
 ## Identity and the skill
 
 - **Key:** OpenClaw gets its own `CROFT_API_KEY_OPENCLAW` in `~/.croft/env`. `croft setup`
@@ -89,6 +81,6 @@ Before evaluating, prototyping or reading up on anything: `croft check "<subject
 File a subject for what is new, break it into todos, log findings and dead ends
 (`--kind attempt`), and conclude it: completed and dropped stages need `--conclusion`.
 `claim` exiting 9 means another agent holds it: pick other work.
-Committed work on a real repository belongs in Cairn: `croft push T-n --to <KEY>`.
+Work that isn't lab work belongs in your task tracker; a todo that becomes committed work is handed off: `croft handoff T-n`.
 The skill has the full lifecycle; `croft --help` has every verb.
 ````

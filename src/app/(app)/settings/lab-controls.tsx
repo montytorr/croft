@@ -1,12 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { Button, InlineInput } from '@/components/ui/control'
 import { Spinner } from '@/components/spinner'
 import { CATEGORY_LABEL } from '@/components/lab/stage'
 import { STAGE_CATEGORIES, type StageCategory } from '@/lib/lab/types'
-import { LAB_PRESETS as PRESETS, normaliseCairnKey } from '@/lib/lab/ui-colours'
+import { HANDOFF_TRACKER_SUGGESTIONS, LAB_PRESETS as PRESETS, parseHandoffDraft } from '@/lib/lab/ui-colours'
 import { cn } from '@/lib/utils'
 
 /** The datalist every lab swatch offers as its starting colours. Render once per page. */
@@ -115,33 +115,110 @@ export const EditableName = ({
   )
 }
 
+export const HANDOFF_HINT =
+  "Where `croft handoff` sends this project's todos: a tracker and a target in it, e.g. cairn + CAIRN, or github + owner/repo."
+
+/** The two inputs of a hand-off: a tracker (free text, with suggestions) and a target in it. */
+export const HandoffInputs = ({
+  tracker,
+  target,
+  onTracker,
+  onTarget,
+  onKeyDown,
+  autoFocus,
+  className,
+}: {
+  tracker: string
+  target: string
+  onTracker: (value: string) => void
+  onTarget: (value: string) => void
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void
+  autoFocus?: boolean
+  className?: string
+}) => {
+  const listId = useId()
+  return (
+    <>
+      <InlineInput
+        autoFocus={autoFocus}
+        value={tracker}
+        list={listId}
+        onChange={(e) => onTracker(e.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder="tracker"
+        aria-label="Hand-off tracker"
+        title={HANDOFF_HINT}
+        maxLength={32}
+        spellCheck={false}
+        autoCapitalize="none"
+        className={cn('h-[1.625rem] w-[6.5rem] font-mono text-[0.75rem]', className)}
+      />
+      <datalist id={listId}>
+        {HANDOFF_TRACKER_SUGGESTIONS.map((name) => (
+          <option key={name} value={name} />
+        ))}
+      </datalist>
+      <InlineInput
+        value={target}
+        onChange={(e) => onTarget(e.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder="target"
+        aria-label="Hand-off target"
+        title={HANDOFF_HINT}
+        maxLength={100}
+        spellCheck={false}
+        autoCapitalize="none"
+        className={cn('h-[1.625rem] w-[8.5rem] font-mono text-[0.75rem]', className)}
+      />
+    </>
+  )
+}
+
 /** The add row shared by stages, tags and projects. */
 export const AddRow = ({
   placeholder,
   withCategory,
-  withCairnKey,
+  withHandoff,
   onAdd,
 }: {
   placeholder: string
   withCategory?: boolean
-  /** An optional Cairn project key beside the name (lab projects). */
-  withCairnKey?: boolean
-  onAdd: (input: { name: string; color: string; category: StageCategory; cairnKey: string | null }) => Promise<boolean>
+  /** An optional hand-off (tracker and target) beside the name (lab projects). */
+  withHandoff?: boolean
+  onAdd: (input: {
+    name: string
+    color: string
+    category: StageCategory
+    handoffTracker: string | null
+    handoffTarget: string | null
+  }) => Promise<boolean>
 }) => {
   const [name, setName] = useState('')
   const [color, setColor] = useState<string>(PRESETS[0])
   const [category, setCategory] = useState<StageCategory>('planned')
-  const [cairnKey, setCairnKey] = useState('')
+  const [tracker, setTracker] = useState('')
+  const [target, setTarget] = useState('')
+  const [handoffError, setHandoffError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
 
   const add = async () => {
     if (!name.trim() || pending) return
+    const handoff = parseHandoffDraft(tracker, target)
+    if (!handoff.ok) return setHandoffError(handoff.error)
+    setHandoffError(null)
     setPending(true)
-    const ok = await onAdd({ name: name.trim(), color, category, cairnKey: normaliseCairnKey(cairnKey) })
+    const ok = await onAdd({
+      name: name.trim(),
+      color,
+      category,
+      handoffTracker: handoff.tracker,
+      handoffTarget: handoff.target,
+    })
     setPending(false)
     if (ok) {
       setName('')
-      setCairnKey('')
+      setTracker('')
+      setTarget('')
       const at = PRESETS.findIndex((c) => c === color)
       setColor(PRESETS[(at + 1) % PRESETS.length]!)
     }
@@ -158,17 +235,14 @@ export const AddRow = ({
         aria-label={placeholder}
         className="h-[1.75rem] min-w-[10rem] flex-1"
       />
-      {withCairnKey ? (
-        <InlineInput
-          value={cairnKey}
-          onChange={(e) => setCairnKey(e.target.value.toUpperCase())}
+      {withHandoff ? (
+        <HandoffInputs
+          tracker={tracker}
+          target={target}
+          onTracker={setTracker}
+          onTarget={setTarget}
           onKeyDown={(e) => e.key === 'Enter' && void add()}
-          placeholder="Cairn key"
-          aria-label="Cairn project key (optional)"
-          title="The Cairn project that receives this project's todos on croft push. Optional."
-          maxLength={10}
-          spellCheck={false}
-          className="h-[1.75rem] w-[6.5rem] font-mono text-[0.75rem] uppercase"
+          className="h-[1.75rem]"
         />
       ) : null}
       {withCategory ? (
@@ -188,7 +262,7 @@ export const AddRow = ({
       <Button size="sm" variant="primary" onClick={() => void add()} disabled={!name.trim() || pending} className="h-[1.75rem] px-3">
         {pending ? <Spinner /> : <><Plus size={13} aria-hidden /> Add</>}
       </Button>
+      {handoffError ? <p className="text-danger enter-rise w-full text-[0.75rem]">{handoffError}</p> : null}
     </div>
   )
 }
-

@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
-import { findTask, refuseArchived, TASK_LIST_FIELDS } from '@/lib/api/tasks'
+import { findTask, refOfRow, refuseArchived, TASK_LIST_FIELDS } from '@/lib/api/tasks'
+import { refuseHandedOff } from '@/lib/api/handoff-shape'
 import { takeTask } from '@/lib/api/claim'
 import { withAssignee } from '@/lib/api/people'
 import { CLAIM_LEASE_SECONDS } from '@/lib/utils'
@@ -31,6 +32,10 @@ export const POST = route<{ ref: string }, z.infer<typeof claimBody>>({
     if (!task) return fail('not_found', `No task ${params.ref}.`)
     const archived = refuseArchived(task)
     if (archived) return archived
+
+    // Claiming moves a todo into work, and a handed-off todo's status is the other tracker's.
+    const handedOff = refuseHandedOff(task, refOfRow(task) ?? params.ref)
+    if (handedOff) return handedOff
 
     // A terminal task is settled history, not available work. Keep the public
     // claim endpoint from reopening a task that already has a resolution; the

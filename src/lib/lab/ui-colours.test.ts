@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { CAIRN_KEY, LAB_PRESETS, matchProjectFilter, nextPreset, normaliseCairnKey } from './ui-colours'
+import {
+  HANDOFF_TARGET, HANDOFF_TRACKER, LAB_PRESETS, matchProjectFilter, nextPreset, normaliseHandoffTarget, normaliseHandoffTracker,
+  parseHandoffDraft,
+} from './ui-colours'
 
 const projects = [
   { id: 'p1', name: 'Trig' },
@@ -25,18 +28,31 @@ describe('the lab project filter from the URL', () => {
   })
 })
 
-describe('a typed Cairn key', () => {
-  it('is trimmed and upper-cased, and empty means none', () => {
-    expect(normaliseCairnKey(' trig ')).toBe('TRIG')
-    expect(normaliseCairnKey('   ')).toBeNull()
+describe('a typed hand-off', () => {
+  it('lower-cases the tracker, keeps the target as typed, and reads empty as none', () => {
+    expect(normaliseHandoffTracker(' GitHub ')).toBe('github')
+    expect(normaliseHandoffTracker('   ')).toBeNull()
+    expect(normaliseHandoffTarget(' Owner/Repo ')).toBe('Owner/Repo')
+    expect(normaliseHandoffTarget('')).toBeNull()
   })
 
-  it('is checked against the same shape the API enforces', () => {
-    expect(CAIRN_KEY.test('TRIG')).toBe(true)
-    expect(CAIRN_KEY.test('C2')).toBe(true)
-    expect(CAIRN_KEY.test('T')).toBe(false)
-    expect(CAIRN_KEY.test('2C')).toBe(false)
-    expect(CAIRN_KEY.test('ABCDEFGHIJK')).toBe(false)
+  it('is checked against the same shapes the API enforces', () => {
+    expect(HANDOFF_TRACKER.test('cairn')).toBe(true)
+    expect(HANDOFF_TRACKER.test('a')).toBe(false)
+    expect(HANDOFF_TRACKER.test('2fa')).toBe(false)
+    expect(HANDOFF_TARGET.test('CAIRN')).toBe(true)
+    expect(HANDOFF_TARGET.test('owner/repo.js')).toBe(true)
+    expect(HANDOFF_TARGET.test('/repo')).toBe(false)
+    expect(HANDOFF_TARGET.test('two words')).toBe(false)
+  })
+
+  it('needs both or neither, and neither clears it', () => {
+    expect(parseHandoffDraft('Cairn', ' TRIG ')).toEqual({ ok: true, tracker: 'cairn', target: 'TRIG' })
+    expect(parseHandoffDraft('', '  ')).toEqual({ ok: true, tracker: null, target: null })
+    expect(parseHandoffDraft('github', '').ok).toBe(false)
+    expect(parseHandoffDraft('', 'owner/repo').ok).toBe(false)
+    expect(parseHandoffDraft('git hub', 'owner/repo').ok).toBe(false)
+    expect(parseHandoffDraft('github', 'two words').ok).toBe(false)
   })
 })
 

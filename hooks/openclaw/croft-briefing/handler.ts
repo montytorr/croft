@@ -12,9 +12,6 @@
  * stay small. Unlike that hook it still injects the rule when the CLI fails,
  * because an agent that cannot reach Croft should still know when to use it.
  *
- * Not linked when Cairn's own cairn-briefing hook is: Cairn's briefing then
- * carries Croft's block (scripts/install-hooks.mjs).
- *
  * No imports from OpenClaw: the hook is linked from outside its tree, so the
  * types below are the subset of its documented event this reads.
  */
@@ -32,7 +29,7 @@ type HookEvent = {
 export const FILE_NAME = 'CROFT.md'
 
 export const RULE = `## Croft — the lab
-Exploring or proving an idea → croft check first; changing a repo for real → a Cairn task (croft push).`
+Lab work (exploring, proving an idea, a subject's todos) → Croft: croft check first. Croft holds lab work only.`
 
 const timeoutMs = () => {
   const value = Number(process.env.CROFT_HOOK_TIMEOUT_MS ?? 3000)

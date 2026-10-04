@@ -7,9 +7,6 @@
  * format. Hermes Agent by Nous Research injects context from `pre_llm_call`,
  * whose response protocol is different.
  *
- * Installed only where Cairn's own SessionStart hook is absent: when it is
- * there, Cairn's briefing carries Croft's block and this one stays out.
- *
  *   1. Never block. Every failure path prints nothing and exits 0, and the CLI
  *      gets a hard deadline.
  *   2. Never speak when there is nothing to say.
@@ -36,11 +33,11 @@ const cli = () => {
 const CLI = cli()
 
 /**
- * A summariser run (Cairn's, Quarry's, ours or any agent-memory tool's) is a
- * headless model call started by a hook. Briefing it wastes its context and,
- * worse, can leak into what it summarises.
+ * A summariser run (ours, or any agent-memory tool's, which sets the shared
+ * flag) is a headless model call started by a hook. Briefing it wastes its
+ * context and, worse, can leak into what it summarises.
  */
-const SUMMARISER_ENVS = ['AGENT_MEMORY_SUMMARISER', 'CAIRN_SUMMARISER', 'QUARRY_SUMMARISER', 'CROFT_SUMMARISER']
+const SUMMARISER_ENVS = ['AGENT_MEMORY_SUMMARISER', 'CROFT_SUMMARISER']
 
 const readStdin = async () => {
   let raw = ''

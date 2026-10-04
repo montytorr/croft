@@ -45,15 +45,31 @@ export type Tag = {
 
 /**
  * A lab project: a curated grouping of subjects (Trig, Croft, Dispofi…), each
- * optionally mapped to the Cairn project that receives its todos on `croft push`.
+ * optionally naming where `croft handoff` sends its todos: a tracker (`cairn`,
+ * `github`) and a target in it (a project key, an `owner/repo`).
  * Not a task container: todos keep their `T-n` refs whatever their subject's project.
  */
 export type LabProject = {
   id: string
   name: string
   color: string
+  handoff_tracker: string | null
+  handoff_target: string | null
+  /** Deprecated (0.7): `handoff_target` when `handoff_tracker` is `cairn`, else null. Removed in 0.8. */
   cairn_key: string | null
   position: number
+}
+
+/**
+ * A todo handed off to another tracker: which task it became there, and what
+ * that tracker last said about it. From then on the tracker owns its status.
+ */
+export type Handoff = {
+  tracker: string
+  ref: string
+  url: string | null
+  status: string | null
+  synced_at: string | null
 }
 
 export type SubjectOwner = { id: string; name: string } | null
@@ -107,6 +123,8 @@ export type SubjectTodo = {
   title: string
   status: string
   claimed_by: string | null
+  handoff: Handoff | null
+  /** Deprecated (0.7): `handoff.ref` / `handoff.status` when the tracker is `cairn`. Removed in 0.8. */
   cairn_ref: string | null
   cairn_status: string | null
   updated_at: string

@@ -8,7 +8,7 @@ import { spawn } from 'node:child_process'
 
 /**
  * The lab verbs: subjects (S-n), their todos (T-n, the task verbs), the
- * pairing with Cairn, and the five-line briefing. Each case asserts what
+ * hand-offs to a task tracker, and the five-line briefing. Each case asserts what
  * reached the wire as well as what was printed.
  */
 const servers: Server[] = []
@@ -128,9 +128,9 @@ describe('croft subject', () => {
       ...Array.from({ length: 8 }, (_, i) => ({ id: `m${i}`, kind: 'note', note: `note ${i}`, actor_type: 'agent', actor_id: 'codex', created_at: `2026-09-1${i}T10:00:00Z` })),
     ]
     const todos = [
-      { id: 'a', ref: 'T-41', number: 41, title: 'Benchmark HNSW', status: 'doing', claimed_by: 'codex', cairn_ref: null, cairn_status: null, updated_at: '' },
-      { id: 'b', ref: 'T-42', number: 42, title: 'Ship the index', status: 'todo', claimed_by: null, cairn_ref: 'CAIRN-331', cairn_status: 'doing', updated_at: '' },
-      { id: 'c', ref: 'T-40', number: 40, title: 'Read the paper', status: 'done', claimed_by: null, cairn_ref: null, cairn_status: null, updated_at: '' },
+      { id: 'a', ref: 'T-41', number: 41, title: 'Benchmark HNSW', status: 'doing', claimed_by: 'codex', handoff: null, updated_at: '' },
+      { id: 'b', ref: 'T-42', number: 42, title: 'Ship the index', status: 'todo', claimed_by: null, handoff: { tracker: 'cairn', ref: 'CAIRN-331', url: null, status: 'doing', synced_at: null }, updated_at: '' },
+      { id: 'c', ref: 'T-40', number: 40, title: 'Read the paper', status: 'done', claimed_by: null, handoff: null, updated_at: '' },
     ]
     const seen: Seen[] = []
     const base = await serve((req) => {
@@ -153,7 +153,7 @@ describe('croft subject', () => {
     expect(stdout).toContain('S-12  exploring  pgvector for recall')
     expect(stdout).toContain('Use pgvector with HNSW.')
     expect(stdout).toContain('todos: 2 open / 1 closed')
-    expect(stdout).toContain('T-42  todo  Ship the index  [Cairn CAIRN-331 doing]')
+    expect(stdout).toContain('T-42  todo  Ship the index  [handed off cairn:CAIRN-331 doing]')
     expect(stdout).not.toContain('Read the paper')
     expect(stdout).toContain('HNSW recall is 0.97')
     expect(stdout).not.toContain('note 0')
@@ -311,19 +311,19 @@ describe('croft subject', () => {
   })
 })
 
-const trig = { id: 'p1', name: 'Trig', color: '#6b7fa6', cairn_key: 'TRIG', position: 0 }
+const trig = { id: 'p1', name: 'Trig', color: '#6b7fa6', handoff_tracker: 'cairn', handoff_target: 'TRIG', position: 0 }
 
 describe('lab projects', () => {
-  it('croft projects lists the lab projects with their Cairn key and subject count, in order', async () => {
+  it('croft projects lists the lab projects with their hand-off and subject count, in order', async () => {
     const seen: Seen[] = []
     const base = await serve(() => [
-      { id: 'p2', name: 'Croft', color: '#888888', cairn_key: null, position: 1, subjects: 0 },
+      { id: 'p2', name: 'Croft', color: '#888888', handoff_tracker: null, handoff_target: null, position: 1, subjects: 0 },
       { ...trig, subjects: 4 },
     ], seen)
     const { code, stdout } = await run(['projects'], base)
     expect(code).toBe(0)
     expect(seen[0]).toMatchObject({ method: 'GET', path: '/api/v1/lab-projects' })
-    expect(stdout.split('\n').slice(0, 4)).toEqual(['#2', 'project\tcairn\tsubjects', 'Trig\tTRIG\t4', 'Croft\t\t0'])
+    expect(stdout.split('\n').slice(0, 4)).toEqual(['#2', 'project\thandoff\tsubjects', 'Trig\tcairn:TRIG\t4', 'Croft\t\t0'])
   })
 
   it('project list is where the task containers went', async () => {
@@ -356,10 +356,10 @@ describe('lab projects', () => {
     expect(seen.map((s) => s.body)).toEqual([{ project: null }, { project: 'Trig' }])
   })
 
-  it('subject show prints the project and its Cairn key', async () => {
+  it('subject show prints the project and its hand-off', async () => {
     const base = await serve((req) => (req.path.endsWith('/notes') || req.path.endsWith('/todos') ? [] : subject({ project: trig })))
     const { stdout } = await run(['subject', 'show', 'S-12'], base)
-    expect(stdout).toContain('project Trig (Cairn TRIG)')
+    expect(stdout).toContain('project Trig (hand-off cairn:TRIG)')
   })
 })
 
@@ -467,6 +467,16 @@ const args = process.argv.slice(2)
 let input = ''
 try { input = readFileSync(0, 'utf8') } catch {}
 appendFileSync(${JSON.stringify(join(dir, 'calls.jsonl'))}, JSON.stringify({ args, input }) + '\\n')
+if (args[0] === 'add' && process.env.FAKE_REJECT_EXTERNAL && args.includes('--external-ref')) {
+  process.stderr.write('error: unknown flag --external-ref\\n')
+  process.exit(2)
+}
+if (args[0] === 'add' && process.env.FAKE_DUPLICATE) {
+  process.stderr.write('already filed as CAIRN-331 (same --external-ref); nothing was created or claimed\\n')
+  console.log('ref\\tCAIRN-331')
+  console.log('duplicate\\ttrue')
+  process.exit(0)
+}
 if (args[0] === 'add') {
   process.stderr.write('claimed nothing\\n')
   console.log('id\\tabc')
@@ -480,86 +490,302 @@ if (args[0] === 'add') {
   return { bin, calls }
 }
 
-describe('croft push --to', () => {
+/** A stand-in for `gh`: issue 7 is closed as completed, 8 is open, 9 was closed as not planned. */
+const fakeGh = async (dir: string) => {
+  const bin = join(dir, 'gh.mjs')
+  await writeFile(bin, `
+import { appendFileSync, readFileSync } from 'node:fs'
+const args = process.argv.slice(2)
+let input = ''
+try { input = readFileSync(0, 'utf8') } catch {}
+appendFileSync(${JSON.stringify(join(dir, 'gh-calls.jsonl'))}, JSON.stringify({ args, input }) + '\\n')
+if (args[0] === 'issue' && args[1] === 'create') {
+  console.log('https://github.com/acme/app/issues/7')
+} else if (args[0] === 'issue' && args[1] === 'view') {
+  const n = args[2]
+  const state = n === '8' ? 'OPEN' : 'CLOSED'
+  const stateReason = n === '9' ? 'NOT_PLANNED' : n === '10' ? 'DUPLICATE' : n === '8' ? '' : 'COMPLETED'
+  console.log(JSON.stringify({ state, stateReason, url: 'https://github.com/acme/app/issues/' + n }))
+}
+`)
+  const calls = async () => (await readFile(join(dir, 'gh-calls.jsonl'), 'utf8')).trim().split('\n').map((l) => JSON.parse(l))
+  return { bin, calls }
+}
+
+describe('croft handoff', () => {
   const todo = { id: 'a', number: 41, project: { key: 'T' }, title: 'Ship the index', type: 'spike', description: 'Build it behind a flag.', subject: { ref: 'S-12' } }
+  const linked = { handoff: { tracker: 'cairn', ref: 'CAIRN-331', url: null, status: 'todo', synced_at: null } }
+  const hostOf = (base: string) => new URL(base).host
 
-  it('files the todo in Cairn with its label and body, then records the link', async () => {
-    const dir = await tempDir('croft-cairn-')
+  it('files the todo through the adapter with an external ref, then records the link', async () => {
+    const dir = await tempDir('croft-tracker-')
     const cairn = await fakeCairn(dir)
     const seen: Seen[] = []
-    const base = await serve((req) => (req.method === 'GET' ? todo : { cairn_ref: 'CAIRN-331' }), seen)
-    const { code, stdout, stderr } = await run(['push', 'T-41', '--to', 'CAIRN'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
+    const base = await serve((req) => (req.method === 'GET' ? todo : linked), seen)
+    const { code, stdout, stderr } = await run(['handoff', 'T-41', '--tracker', 'cairn', '--to', 'CAIRN'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
     expect(code, stderr).toBe(0)
     const [call] = await cairn.calls()
-    expect(call.args).toEqual(['add', 'Ship the index', '--project', 'CAIRN', '--type', 'spike', '--label', 'croft:T-41', '--body', '-', '--no-start'])
-    expect(call.input).toBe('Build it behind a flag.\n\nFrom Croft T-41 (subject S-12)')
-    expect(posts(seen, '/api/v1/tasks/T-41/cairn-link')[0]!.body).toEqual({ cairnRef: 'CAIRN-331' })
-    expect(stdout).toContain('T-41\tCAIRN-331\tS-12\tShip the index')
-    expect(stderr).toContain('Cairn owns its status from here')
+    const url = `${base}/projects/T/tasks/41`
+    expect(call.args).toEqual([
+      'add', 'Ship the index', '--project', 'CAIRN', '--type', 'spike', '--body', '-', '--no-start',
+      '--external-ref', `croft:${hostOf(base)}/T-41`, '--external-url', url,
+    ])
+    expect(call.input).toBe(`Build it behind a flag.\n\nFrom Croft T-41: ${url}`)
+    expect(posts(seen, '/api/v1/tasks/T-41/handoff')[0]!.body).toEqual({ tracker: 'cairn', ref: 'CAIRN-331' })
+    expect(stdout).toContain('T-41\tcairn\tCAIRN-331\tS-12\tShip the index')
+    expect(stderr).toContain('cairn owns its status from here')
   })
 
-  it('says plainly when there is no cairn CLI, and files nothing', async () => {
-    const seen: Seen[] = []
-    const base = await serve(() => todo, seen)
-    const { code, stderr } = await run(['push', 'T-41', '--to', 'CAIRN'], base)
-    expect(code).toBe(1)
-    expect(stderr).toContain('`cairn` is not in ~/.local/bin or on PATH')
-    expect(stderr).toContain('CROFT_CAIRN_BIN')
-    expect(seen).toHaveLength(0)
-  })
-
-  it('refuses a todo that is already paired', async () => {
-    const dir = await tempDir('croft-cairn-')
-    const cairn = await fakeCairn(dir)
-    const base = await serve(() => ({ ...todo, cairn_ref: 'CAIRN-300' }))
-    const { code, stderr } = await run(['push', 'T-41', '--to', 'CAIRN'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
-    expect(code).toBe(1)
-    expect(stderr).toContain('T-41 is already paired with CAIRN-300')
-  })
-
-  it('without --to files it under the Cairn key of its subject\'s lab project', async () => {
-    const dir = await tempDir('croft-cairn-')
+  it('retries with a label when the installed cairn does not know external refs', async () => {
+    const dir = await tempDir('croft-tracker-')
     const cairn = await fakeCairn(dir)
     const seen: Seen[] = []
-    const withKey = { ...todo, subject: { ref: 'S-12', project: { name: 'Trig', cairn_key: 'TRIG' } } }
-    const base = await serve((req) => (req.method === 'GET' ? withKey : { cairn_ref: 'CAIRN-331' }), seen)
-    const { code, stderr } = await run(['push', 'T-41'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
+    const base = await serve((req) => (req.method === 'GET' ? todo : linked), seen)
+    const { code, stderr } = await run(['handoff', 'T-41', '--tracker', 'cairn', '--to', 'CAIRN'], base, {
+      env: { CROFT_CAIRN_BIN: cairn.bin, FAKE_REJECT_EXTERNAL: '1' },
+    })
     expect(code, stderr).toBe(0)
-    const [call] = await cairn.calls()
-    expect(call.args.slice(0, 4)).toEqual(['add', 'Ship the index', '--project', 'TRIG'])
-    expect(stderr).toContain("filing in TRIG, Trig's Cairn project")
-    expect(posts(seen, '/api/v1/tasks/T-41/cairn-link')).toHaveLength(1)
+    const calls = await cairn.calls()
+    expect(calls).toHaveLength(2)
+    expect(calls[1].args).toEqual([
+      'add', 'Ship the index', '--project', 'CAIRN', '--type', 'spike', '--body', '-', '--no-start', '--label', 'croft:T-41',
+    ])
+    expect(posts(seen, '/api/v1/tasks/T-41/handoff')).toHaveLength(1)
+  })
 
-    // An explicit --to still wins.
-    const again = await run(['push', 'T-41', '--to', 'OTHER'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
+  it('files an issue through gh, with a footer back to the todo', async () => {
+    const dir = await tempDir('croft-tracker-')
+    const gh = await fakeGh(dir)
+    const seen: Seen[] = []
+    const base = await serve((req) => (req.method === 'GET' ? todo : {}), seen)
+    const { code, stderr } = await run(['handoff', 'T-41', '--tracker', 'github', '--to', 'acme/app'], base, { env: { CROFT_GH_BIN: gh.bin } })
+    expect(code, stderr).toBe(0)
+    const [call] = await gh.calls()
+    expect(call.args).toEqual(['issue', 'create', '--repo=acme/app', '--title=Ship the index', '--body-file', '-'])
+    expect(call.input).toBe(`Build it behind a flag.\n\n---\n\nFrom Croft T-41: ${base}/projects/T/tasks/41`)
+    expect(posts(seen, '/api/v1/tasks/T-41/handoff')[0]!.body).toEqual({
+      tracker: 'github', ref: 'acme/app#7', url: 'https://github.com/acme/app/issues/7',
+    })
+  })
+
+  it('without flags goes where its subject\'s lab project says', async () => {
+    const dir = await tempDir('croft-tracker-')
+    const gh = await fakeGh(dir)
+    const seen: Seen[] = []
+    const project = { name: 'Trig', handoff_tracker: 'github', handoff_target: 'acme/app' }
+    const base = await serve((req) => (req.method === 'GET' ? { ...todo, subject: { ref: 'S-12', project } } : {}), seen)
+    const { code, stderr } = await run(['handoff', 'T-41'], base, { env: { CROFT_GH_BIN: gh.bin } })
+    expect(code, stderr).toBe(0)
+    expect(stderr).toContain("handing off to github acme/app, Trig's hand-off target")
+    expect((await gh.calls())[0].args.slice(0, 3)).toEqual(['issue', 'create', '--repo=acme/app'])
+
+    // An explicit --to still wins over the project's target.
+    const again = await run(['handoff', 'T-41', '--to', 'acme/other'], base, { env: { CROFT_GH_BIN: gh.bin } })
     expect(again.code, again.stderr).toBe(0)
-    expect((await cairn.calls())[1].args.slice(0, 4)).toEqual(['add', 'Ship the index', '--project', 'OTHER'])
+    expect((await gh.calls())[1].args.slice(0, 3)).toEqual(['issue', 'create', '--repo=acme/other'])
   })
 
-  it('without --to refuses, saying what is missing, when there is no key to go to', async () => {
-    const dir = await tempDir('croft-cairn-')
+  it('reads the older server\'s project key as a hand-off to cairn', async () => {
+    const dir = await tempDir('croft-tracker-')
+    const cairn = await fakeCairn(dir)
+    const base = await serve((req) => (req.method === 'GET' ? { ...todo, subject: { ref: 'S-12', project: { name: 'Trig', cairn_key: 'TRIG' } } } : linked))
+    const { code, stderr } = await run(['handoff', 'T-41'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
+    expect(code, stderr).toBe(0)
+    expect((await cairn.calls())[0].args.slice(0, 4)).toEqual(['add', 'Ship the index', '--project', 'TRIG'])
+  })
+
+  it('refuses, saying what is missing, when there is no target to go to', async () => {
+    const dir = await tempDir('croft-tracker-')
     const cairn = await fakeCairn(dir)
     const cases: [Record<string, unknown>, string][] = [
       [{ ...todo, subject: null }, 'T-41 is not part of a subject'],
       [{ ...todo, subject: { ref: 'S-12', project: null } }, "T-41's subject S-12 is in no lab project"],
-      [{ ...todo, subject: { ref: 'S-12', project: { name: 'Trig', cairn_key: null } } }, "T-41's lab project Trig has no Cairn key"],
+      [{ ...todo, subject: { ref: 'S-12', project: { name: 'Trig', handoff_tracker: null, handoff_target: null } } }, "T-41's lab project Trig has no hand-off target"],
     ]
     for (const [shown, why] of cases) {
       const seen: Seen[] = []
       const base = await serve(() => shown, seen)
-      const { code, stderr } = await run(['push', 'T-41'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
+      // A machine with gh as well would ask which tracker first: pin the one under test.
+      const { code, stderr } = await run(['handoff', 'T-41'], base, { env: { CROFT_CAIRN_BIN: cairn.bin, CROFT_TRACKER: 'cairn' } })
       expect(code).toBe(1)
       expect(stderr).toContain(why)
-      expect(stderr).toContain('croft push T-41 --to <CAIRN_KEY>')
+      expect(stderr).toContain('croft handoff T-41 --to <TARGET>')
       expect(seen.map((s) => s.method)).toEqual(['GET'])
     }
     expect(existsSync(join(dir, 'calls.jsonl'))).toBe(false)
   })
 
-  it('without --to still records a git push', async () => {
+  it('asks which tracker when two adapters are here, and files nothing', async () => {
+    const dir = await tempDir('croft-tracker-')
+    const cairn = await fakeCairn(dir)
+    const gh = await fakeGh(dir)
+    const seen: Seen[] = []
+    const base = await serve(() => todo, seen)
+    const { code, stderr } = await run(['handoff', 'T-41', '--to', 'acme/app'], base, { env: { CROFT_CAIRN_BIN: cairn.bin, CROFT_GH_BIN: gh.bin } })
+    expect(code).toBe(1)
+    expect(stderr).toContain('which tracker?')
+    expect(stderr).toContain('--tracker <name>')
+    expect(stderr).toContain('CROFT_TRACKER')
+    expect(seen.map((s) => s.method)).toEqual(['GET'])
+
+    // CROFT_TRACKER answers it.
+    const named = await run(['handoff', 'T-41', '--to', 'acme/app'], await serve((req) => (req.method === 'GET' ? todo : {})), {
+      env: { CROFT_CAIRN_BIN: cairn.bin, CROFT_GH_BIN: gh.bin, CROFT_TRACKER: 'github' },
+    })
+    expect(named.code, named.stderr).toBe(0)
+    expect((await gh.calls())[0].args[0]).toBe('issue')
+  })
+
+  it('uses the only adapter on the machine', async () => {
+    const dir = await tempDir('croft-tracker-')
+    const gh = await fakeGh(dir)
+    const seen: Seen[] = []
+    const base = await serve((req) => (req.method === 'GET' ? todo : {}), seen)
+    const { code, stderr } = await run(['handoff', 'T-41', '--to', 'acme/app'], base, { env: { CROFT_GH_BIN: gh.bin } })
+    expect(code, stderr).toBe(0)
+    expect(posts(seen, '/api/v1/tasks/T-41/handoff')[0]!.body).toMatchObject({ tracker: 'github' })
+  })
+
+  it('says plainly when the adapter\'s tool is missing, and files nothing', async () => {
+    const seen: Seen[] = []
+    const base = await serve(() => todo, seen)
+    const { code, stderr } = await run(['handoff', 'T-41', '--tracker', 'cairn', '--to', 'CAIRN'], base)
+    expect(code).toBe(1)
+    expect(stderr).toContain('`cairn` is not in ~/.local/bin or on PATH')
+    expect(stderr).toContain('CROFT_CAIRN_BIN')
+    expect(seen.map((s) => s.method)).toEqual(['GET'])
+
+    const unknown = await run(['handoff', 'T-41', '--tracker', 'linear', '--to', 'X'], base)
+    expect(unknown.code).toBe(1)
+    expect(unknown.stderr).toContain('no adapter for "linear"')
+    expect(unknown.stderr).toContain('--link <REF> --tracker linear')
+  })
+
+  it('refuses a todo that is already handed off', async () => {
+    const dir = await tempDir('croft-tracker-')
+    const cairn = await fakeCairn(dir)
+    const base = await serve(() => ({ ...todo, handoff: { tracker: 'cairn', ref: 'CAIRN-300', url: null, status: 'doing', synced_at: null } }))
+    const { code, stderr } = await run(['handoff', 'T-41', '--tracker', 'cairn', '--to', 'CAIRN'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
+    expect(code).toBe(1)
+    expect(stderr).toContain('T-41 is already handed off to cairn as CAIRN-300')
+    expect(stderr).toContain('--undo')
+  })
+
+  it('--link records a task made by hand, for any tracker name, with its url', async () => {
+    const seen: Seen[] = []
+    const base = await serve((req) => (req.method === 'GET' ? todo : {}), seen)
+    const { code, stderr } = await run(['handoff', 'T-41', '--link', 'ENG-12', '--tracker', 'linear', '--url', 'https://linear.app/x/ENG-12', '--force'], base)
+    expect(code, stderr).toBe(0)
+    expect(posts(seen, '/api/v1/tasks/T-41/handoff')[0]!.body).toEqual({
+      tracker: 'linear', ref: 'ENG-12', url: 'https://linear.app/x/ENG-12', force: true,
+    })
+    const bad = await run(['handoff', 'T-41', '--link', 'has space', '--tracker', 'linear'], base)
+    expect(bad.code).toBe(1)
+    expect(bad.stderr).toContain('is not a task ref')
+  })
+
+  it('--undo takes it back with a DELETE and touches no tracker', async () => {
+    const seen: Seen[] = []
+    const base = await serve(() => ({ ref: 'T-41', status: 'todo', title: 'Ship the index', handoff: null }), seen)
+    const { code, stdout, stderr } = await run(['handoff', 'T-41', '--undo'], base)
+    expect(code, stderr).toBe(0)
+    expect(seen.map((s) => [s.method, s.path])).toEqual([['DELETE', '/api/v1/tasks/T-41/handoff']])
+    expect(stdout).toContain('T-41\ttodo\tShip the index')
+    expect(stderr).toContain('T-41 is back in Croft')
+  })
+
+  it('refuses a todo of an unpublished subject before the tracker is touched, and --force hands it off', async () => {
+    const dir = await tempDir('croft-tracker-')
+    const cairn = await fakeCairn(dir)
+    const hidden = { ...todo, subject: { ref: 'S-12', visibility: 'private' } }
+    const seen: Seen[] = []
+    const base = await serve((req) => (req.method === 'GET' ? hidden : linked), seen)
+    const args = ['handoff', 'T-41', '--tracker', 'cairn', '--to', 'CAIRN']
+
+    const refused = await run(args, base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
+    expect(refused.code).toBe(1)
+    expect(refused.stderr).toContain('S-12, which is private')
+    expect(refused.stderr).toContain('--force')
+    expect(existsSync(join(dir, 'calls.jsonl'))).toBe(false)
+    expect(seen.map((s) => s.method)).toEqual(['GET'])
+
+    const forced = await run([...args, '--force'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
+    expect(forced.code, forced.stderr).toBe(0)
+    expect(posts(seen, '/api/v1/tasks/T-41/handoff')[0]!.body).toEqual({ tracker: 'cairn', ref: 'CAIRN-331', force: true })
+  })
+
+  it('--link names the fix when the server refuses an unpublished subject', async () => {
+    const base = await serve((req) => (req.method === 'GET'
+      ? todo
+      : { status: 409, payload: { success: false, error: 'S-12 is not in the lab', code: 'subject_not_published' } }))
+    const refused = await run(['handoff', 'T-41', '--link', 'ENG-1', '--tracker', 'linear'], base)
+    expect(refused.code).toBe(1)
+    expect(refused.stderr).toContain('re-run with --force')
+  })
+
+  it('prints the server\'s guidance when a hand-off was filed but refused', async () => {
+    const dir = await tempDir('croft-tracker-')
+    const cairn = await fakeCairn(dir)
+    const base = await serve((req) => (req.method === 'GET'
+      ? todo
+      : { status: 422, payload: { success: false, error: 'bad ref', code: 'validation_failed' } }))
+    const { code, stderr } = await run(['handoff', 'T-41', '--tracker', 'cairn', '--to', 'CAIRN'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
+    expect(code).toBe(1)
+    expect(stderr).toContain('CAIRN-331 was filed, but Croft refused the link: bad ref')
+    expect(stderr).toContain('croft handoff T-41 --link CAIRN-331 --tracker cairn')
+  })
+
+  it('falls back to the old link route on a 0.6 server, for the cairn tracker', async () => {
+    const dir = await tempDir('croft-tracker-')
+    const cairn = await fakeCairn(dir)
+    const seen: Seen[] = []
+    const base = await serve((req) => {
+      if (req.method === 'GET') return todo
+      if (req.path.endsWith('/handoff')) return { status: 404, payload: '<html>not found</html>' }
+      return { cairn_ref: 'CAIRN-331' }
+    }, seen)
+    const { code, stderr } = await run(['handoff', 'T-41', '--tracker', 'cairn', '--to', 'CAIRN', '--force'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
+    expect(code, stderr).toBe(0)
+    expect(posts(seen, '/api/v1/tasks/T-41/cairn-link')[0]!.body).toEqual({ cairnRef: 'CAIRN-331', force: true })
+  })
+
+  it('still answers the 0.6 server\'s paired todo as already handed off', async () => {
+    const base = await serve(() => ({ ...todo, cairn_ref: 'CAIRN-300', cairn_status: 'doing' }))
+    const { code, stderr } = await run(['handoff', 'T-41', '--tracker', 'cairn', '--to', 'CAIRN'], base)
+    expect(code).toBe(1)
+    expect(stderr).toContain('already handed off to cairn as CAIRN-300')
+  })
+})
+
+describe('croft push', () => {
+  const todo = { id: 'a', number: 41, project: { key: 'T' }, title: 'Ship the index', type: 'spike', description: 'Build it behind a flag.', subject: { ref: 'S-12' } }
+
+  it('without a sha is the deprecated alias of handoff, and says so', async () => {
+    const dir = await tempDir('croft-tracker-')
+    const cairn = await fakeCairn(dir)
+    const seen: Seen[] = []
+    const base = await serve((req) => (req.method === 'GET' ? todo : {}), seen)
+    const { code, stderr } = await run(['push', 'T-41', '--to', 'CAIRN'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
+    expect(code, stderr).toBe(0)
+    expect(stderr).toContain('`push T-41` without a sha is deprecated (0.7), removed in 0.8: use `croft handoff T-41`')
+    expect((await cairn.calls())[0].args.slice(0, 4)).toEqual(['add', 'Ship the index', '--project', 'CAIRN'])
+    expect(posts(seen, '/api/v1/tasks/T-41/handoff')[0]!.body).toMatchObject({ tracker: 'cairn', ref: 'CAIRN-331' })
+  })
+
+  it('--link keeps working as the alias', async () => {
+    const seen: Seen[] = []
+    const base = await serve((req) => (req.method === 'GET' ? todo : {}), seen)
+    const { code, stderr } = await run(['push', 'T-41', '--link', 'CAIRN-331'], base, { env: { CROFT_TRACKER: 'cairn' } })
+    expect(code, stderr).toBe(0)
+    expect(posts(seen, '/api/v1/tasks/T-41/handoff')[0]!.body).toEqual({ tracker: 'cairn', ref: 'CAIRN-331' })
+  })
+
+  it('with a sha still records a git push, unchanged and without a notice', async () => {
     const seen: Seen[] = []
     const base = await serve(() => ({ event: 'git_push' }), seen)
-    expect((await run(['push', 'T-41', 'abc1234'], base)).code).toBe(0)
+    const { code, stderr } = await run(['push', 'T-41', 'abc1234'], base)
+    expect(code).toBe(0)
+    expect(stderr).toBe('')
     expect(posts(seen, '/api/v1/tasks/T-41/activity')[0]!.body).toEqual({ event: 'git_push', sha: 'abc1234' })
   })
 })
@@ -661,40 +887,15 @@ describe('subject visibility', () => {
     expect(refused.code).toBe(1)
     expect(refused.stderr).toContain('publishing is one-way')
   })
-
-  it('push refuses a todo of an unpublished subject before Cairn is touched, and --force files and links it', async () => {
-    const dir = await tempDir('croft-cairn-')
-    const cairn = await fakeCairn(dir)
-    const hidden = { id: 'a', number: 41, project: { key: 'T' }, title: 'Ship it', type: 'feature', description: 'x', subject: { ref: 'S-12', visibility: 'private' } }
-    const seen: Seen[] = []
-    const base = await serve((req) => (req.method === 'GET' ? hidden : { cairn_ref: 'CAIRN-331' }), seen)
-
-    const refused = await run(['push', 'T-41', '--to', 'CAIRN'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
-    expect(refused.code).toBe(1)
-    expect(refused.stderr).toContain('S-12, which is private')
-    expect(refused.stderr).toContain('--force')
-    expect(existsSync(join(dir, 'calls.jsonl'))).toBe(false)
-    expect(seen.map((s) => s.method)).toEqual(['GET'])
-
-    const forced = await run(['push', 'T-41', '--to', 'CAIRN', '--force'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
-    expect(forced.code, forced.stderr).toBe(0)
-    expect(posts(seen, '/api/v1/tasks/T-41/cairn-link')[0]!.body).toEqual({ cairnRef: 'CAIRN-331', force: true })
-  })
-
-  it('push --link carries --force, and names the fix when the server refuses', async () => {
-    const seen: Seen[] = []
-    const base = await serve(() => ({ status: 409, payload: { success: false, error: 'S-12 is not in the lab', code: 'subject_not_published' } }), seen)
-    const refused = await run(['push', 'T-41', '--link', 'CAIRN-331'], base)
-    expect(refused.code).toBe(1)
-    expect(refused.stderr).toContain('re-run with --force')
-
-    const ok = await serve(() => ({ cairn_ref: 'CAIRN-331' }), seen)
-    expect((await run(['push', 'T-41', '--link', 'CAIRN-331', '--force'], ok)).code).toBe(0)
-    expect(posts(seen, '/api/v1/tasks/T-41/cairn-link').at(-1)!.body).toEqual({ cairnRef: 'CAIRN-331', force: true })
-  })
 })
 
 describe('croft sync', () => {
+  const row = (number: number, handoff: Record<string, unknown> | null, status = 'todo') => ({
+    number, project: { key: 'T' }, status, subject_ref: 'S-12', handoff,
+  })
+  const handoff = (tracker: string, ref: string, status: string | null = 'doing') => ({ tracker, ref, url: null, status, synced_at: null })
+  const listing = (tasks: unknown[]) => (req: Seen) => (req.path.startsWith('/api/v1/projects/T/tasks') ? { count: tasks.length, offset: 0, limit: 200, tasks } : {})
+
   it('rejects the retired server-only flag before sending a request', async () => {
     const seen: Seen[] = []
     const base = await serve(() => ({}), seen)
@@ -704,78 +905,91 @@ describe('croft sync', () => {
     expect(seen).toHaveLength(0)
   })
 
-  it('names the local setup needed when no Cairn CLI is installed', async () => {
+  it('reports and skips a todo whose tracker has no adapter here', async () => {
     const seen: Seen[] = []
-    const base = await serve(() => ({}), seen)
+    const base = await serve(listing([row(41, handoff('linear', 'ENG-12'))]), seen)
     const result = await run(['sync'], base)
-    expect(result.code).toBe(1)
-    expect(result.stderr).toContain('cairn setup --url <your Cairn>')
-    expect(result.stderr).not.toContain('Settings')
-    expect(seen).toHaveLength(0)
+    expect(result.code, result.stderr).toBe(0)
+    expect(result.stdout).toContain('T-41\tlinear\tENG-12\tdoing\tskipped: no linear adapter on this machine')
+    expect(posts(seen, '/handoff')).toHaveLength(0)
   })
 
-  it('syncs through the local Cairn CLI without calling the retired integration', async () => {
-    const dir = await tempDir('croft-cairn-')
+  it('syncs each tracker through its own adapter, posting the outcome to /handoff', async () => {
+    const dir = await tempDir('croft-tracker-')
     const cairn = await fakeCairn(dir)
+    const gh = await fakeGh(dir)
     const seen: Seen[] = []
     const base = await serve((req) => {
-      if (req.path.startsWith('/api/v1/projects/T/tasks')) {
-        // The list row's lab fields as the server adds them (TASK_LIST_LAB_FIELDS).
-        const row = { status: 'todo', subject_ref: 'S-12' }
-        return {
-          count: 3,
-          offset: 0,
-          limit: 200,
-          tasks: [
-            { ...row, number: 41, project: { key: 'T' }, cairn_ref: 'CAIRN-331', cairn_status: 'doing' },
-            { ...row, number: 42, project: { key: 'T' }, cairn_ref: 'CAIRN-332', cairn_status: 'doing' },
-            { ...row, number: 43, project: { key: 'T' }, cairn_ref: null, cairn_status: null },
-          ],
-        }
-      }
-      if (req.path.endsWith('/cairn-link')) return { ref: 'T-41', status: 'done', noted: true, closed: true }
-      return {}
+      if (req.path.endsWith('/handoff')) return { ref: 'T-41', status: 'done', noted: true, closed: true }
+      return listing([
+        row(41, handoff('cairn', 'CAIRN-331')),
+        row(42, handoff('cairn', 'CAIRN-332')),
+        row(43, null),
+        row(44, handoff('github', 'acme/app#7', 'todo')),
+        row(45, handoff('github', 'acme/app#8', 'todo')),
+        row(46, handoff('github', 'acme/app#9', 'todo')),
+      ])(req)
     }, seen)
-    const { code, stdout, stderr } = await run(['sync'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
+    const { code, stdout, stderr } = await run(['sync'], base, { env: { CROFT_CAIRN_BIN: cairn.bin, CROFT_GH_BIN: gh.bin } })
     expect(code, stderr).toBe(0)
-    expect(seen.some((request) => request.path.startsWith('/api/v1/integrations/'))).toBe(false)
     expect((await cairn.calls()).map((c) => c.args)).toEqual([['show', 'CAIRN-331', '--json'], ['show', 'CAIRN-332', '--json']])
+    expect((await gh.calls()).map((c) => c.args.slice(0, 4))).toEqual([
+      ['issue', 'view', '7', '-R'], ['issue', 'view', '8', '-R'], ['issue', 'view', '9', '-R'],
+    ])
     expect(new URL(seen.find((s) => s.path.startsWith('/api/v1/projects/T/tasks'))!.path, base).searchParams.get('limit')).toBe('200')
     // The resolution travels, so the server writes `CAIRN-331 done: shipped` and closes the todo.
-    expect(posts(seen, '/cairn-link').map((s) => [s.path, s.body])).toEqual([
-      ['/api/v1/tasks/T-41/cairn-link', { cairnRef: 'CAIRN-331', cairnStatus: 'done', cairnResolution: 'shipped' }],
+    expect(posts(seen, '/handoff').map((s) => [s.path, s.body])).toEqual([
+      ['/api/v1/tasks/T-41/handoff', { tracker: 'cairn', ref: 'CAIRN-331', status: 'done', resolution: 'shipped' }],
+      ['/api/v1/tasks/T-44/handoff', { tracker: 'github', ref: 'acme/app#7', status: 'done', resolution: 'closed as completed', url: 'https://github.com/acme/app/issues/7' }],
+      ['/api/v1/tasks/T-46/handoff', { tracker: 'github', ref: 'acme/app#9', status: 'cancelled', resolution: 'closed as not planned', resolutionKind: 'wont-fix', url: 'https://github.com/acme/app/issues/9' }],
     ])
-    expect(stdout).toContain('T-41\tCAIRN-331\tdone\twas doing · noted · closed')
-    expect(stdout).toContain('T-42\tCAIRN-332\tdoing\tunchanged')
+    expect(stdout).toContain('ref\ttracker\thandoff\tstatus\tresult')
+    expect(stdout).toContain('T-41\tcairn\tCAIRN-331\tdone\twas doing · noted · closed')
+    expect(stdout).toContain('T-42\tcairn\tCAIRN-332\tdoing\tunchanged')
+    expect(stdout).toContain('T-45\tgithub\tacme/app#8\ttodo\tunchanged')
   })
 
-  it('sends an ended Cairn task again while its todo is still open, so the server closes it', async () => {
-    const dir = await tempDir('croft-cairn-')
+  it('sends an ended task again while its todo is still open, so the server closes it', async () => {
+    const dir = await tempDir('croft-tracker-')
     const cairn = await fakeCairn(dir)
     const seen: Seen[] = []
     const base = await serve((req) => {
-      if (req.path.startsWith('/api/v1/projects/T/tasks')) {
-        return {
-          count: 2,
-          tasks: [
-            // Status already recorded as done, todo still open: sent again.
-            { number: 41, project: { key: 'T' }, status: 'todo', cairn_ref: 'CAIRN-331', cairn_status: 'done', subject_ref: 'S-12' },
-            // Status recorded and the todo closed: nothing to do.
-            { number: 44, project: { key: 'T' }, status: 'done', cairn_ref: 'CAIRN-331', cairn_status: 'done', subject_ref: 'S-12' },
-          ],
-        }
-      }
-      return { ref: 'T-41', status: 'done', noted: false, closed: true }
+      if (req.path.endsWith('/handoff')) return { ref: 'T-41', status: 'done', noted: false, closed: true }
+      return listing([
+        // Status already recorded as done, todo still open: sent again.
+        row(41, handoff('cairn', 'CAIRN-331', 'done'), 'todo'),
+        // Status recorded and the todo closed: nothing to do.
+        row(44, handoff('cairn', 'CAIRN-331', 'done'), 'done'),
+      ])(req)
     }, seen)
     const { code, stdout, stderr } = await run(['sync'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
     expect(code, stderr).toBe(0)
-    expect(posts(seen, '/cairn-link').map((s) => s.path)).toEqual(['/api/v1/tasks/T-41/cairn-link'])
-    expect(stdout).toContain('T-41\tCAIRN-331\tdone\tunchanged · closed')
-    expect(stdout).toContain('T-44\tCAIRN-331\tdone\tunchanged')
+    expect(posts(seen, '/handoff').map((s) => s.path)).toEqual(['/api/v1/tasks/T-41/handoff'])
+    expect(stdout).toContain('T-41\tcairn\tCAIRN-331\tdone\tunchanged · closed')
+    expect(stdout).toContain('T-44\tcairn\tCAIRN-331\tdone\tunchanged')
+  })
+
+  it('reads a 0.6 server\'s paired todos and posts to its old link route', async () => {
+    const dir = await tempDir('croft-tracker-')
+    const cairn = await fakeCairn(dir)
+    const seen: Seen[] = []
+    const base = await serve((req) => {
+      if (req.path.endsWith('/handoff')) return { status: 404, payload: '<html>not found</html>' }
+      if (req.path.endsWith('/cairn-link')) return { ref: 'T-41', status: 'done', noted: true, closed: true }
+      return listing([
+        { number: 41, project: { key: 'T' }, status: 'todo', subject_ref: 'S-12', cairn_ref: 'CAIRN-331', cairn_status: 'doing' },
+        { number: 43, project: { key: 'T' }, status: 'todo', subject_ref: 'S-12', cairn_ref: null, cairn_status: null },
+      ])(req)
+    }, seen)
+    const { code, stdout, stderr } = await run(['sync'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
+    expect(code, stderr).toBe(0)
+    expect(posts(seen, '/cairn-link').map((s) => s.body)).toEqual([{ cairnRef: 'CAIRN-331', cairnStatus: 'done', cairnResolution: 'shipped' }])
+    expect(stdout).toContain('T-41\tcairn\tCAIRN-331\tdone\twas doing · noted · closed')
   })
 })
 
 describe('croft context --brief', () => {
+  const LAB_RULE = "Lab work (exploring, proving an idea, a subject's todos) → Croft: croft check first. Croft holds lab work only."
   const stages = [stage('to explore', 'planned', 0), stage('exploring', 'active', 1), stage('done', 'completed', 2), stage('implementing', 'active', 3)]
 
   it('is five lines at most: the lanes that are open, what is yours, and the rule', async () => {
@@ -797,7 +1011,22 @@ describe('croft context --brief', () => {
     expect(lines[1]).toBe('  S-12 implementing  pgvector for recall — 2 todos')
     expect(lines[2]).toBe('  S-13 exploring  Try Bun — 1 todo')
     expect(lines[3]).toBe('  S-14 exploring  pgvector for recall')
-    expect(lines[4]).toBe('Exploring or proving an idea → croft check first; changing a repo for real → a Cairn task (croft push).')
+    expect(lines[4]).toBe(LAB_RULE)
+  })
+
+  it('adds the hand-off rule, on the same line, when a lab project has a target', async () => {
+    const base = await serve((req) =>
+      req.path === '/api/v1/stages'
+        ? stages
+        : req.path === '/api/v1/lab-projects'
+          ? [{ id: 'p1', name: 'Trig', handoff_tracker: 'github', handoff_target: 'acme/app', subjects: 1 }]
+          : { counts: { exploring: 1 }, mine: [] },
+    )
+    const { stdout } = await run(['context', '--brief'], base)
+    expect(stdout.trimEnd().split('\n')).toEqual([
+      'Croft — lab: 1 exploring',
+      `${LAB_RULE} Committed work leaves the lab: croft handoff T-n.`,
+    ])
   })
 
   it('reads the server\'s real /subjects/brief and /stages payloads', async () => {
@@ -833,7 +1062,7 @@ describe('croft context --brief', () => {
       'Croft — lab: 2 exploring · 1 to implement · 1 implementing',
       '  S-20 implementing  Streaming ingest — 3 todos',
       '  S-21 to implement  Try Bun',
-      'Exploring or proving an idea → croft check first; changing a repo for real → a Cairn task (croft push).',
+      LAB_RULE,
     ])
   })
 
@@ -870,12 +1099,26 @@ describe('the CLI surface', () => {
 
   it('offers the lab verbs and none of the memory verbs', async () => {
     const { stdout } = await run(['help'], 'http://127.0.0.1:9')
-    for (const verb of ['croft subject add', 'croft subject stage', 'croft stages', 'croft tags', 'croft projects', 'croft push T-41 [--to', 'croft sync', 'croft context --brief']) {
+    for (const verb of ['croft subject add', 'croft subject stage', 'croft stages', 'croft tags', 'croft projects', 'croft handoff T-41 [--to', 'croft handoff T-41 --undo', 'croft sync', 'croft claim T-41', 'croft done T-41', 'croft note T-41', 'croft checkpoint T-41', 'croft context --brief']) {
       expect(stdout).toContain(verb)
     }
     for (const gone of ['croft learn', 'croft relearn', 'croft unlearn', 'croft verify', 'croft know', 'croft recall', 'croft vitals', 'croft session', 'croft entities']) {
       expect(stdout).not.toContain(gone)
     }
+  })
+
+  it('keeps the inherited task verbs and every product name under help --all', async () => {
+    const short = (await run(['help'], 'http://127.0.0.1:9')).stdout
+    const all = (await run(['help', '--all'], 'http://127.0.0.1:9')).stdout
+    for (const verb of ['croft blockedby', 'croft beat', 'croft labels', 'croft route add', 'croft reconcile', 'croft replay', 'croft map']) {
+      expect(short).not.toContain(verb)
+      expect(all).toContain(verb)
+    }
+    expect(all.startsWith(short.trimEnd())).toBe(true)
+    expect(all).toContain('inherited task verbs')
+    // The product names live in the adapter section alone; help lists adapters from it.
+    expect(short).toContain('adapters: cairn, github')
+    expect(short).not.toMatch(/Cairn|CAIRN/)
   })
 
   it('refuses the memory verbs as unknown commands', async () => {
@@ -884,5 +1127,74 @@ describe('the CLI surface', () => {
       expect(code).toBe(1)
       expect(stderr).toContain(`unknown command "${verb}"`)
     }
+  })
+})
+
+describe('tracker adapters, defensively', () => {
+  const todo = { id: 'a', number: 41, project: { key: 'T' }, title: '--project OTHER', type: 'chore', description: 'Body.', subject: { ref: 'S-12' } }
+  const linked = { handoff: { tracker: 'cairn', ref: 'CAIRN-331', url: null, status: 'todo', synced_at: null } }
+
+  it('keeps a title that starts with dashes from being read as a flag', async () => {
+    const dir = await tempDir('croft-tracker-')
+    const cairn = await fakeCairn(dir)
+    const base = await serve((req) => (req.method === 'GET' ? todo : linked))
+    const { code, stderr } = await run(['handoff', 'T-41', '--tracker', 'cairn', '--to', 'CAIRN'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
+    expect(code, stderr).toBe(0)
+    const [call] = await cairn.calls()
+    expect(call.args[1]).toBe('– project OTHER')
+    expect(call.args.slice(2, 4)).toEqual(['--project', 'CAIRN'])
+  })
+
+  it('refuses to link the task an earlier hand-off filed, and links nothing', async () => {
+    const dir = await tempDir('croft-tracker-')
+    const cairn = await fakeCairn(dir)
+    const seen: Seen[] = []
+    const base = await serve((req) => (req.method === 'GET' ? { ...todo, title: 'Ship it' } : linked), seen)
+    const { code, stderr } = await run(['handoff', 'T-41', '--tracker', 'cairn', '--to', 'CAIRN'], base, {
+      env: { CROFT_CAIRN_BIN: cairn.bin, FAKE_DUPLICATE: '1' },
+    })
+    expect(code).toBe(1)
+    expect(stderr).toContain('Cairn already has CAIRN-331 for T-41')
+    expect(stderr).toContain('croft handoff T-41 --link CAIRN-331 --tracker cairn')
+    expect(posts(seen, '/handoff')).toHaveLength(0)
+  })
+
+  it('reads a GitHub issue closed as a duplicate as cancelled, and never shows a ref that is not one', async () => {
+    const dir = await tempDir('croft-tracker-')
+    const cairn = await fakeCairn(dir)
+    const gh = await fakeGh(dir)
+    const seen: Seen[] = []
+    const tasks = [
+      { number: 47, project: { key: 'T' }, status: 'todo', subject_ref: 'S-12', handoff: { tracker: 'github', ref: 'acme/app#10', url: null, status: 'todo', synced_at: null } },
+      { number: 48, project: { key: 'T' }, status: 'todo', subject_ref: 'S-12', handoff: { tracker: 'cairn', ref: '--instance=evil', url: null, status: 'doing', synced_at: null } },
+    ]
+    const base = await serve((req) => {
+      if (req.path.endsWith('/handoff')) return { ref: 'T-47', status: 'cancelled', noted: true, closed: true }
+      return req.path.startsWith('/api/v1/projects/T/tasks') ? { count: tasks.length, offset: 0, limit: 200, tasks } : {}
+    }, seen)
+    const result = await run(['sync'], base, { env: { CROFT_CAIRN_BIN: cairn.bin, CROFT_GH_BIN: gh.bin } })
+    expect(result.code, result.stderr).toBe(0)
+    expect(posts(seen, '/api/v1/tasks/T-47/handoff')[0]!.body).toMatchObject({ status: 'cancelled', resolutionKind: 'duplicate' })
+    expect(result.stdout).toContain('T-48\tcairn\t--instance=evil\tdoing\tunread: "--instance=evil" is not a Cairn task ref')
+    expect(existsSync(join(dir, 'calls.jsonl'))).toBe(false)
+  })
+
+  it('reports a todo the server refuses on its row, and goes on with the rest', async () => {
+    const dir = await tempDir('croft-tracker-')
+    const cairn = await fakeCairn(dir)
+    const seen: Seen[] = []
+    const tasks = [41, 42].map((number) => ({
+      number, project: { key: 'T' }, status: 'todo', subject_ref: 'S-12',
+      handoff: { tracker: 'cairn', ref: 'CAIRN-331', url: null, status: 'doing', synced_at: null },
+    }))
+    const base = await serve((req) => {
+      if (req.path === '/api/v1/tasks/T-41/handoff') return { status: 409, payload: { success: false, error: 'refused for a reason', code: 'conflict' } }
+      if (req.path.endsWith('/handoff')) return { ref: 'T-42', status: 'done', noted: true, closed: true }
+      return req.path.startsWith('/api/v1/projects/T/tasks') ? { count: tasks.length, offset: 0, limit: 200, tasks } : {}
+    }, seen)
+    const result = await run(['sync'], base, { env: { CROFT_CAIRN_BIN: cairn.bin } })
+    expect(result.code, result.stderr).toBe(0)
+    expect(result.stdout).toContain('T-41\tcairn\tCAIRN-331\tdone\trefused: refused for a reason')
+    expect(result.stdout).toMatch(/T-42\tcairn\tCAIRN-331\tdone\t.*closed/)
   })
 })

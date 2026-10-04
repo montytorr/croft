@@ -1,3 +1,4 @@
+import { isHandedOff } from './handoff-shape'
 import { admin } from '@/lib/db/client'
 import type { Actor } from './auth'
 import { isUntouchedAutoCheckpoint } from '@/lib/checkpoint-origin'
@@ -72,6 +73,9 @@ type HeldClaim = {
   updated_at: string | null
   checkpoint_summary: string | null
   ownership_version: number
+  handoff_tracker: string | null
+  handoff_ref: string | null
+  handoff_status: string | null
   project: { key: string }
 }
 
@@ -152,7 +156,7 @@ export const reconcileClaims = async (
     .from('tasks')
     .select(
       'id, number, status, claimed_by, claimed_at, heartbeat_at, checkpoint_at, updated_at, ' +
-        'checkpoint_summary, ownership_version, project:projects!project_id!inner(key)',
+        'checkpoint_summary, ownership_version, handoff_tracker, handoff_ref, handoff_status, project:projects!project_id!inner(key)',
     )
   // The maintenance sweep acts on every quiet claim, private todos included —
   // an abandoned claim is abandoned whoever can see the task — and reports
@@ -195,7 +199,10 @@ export const reconcileClaims = async (
     //
     // Moving it back to todo is not closing it. The checkpoint and the notes
     // are untouched; what changes is that `doing` starts meaning what it says.
-    const reopen = task.status === 'doing'
+    //
+    // Not a handed-off todo: its tracker owns the status, so the stale claim
+    // goes and the status stays for the hand-off's outcome to settle.
+    const reopen = task.status === 'doing' && !isHandedOff(task)
 
     if (!options.dryRun) {
       const { data: didRelease, error: releaseError } = await admin().rpc<boolean>('reconcile_task_atomic', {

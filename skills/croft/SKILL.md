@@ -1,6 +1,6 @@
 ---
 name: croft
-description: "Lab board for exploring and proving ideas: new tech to evaluate, POCs, things to build before they become real work. Use BEFORE evaluating or prototyping anything to check what the lab already concluded; to file a subject, move it through stages, log findings, add todos, and record the conclusion. Triggers on 'should we use X', 'evaluate', 'try out', 'POC', 'spike on', 'what did we conclude about', 'lab', 'croft', 'subject'. Not for: committed work on a repo tracked in Cairn — push the todo to Cairn instead; nor for the agent tooling itself (Cairn's session summariser, hooks, setup, sync) — file that straight in Cairn."
+description: "Lab board for exploring and proving ideas: new tech to evaluate, POCs, things to build before they become real work. Use BEFORE evaluating or prototyping anything to check what the lab already concluded; to file a subject, move it through stages, log findings, add todos, and record the conclusion. Triggers on 'should we use X', 'evaluate', 'try out', 'POC', 'spike on', 'what did we conclude about', 'lab', 'croft', 'subject'. Not for: work that isn't a lab subject or its todo — that belongs in your task tracker."
 ---
 
 # Croft
@@ -10,7 +10,7 @@ evaluate, a POC, an idea to build before it becomes real work. It has a markdown
 a work log, tags, an owner, a **lab project** (Trig, Croft…), **todos** (`T-41`), a **stage**,
 and in the end a **conclusion**.
 
-> Exploring or proving an idea → croft check first; changing a repo for real → a Cairn task (croft push).
+> Lab work (exploring, proving an idea, a subject's todos) → Croft: croft check first. Croft holds lab work only.
 
 ## The lifecycle — every subject, every time
 
@@ -39,8 +39,7 @@ and in the end a **conclusion**.
 the rest without claiming them: note, stage, close what you can.
 
 **When not to file.**
-- **It is committed work on a real repo** — that is Cairn's. Push the todo (below).
-- **It is the agent tooling itself** — Cairn's session summariser, hooks, setup, sync. Not a lab subject, even as an idea: file it straight in Cairn, in the tool's project.
+- **It is not lab work** — committed work on a real repo, tooling, a chore. That belongs in your task tracker, not here. A todo that *becomes* committed work is handed off (below).
 - **A subject already covers it** — add a todo or a note to that one.
 - **Reading a file answers it** — no subject needed.
 - **A fact that expires** ("the beta API is down today") — a note, or nothing.
@@ -53,10 +52,11 @@ A subject filed by mistake is deleted (`croft subject delete S-n --confirm S-n`)
 ## Refs
 
 - `S-12` — a subject. Used only with `croft subject …`.
-- `T-41` — a todo. It is an ordinary task: `show`, `claim`, `beat`, `note`, `log`,
-  `checkpoint`, `release`, `update`, `done --resolution`, `cancel`, `deps`, `history`.
+- `T-41` — a todo, always under a subject. Worked here with `show`, `claim`, `note`,
+  `checkpoint`, `release`, `done --resolution`, `cancel`. `croft help --all` lists the
+  inherited task verbs (`beat`, `log`, `update`, `deps`, `history`…), which also work.
 
-Single-letter keys on purpose: they never collide with Cairn refs (`CAIRN-331`).
+Single-letter keys on purpose: they never collide with a tracker's refs.
 
 ## Subjects
 
@@ -81,8 +81,9 @@ croft subject notes S-12  |  croft subject attach S-12 <file>  |  croft subject 
 
 **Visibility**: a subject is `lab` (everyone sees it) unless filed `private` (its owner only)
 or `members` (its owner and the people shared with). Publishing to the lab is one-way — do
-it only when the owner means it. Do not push a private or members subject's todo to Cairn:
-`croft push` refuses without `--force`, because Cairn shows it to everyone. A stage change writes a
+it only when the owner means it. Do not hand off a private or members subject's todo:
+`croft handoff` refuses without `--force`, because a tracker has no notion of who may see
+what. A stage change writes a
 `stage` note by itself ("to explore → exploring"); do not narrate it.
 
 **Bodies and notes are markdown**: `##` headings, `-` lists, code and paths in backticks.
@@ -94,7 +95,7 @@ A wall of text is refused, naming what to fix. Secrets are refused everywhere �
 ```bash
 croft stages    # the pipeline, in order, with each stage's category
 croft tags      # the curated tags
-croft projects  # the lab projects, each with the Cairn key its todos go to
+croft projects  # the lab projects, each with the tracker and target its todos are handed off to
 ```
 
 Admins curate all three in the web app. A subject is in at most one lab project. The seed pipeline:
@@ -109,34 +110,39 @@ Admins curate all three in the web app. A subject is in at most one lab project.
 `rejected` with a clear reason is a result, not a failure: it is what stops the next
 person re-evaluating the same thing.
 
-## From the lab to real work: push and sync
+## From the lab to real work: handoff and sync
 
-When a todo becomes committed work on a repo tracked in Cairn, hand it over:
-
-```bash
-croft push T-41                 # to the Cairn key of its subject's lab project
-croft push T-41 --to CAIRN      # or name the Cairn project key; --to always wins
-```
-
-With no `--to` and no key on the subject's project, it refuses and says what is missing.
-A todo whose subject is not yet in the lab (private or members) is refused too: publish the
-subject first, or `--force` when its owner has said it can go.
-
-This runs `cairn add` with the todo's title and description (plus "From Croft T-41 (subject
-S-12)"), labels the Cairn task `croft:T-41`, and links the two. **From then on Cairn owns the
-status**: work it there (claim, notes, done), not in Croft. `cairn` must be on PATH
-(`CROFT_CAIRN_BIN` overrides).
+Croft holds lab work only. When a todo becomes committed work in your team's task tracker,
+hand it off:
 
 ```bash
-croft sync      # pull linked Cairn statuses back
+croft handoff T-41                     # to the tracker and target of its subject's lab project
+croft handoff T-41 --to <TARGET>       # name where it goes in the tracker; --to always wins
+croft handoff T-41 --tracker <NAME>    # name the tracker (else CROFT_TRACKER, else the only adapter here)
+croft handoff T-41 --link <REF> [--url URL]   # record a task you already made by hand
+croft handoff T-41 --undo              # take it back; nothing is done in the tracker
 ```
 
-`sync` updates each pushed todo's Cairn status, and when the Cairn task closes it notes the
-subject ("CAIRN-331 done: <resolution>") once. Then decide the subject's stage — often
-`rolled out` with a conclusion.
+It files the todo through the tracker's adapter, using that tool's own CLI and sign-in on
+this machine, with the title, the description and a line saying it came from Croft T-41, and
+links the two. If the tracker or target is ambiguous or missing it refuses and says which
+flag to pass. A todo whose subject is not yet in the lab (private or members) is refused
+too: publish the subject first, or `--force` when its owner has said it can go.
 
-`croft push T-41 <sha> [--branch B]` (with a sha) is the other `push`: it records a git push
-on the todo as evidence, like `croft commit` and `croft run`. None of those executes anything.
+**From then on the tracker owns the status**: work it there, not in Croft. Claiming, closing
+or moving it here is refused with `handed_off`; `--undo` is the way back.
+
+```bash
+croft sync      # pull every handed-off todo's status back
+```
+
+`sync` updates each todo whose tracker has an adapter on this machine, skips and reports the
+rest, and when the task closes it notes the subject ("<ref> done: <resolution>") once. Then
+decide the subject's stage, often `rolled out` with a conclusion.
+
+`croft push T-41 <sha> [--branch B]` records a git push on the todo as evidence, like `croft
+commit` and `croft run`. None of those executes anything. (`push T-41` with no sha is the
+deprecated spelling of `handoff`.)
 
 ## Briefing
 
@@ -144,8 +150,8 @@ on the todo as evidence, like `croft commit` and `croft run`. None of those exec
 croft context --brief   # a few lines: stage counts, your active subjects, the rule
 ```
 
-A SessionStart hook prints this. When Cairn's briefing is installed it carries Croft's block
-instead, so you see it once.
+A SessionStart hook prints this. Where a lab project has a hand-off target it adds a line
+saying committed work leaves the lab: `croft handoff T-n`.
 
 ## Output and exit codes
 

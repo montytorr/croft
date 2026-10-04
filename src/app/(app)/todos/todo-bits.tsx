@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import { LockMark } from '@/components/lab/visibility'
-import { ArrowUpRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { LabTodo } from '@/lib/lab/types'
 
@@ -50,31 +49,3 @@ export const SubjectChip = ({
     <span className={cn('min-w-0 truncate', titleClassName)}>{subject.title}</span>
   </Link>
 )
-
-/**
- * Where a pushed todo's work is being done: `↗ CAIRN-331 · doing`. The status
- * is as of the last sync, so it stays grey rather than borrowing a status
- * colour it may no longer have.
- */
-export const CairnBadge = ({
-  cairnRef,
-  cairnStatus,
-  className,
-}: {
-  cairnRef: string | null
-  cairnStatus: string | null
-  className?: string
-}) =>
-  cairnRef ? (
-    <span
-      className={cn(
-        'border-border text-fg-muted inline-flex h-[1.125rem] shrink-0 items-center gap-1 rounded border px-1.5 font-mono text-[0.6875rem]',
-        className,
-      )}
-      title={`Pushed to Cairn as ${cairnRef}${cairnStatus ? `; ${cairnStatus} at the last sync` : ''}. Its status is Cairn's now.`}
-    >
-      <ArrowUpRight size={10} aria-hidden />
-      {cairnRef}
-      {cairnStatus ? <span className="text-fg-subtle">· {cairnStatus}</span> : null}
-    </span>
-  ) : null

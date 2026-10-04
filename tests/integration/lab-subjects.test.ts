@@ -5,7 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
  * The lab, end to end through the real route handlers and a real database:
  * file a subject, move it along the board, meet the conclusion rule, give it
  * a todo that is a genuine task in project T, keep a log, find it in search,
- * and hand the todo to Cairn and read the outcome back.
+ * and hand the todo to another tracker and read the outcome back.
  */
 
 const auth = vi.hoisted(() => ({ actor: null as null | Record<string, unknown> }))
@@ -25,6 +25,7 @@ import { POST as createStageRoute } from '@/app/api/v1/stages/route'
 import { DELETE as deleteStageRoute } from '@/app/api/v1/stages/[id]/route'
 import { POST as createTagRoute } from '@/app/api/v1/tags/route'
 import { POST as cairnLinkRoute } from '@/app/api/v1/tasks/[ref]/cairn-link/route'
+import { POST as handoffRoute } from '@/app/api/v1/tasks/[ref]/handoff/route'
 import { GET as showTaskRoute } from '@/app/api/v1/tasks/[ref]/route'
 import { GET as searchRoute } from '@/app/api/v1/search/route'
 import { GET as listProjectTasksRoute } from '@/app/api/v1/projects/[id]/tasks/route'
@@ -263,7 +264,7 @@ describe('the lab board', () => {
     stageIds.pop()
   })
 
-  it('shows a todo with its subject and Cairn pairing, and lists them per row', async () => {
+  it('shows a todo with its subject and hand-off, and lists them per row', async () => {
     const shown = await call(showTaskRoute, 'GET', `/tasks/${todoRef}`, { ref: todoRef })
     expect(shown.json.data.subject).toEqual({
       ref,
@@ -272,15 +273,17 @@ describe('the lab board', () => {
       project: null,
       visibility: 'lab',
     })
-    expect(shown.json.data).toMatchObject({ cairn_ref: null, cairn_status: null, cairn_synced_at: null })
+    expect(shown.json.data).toMatchObject({ handoff: null, cairn_ref: null, cairn_status: null, cairn_synced_at: null })
+    expect(shown.json.data).not.toHaveProperty('handoff_ref')
 
     const digest = await call(showTaskRoute, 'GET', `/tasks/${todoRef}?view=digest`, { ref: todoRef })
     expect(digest.json.data.subject).toMatchObject({ ref })
     expect(digest.json.data).not.toHaveProperty('cairn_ref')
+    expect(digest.json.data).not.toHaveProperty('handoff')
 
     const listed = await call(listProjectTasksRoute, 'GET', '/projects/T/tasks?limit=200', { id: 'T' })
     const row = listed.json.data.tasks.find((t: { number: number }) => `T-${t.number}` === todoRef)
-    expect(row).toMatchObject({ subject_ref: ref, cairn_ref: null, cairn_status: null })
+    expect(row).toMatchObject({ subject_ref: ref, handoff: null, cairn_ref: null, cairn_status: null })
     // The raw `{number}` embed is folded into subject_ref; `subject` is the lab's shape (0.3).
     expect(row.subject).toEqual({ ref, number: Number(ref.slice(2)), title: `Evaluate ${WORD} for semantic recall`, project: null, visibility: 'lab' })
 
@@ -288,34 +291,42 @@ describe('the lab board', () => {
     expect(page?.subject).toEqual({ ref, number: Number(ref.slice(2)), title: `Evaluate ${WORD} for semantic recall`, visibility: 'lab' })
   })
 
-  it('links a todo to Cairn and writes the outcome to the log exactly once', async () => {
+  it('hands a todo off and writes the outcome to the log exactly once', async () => {
     auth.actor = actorFor(adminId, 'admin', 'agent')
-    const cairnRef = `CAIRN-${100_000 + Math.floor(Math.random() * 900_000)}`
-    const linked = await call(cairnLinkRoute, 'POST', `/tasks/${todoRef}/cairn-link`, { ref: todoRef }, { cairnRef, cairnStatus: 'todo' })
+    const handoffRef = `owner/repo#${100_000 + Math.floor(Math.random() * 900_000)}`
+    const url = `https://github.com/${handoffRef.replace('#', '/issues/')}`
+    const linked = await call(handoffRoute, 'POST', `/tasks/${todoRef}/handoff`, { ref: todoRef }, { tracker: 'github', ref: handoffRef, url, status: 'todo' })
     expect(linked.status).toBe(200)
-    expect(linked.json.data).toMatchObject({ ref: todoRef, cairn_ref: cairnRef, cairn_status: 'todo' })
+    expect(linked.json.data).toMatchObject({
+      ref: todoRef,
+      handoff: { tracker: 'github', ref: handoffRef, url, status: 'todo' },
+      // The deprecated aliases are only for tracker cairn.
+      cairn_ref: null,
+      cairn_status: null,
+    })
 
-    // The agent reports what its own Cairn CLI read; the server stores no key.
-    const body = { cairnRef, cairnStatus: 'done', cairnResolution: 'Shipped the index.' }
-    const first = await call(cairnLinkRoute, 'POST', `/tasks/${todoRef}/cairn-link`, { ref: todoRef }, body)
+    // The agent reports what its own adapter read; the server stores no key.
+    const body = { tracker: 'github', ref: handoffRef, status: 'done', resolution: 'Shipped the index.' }
+    const first = await call(handoffRoute, 'POST', `/tasks/${todoRef}/handoff`, { ref: todoRef }, body)
     expect(first.status).toBe(200)
-    expect(first.json.data).toMatchObject({ cairn_ref: cairnRef, cairn_status: 'done', noted: true, closed: true })
-    const second = await call(cairnLinkRoute, 'POST', `/tasks/${todoRef}/cairn-link`, { ref: todoRef }, body)
+    expect(first.json.data).toMatchObject({ handoff: { status: 'done', url }, noted: true, closed: true })
+    const second = await call(handoffRoute, 'POST', `/tasks/${todoRef}/handoff`, { ref: todoRef }, body)
     expect(second.status).toBe(200)
-    expect(second.json.data).toMatchObject({ cairn_ref: cairnRef, cairn_status: 'done', noted: false, closed: false })
+    expect(second.json.data).toMatchObject({ handoff: { status: 'done' }, noted: false, closed: false })
 
     const notes = await call(listNotesRoute, 'GET', `/subjects/${ref}/notes`, { ref })
-    const outcome = notes.json.data.filter((n: { note: string }) => n.note.startsWith(`${cairnRef} done`))
+    const outcome = notes.json.data.filter((n: { note: string }) => n.note.startsWith(`${handoffRef} done`))
     expect(outcome).toHaveLength(1)
-    expect(outcome[0]).toMatchObject({ kind: 'finding', note: `${cairnRef} done: Shipped the index.` })
-    expect(notes.json.data.some((n: { kind: string; note: string }) => n.kind === 'handoff' && n.note.includes(cairnRef))).toBe(true)
+    expect(outcome[0]).toMatchObject({ kind: 'finding', note: `${handoffRef} done: Shipped the index.` })
+    const handed = notes.json.data.filter((n: { kind: string; note: string }) => n.kind === 'handoff' && n.note.includes(handoffRef))
+    expect(handed).toEqual([expect.objectContaining({ note: `${todoRef} handed off to github as ${handoffRef}` })])
 
-    // Cairn owns a pushed todo's status: its close closed the todo, once.
+    // The tracker owns a handed-off todo's status: its close closed the todo, once.
     const task = await call(showTaskRoute, 'GET', `/tasks/${todoRef}`, { ref: todoRef })
     expect(task.json.data).toMatchObject({
-      cairn_status: 'done',
+      handoff: { tracker: 'github', status: 'done' },
       status: 'done',
-      resolution: `Closed in Cairn as ${cairnRef}: Shipped the index.`,
+      resolution: `Closed in github as ${handoffRef}: Shipped the index.`,
       resolution_kind: 'verified',
       claimed_by: null,
     })
@@ -329,12 +340,11 @@ describe('the lab board', () => {
     const listed = await call(listProjectTasksRoute, 'GET', '/projects/T/tasks?limit=200', { id: 'T' })
     expect(listed.json.data.tasks.find((t: { number: number }) => `T-${t.number}` === todoRef)).toMatchObject({
       subject_ref: ref,
-      cairn_ref: cairnRef,
-      cairn_status: 'done',
+      handoff: { tracker: 'github', ref: handoffRef, status: 'done' },
     })
   })
 
-  it('takes an ended status through cairn-link the way sync does: the note once, the todo closed', async () => {
+  it('takes an ended status through the deprecated cairn-link the way 0.6 sync does: the note once, the todo closed', async () => {
     auth.actor = actorFor(adminId, 'admin', 'agent')
     const todo = await call(addTodoRoute, 'POST', `/subjects/${ref}/todos`, { ref }, { title: 'Wire the flag' })
     const localRef = todo.json.data.ref as string
@@ -348,12 +358,20 @@ describe('the lab board', () => {
       cairnResolutionKind: 'superseded',
     })
     expect(ended.status).toBe(200)
-    expect(ended.json.data).toMatchObject({ ref: localRef, cairn_status: 'cancelled', status: 'cancelled', noted: true, closed: true })
+    expect(ended.json.data).toMatchObject({
+      ref: localRef,
+      cairn_ref: cairnRef,
+      cairn_status: 'cancelled',
+      handoff: { tracker: 'cairn', ref: cairnRef, status: 'cancelled' },
+      status: 'cancelled',
+      noted: true,
+      closed: true,
+    })
 
     const again = await call(cairnLinkRoute, 'POST', `/tasks/${localRef}/cairn-link`, { ref: localRef }, {
       cairnRef,
       cairnStatus: 'cancelled',
-      cairnResolution: 'Reworded in Cairn later.',
+      cairnResolution: 'Reworded later.',
     })
     expect(again.json.data).toMatchObject({ noted: false, closed: false, status: 'cancelled' })
 
@@ -364,7 +382,7 @@ describe('the lab board', () => {
     const task = await call(showTaskRoute, 'GET', `/tasks/${localRef}`, { ref: localRef })
     expect(task.json.data).toMatchObject({
       status: 'cancelled',
-      resolution: `Closed in Cairn as ${cairnRef}: Superseded by the new pipeline.`,
+      resolution: `Closed in cairn as ${cairnRef}: Superseded by the new pipeline.`,
       resolution_kind: 'superseded',
     })
   })
@@ -423,9 +441,17 @@ describe('lab projects', () => {
     expect(refused.json.code).toBe('forbidden')
 
     auth.actor = actorFor(adminId, 'admin', 'agent')
-    const created = await call(createLabProjectRoute, 'POST', '/lab-projects', {}, { name, color: '#6B7FA6', cairnKey: 'trig' })
+    const created = await call(createLabProjectRoute, 'POST', '/lab-projects', {}, { name, color: '#6B7FA6', handoffTracker: 'Cairn', handoffTarget: 'TRIG' })
     expect(created.status).toBe(201)
-    expect(created.json.data).toEqual({ id: expect.any(String), name, color: '#6b7fa6', cairn_key: 'TRIG', position: expect.any(Number) })
+    expect(created.json.data).toEqual({
+      id: expect.any(String),
+      name,
+      color: '#6b7fa6',
+      handoff_tracker: 'cairn',
+      handoff_target: 'TRIG',
+      cairn_key: 'TRIG',
+      position: expect.any(Number),
+    })
     projectId = created.json.data.id
     labProjectIds.push(projectId)
 
@@ -435,26 +461,35 @@ describe('lab projects', () => {
 
     const badKey = await call(createLabProjectRoute, 'POST', '/lab-projects', {}, { name: `x-${RUN}`, cairnKey: 'no-such' })
     expect(badKey.status).toBe(400)
+    const half = await call(createLabProjectRoute, 'POST', '/lab-projects', {}, { name: `x-${RUN}`, handoffTracker: 'github' })
+    expect(half.status).toBe(400)
 
     const other = await call(createLabProjectRoute, 'POST', '/lab-projects', {}, { name: `Croft-${RUN}` })
-    expect(other.json.data.cairn_key).toBeNull()
+    expect(other.json.data).toMatchObject({ handoff_tracker: null, handoff_target: null, cairn_key: null })
     otherId = other.json.data.id
     labProjectIds.push(otherId)
 
     auth.actor = actorFor(memberId, 'member')
     const listed = await call(listLabProjectsRoute, 'GET', '/lab-projects')
     expect(listed.status).toBe(200)
-    expect(listed.json.data.find((p: { id: string }) => p.id === projectId)).toMatchObject({ name, cairn_key: 'TRIG', subjects: 0 })
+    expect(listed.json.data.find((p: { id: string }) => p.id === projectId)).toMatchObject({ name, handoff_tracker: 'cairn', handoff_target: 'TRIG', cairn_key: 'TRIG', subjects: 0 })
     expect((await listLabProjects({ id: adminId, role: 'admin' })).some((p) => p.id === projectId)).toBe(true)
     const memberPatch = await call(patchLabProjectRoute, 'PATCH', `/lab-projects/${projectId}`, { id: projectId }, { name: 'x' })
     expect(memberPatch.status).toBe(403)
   })
 
-  it('rename, recolour and re-key; null or an empty string clears the key', async () => {
+  it('rename, recolour and re-point; null clears the hand-off, and cairnKey still says it the old way', async () => {
     const patch = (body: unknown) => call(patchLabProjectRoute, 'PATCH', `/lab-projects/${otherId}`, { id: otherId }, body)
-    expect((await patch({ cairnKey: 'CROFT' })).json.data.cairn_key).toBe('CROFT')
-    expect((await patch({ color: '#123456' })).json.data).toMatchObject({ color: '#123456', cairn_key: 'CROFT' })
-    expect((await patch({ cairnKey: null })).json.data.cairn_key).toBeNull()
+    const github = await patch({ handoffTracker: 'github', handoffTarget: 'owner/repo' })
+    expect(github.json.data).toMatchObject({ handoff_tracker: 'github', handoff_target: 'owner/repo', cairn_key: null })
+    expect((await patch({ color: '#123456' })).json.data).toMatchObject({ color: '#123456', handoff_tracker: 'github', handoff_target: 'owner/repo' })
+    expect((await patch({ handoffTracker: null, handoffTarget: null })).json.data).toMatchObject({ handoff_tracker: null, handoff_target: null })
+    // Half a pair is refused, and so is the alias beside the pair.
+    expect((await patch({ handoffTarget: 'owner/repo' })).status).toBe(400)
+    expect((await patch({ cairnKey: 'CROFT', handoffTracker: 'cairn', handoffTarget: 'CROFT' })).status).toBe(400)
+    // Deprecated (0.7): cairnKey is tracker cairn and that target.
+    expect((await patch({ cairnKey: 'CROFT' })).json.data).toMatchObject({ handoff_tracker: 'cairn', handoff_target: 'CROFT', cairn_key: 'CROFT' })
+    expect((await patch({ cairnKey: null })).json.data).toMatchObject({ handoff_tracker: null, handoff_target: null, cairn_key: null })
     await patch({ cairnKey: 'CROFT' })
     expect((await patch({ cairnKey: '' })).json.data.cairn_key).toBeNull()
     const taken = await patch({ name: name.toLowerCase() })
@@ -484,7 +519,15 @@ describe('lab projects', () => {
     expect(created.status).toBe(201)
     subjectIds.push(created.json.data.id)
     subjectRef = created.json.data.ref
-    expect(created.json.data.project).toEqual({ id: projectId, name, color: '#6b7fa6', cairn_key: 'TRIG', position: expect.any(Number) })
+    expect(created.json.data.project).toEqual({
+      id: projectId,
+      name,
+      color: '#6b7fa6',
+      handoff_tracker: 'cairn',
+      handoff_target: 'TRIG',
+      cairn_key: 'TRIG',
+      position: expect.any(Number),
+    })
 
     const patch = (body: unknown) => call(patchSubjectRoute, 'PATCH', `/subjects/${subjectRef}`, { ref: subjectRef }, body)
     expect((await patch({ project: otherId })).json.data.project.id).toBe(otherId)
@@ -508,16 +551,16 @@ describe('lab projects', () => {
     expect(none.length).toBeGreaterThan(0)
     expect((await refs(`project=none,${encodeURIComponent(name)}`)).sort()).toEqual([...none, subjectRef].sort())
     const listed = await call(listSubjectsRoute, 'GET', `/subjects?project=${encodeURIComponent(name)}`)
-    expect(listed.json.data[0].project).toMatchObject({ name, cairn_key: 'TRIG' })
+    expect(listed.json.data[0].project).toMatchObject({ name, handoff_tracker: 'cairn', handoff_target: 'TRIG', cairn_key: 'TRIG' })
   })
 
-  it("shows a todo's subject with its project and Cairn key, for croft push", async () => {
+  it("shows a todo's subject with its project and hand-off target, for croft handoff", async () => {
     const todo = await call(addTodoRoute, 'POST', `/subjects/${subjectRef}/todos`, { ref: subjectRef }, { title: 'Ship it behind a flag' })
     expect(todo.status).toBe(201)
     const shown = await call(showTaskRoute, 'GET', `/tasks/${todo.json.data.ref}`, { ref: todo.json.data.ref })
-    expect(shown.json.data.subject).toMatchObject({ ref: subjectRef, project: { name, cairn_key: 'TRIG' } })
+    expect(shown.json.data.subject).toMatchObject({ ref: subjectRef, project: { name, handoff_tracker: 'cairn', handoff_target: 'TRIG', cairn_key: 'TRIG' } })
     const digest = await call(showTaskRoute, 'GET', `/tasks/${todo.json.data.ref}?view=digest`, { ref: todo.json.data.ref })
-    expect(digest.json.data.subject.project).toEqual({ name, cairn_key: 'TRIG' })
+    expect(digest.json.data.subject.project).toEqual({ name, handoff_tracker: 'cairn', handoff_target: 'TRIG', cairn_key: 'TRIG' })
   })
 
   it('refuses to delete a project while a subject, archived or not, is in it', async () => {

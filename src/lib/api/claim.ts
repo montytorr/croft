@@ -2,6 +2,7 @@ import { admin } from '@/lib/db/client'
 import type { Actor } from './auth'
 import { actorLabel } from './actor'
 import { CLAIM_LEASE_SECONDS } from '@/lib/utils'
+import { isHandedOff } from './handoff-shape'
 
 /**
  * Taking a task, as one conditional UPDATE.
@@ -101,6 +102,7 @@ export const takeTask = async (
  *     comment does not mean they have picked the work up.
  *   - never steals. If somebody else holds a live lease this does nothing.
  *   - never reopens. A note on a closed task is a postscript, not a restart.
+ *   - never takes a todo handed off to another tracker, whose status is theirs.
  */
 export const shouldClaimByWorking = (
   actor: { actorType: string },
@@ -108,6 +110,8 @@ export const shouldClaimByWorking = (
 ): boolean => {
   if (actor.actorType !== 'agent') return false
   if (task.claimed_by) return false
+  // Working on a todo another tracker owns is not claiming it.
+  if (isHandedOff(task)) return false
   const status = task.status as string
   return status !== 'done' && status !== 'cancelled'
 }

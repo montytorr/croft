@@ -164,7 +164,7 @@ describe('croft setup — dry run', () => {
 })
 
 /**
- * Croft records no sessions — Cairn does — so setup plans only the agent-files
+ * Croft records no sessions, so setup plans only the agent-files
  * job, and reconcile with --maintenance. Dry-run only: --install would run
  * real launchctl, which this suite must never do.
  */
@@ -425,7 +425,7 @@ describe('croft setup — CROFT_SETUP_SOURCE', () => {
     expect(existsSync(join(HOME, '.croft', 'releases'))).toBe(false)
   })
 
-  it('copies the skill for each runtime and wires hooks around Cairn, the same on a second run', async () => {
+  it('copies the skill for each runtime and wires its own hooks beside other hooks, the same on a second run', async () => {
     const base = await serve({
       status: 'approved',
       keys: [{ agentName: 'claude-code', key: 'sk_valid' }, { agentName: 'codex', key: 'sk_valid' }],
@@ -433,11 +433,11 @@ describe('croft setup — CROFT_SETUP_SOURCE', () => {
     const HOME = await home()
     await mkdir(join(HOME, '.claude'), { recursive: true })
     await mkdir(join(HOME, '.codex'), { recursive: true })
-    const cairn = { type: 'command', command: 'node /h/.cairn/hooks/cairn-context.mjs', 'cairn-memory': true, timeout: 10 }
+    const other = { type: 'command', command: 'node /h/.other/hooks/briefing.mjs', 'other-memory': true, timeout: 10 }
     const guard = { matcher: 'Bash', hooks: [{ type: 'command', command: '/guard.sh' }] }
     await writeFile(
       join(HOME, '.claude', 'settings.json'),
-      JSON.stringify({ model: 'opus', hooks: { SessionStart: [{ matcher: 'startup', hooks: [cairn] }], PreToolUse: [guard] } }),
+      JSON.stringify({ model: 'opus', hooks: { SessionStart: [{ matcher: 'startup', hooks: [other] }], PreToolUse: [guard] } }),
     )
     const quarry = { hooks: [{ type: 'command', command: 'node /x/quarry-stop.mjs' }] }
     await writeFile(join(HOME, '.codex', 'hooks.json'), JSON.stringify({ hooks: { Stop: [quarry] } }))
@@ -451,9 +451,21 @@ describe('croft setup — CROFT_SETUP_SOURCE', () => {
         await readFile(join(REPO, 'skills', 'croft', 'SKILL.md'), 'utf8'),
       )
     }
-    expect(first.stdout).toContain('claude: briefing: carried by Cairn')
+    expect(first.stdout).not.toContain('carried by')
     const claude = JSON.parse(await readFile(join(HOME, '.claude', 'settings.json'), 'utf8'))
-    expect(claude).toEqual({ model: 'opus', hooks: { SessionStart: [{ matcher: 'startup', hooks: [cairn] }], PreToolUse: [guard] } })
+    expect(claude).toEqual({
+      model: 'opus',
+      hooks: {
+        SessionStart: [
+          { matcher: 'startup', hooks: [other] },
+          {
+            matcher: 'startup|resume|clear|compact',
+            hooks: [expect.objectContaining({ command: expect.stringMatching(/croft-context\.mjs$/), 'croft-memory': true })],
+          },
+        ],
+        PreToolUse: [guard],
+      },
+    })
     const codex = JSON.parse(await readFile(join(HOME, '.codex', 'hooks.json'), 'utf8'))
     expect(codex.hooks.Stop).toEqual([quarry])
     expect(codex.hooks.SessionStart).toEqual([

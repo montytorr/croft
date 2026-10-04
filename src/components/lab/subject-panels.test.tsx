@@ -31,6 +31,7 @@ const todo = (over: Partial<PageTodo>): PageTodo => ({
   title: 'Try it',
   status: 'todo',
   claimed_by: null,
+  handoff: null,
   cairn_ref: null,
   cairn_status: null,
   updated_at: '2026-09-30T10:00:00Z',
@@ -77,18 +78,41 @@ describe('subject panels', () => {
     expect(container.querySelector('img')?.getAttribute('src')).toBe('/c/i1')
   })
 
-  it('offers no status control on a pushed todo and shows its Cairn reference', async () => {
+  it('offers no status control on a pushed todo and shows its hand-off', async () => {
     await render(
       <TodosPanel
         subjectRef="S-1"
-        todos={[todo({}), todo({ id: 't2', ref: 'T-2', number: 2, cairn_ref: 'CAIRN-9', cairn_status: 'doing' })]}
+        todos={[todo({}), todo({ id: 't2', ref: 'T-2', number: 2, handoff: { tracker: 'acme', ref: 'ACME-9', url: null, status: 'doing', synced_at: null } })]}
       />,
     )
     expect(container.querySelector('select[aria-label="Status of T-1"]')).not.toBeNull()
     expect(container.querySelector('select[aria-label="Status of T-2"]')).toBeNull()
-    expect(container.textContent).toContain('CAIRN-9')
+    expect(container.textContent).toContain('ACME-9')
     expect(container.textContent).toContain('doing')
     expect(container.querySelector('a[href^="https://"]')).toBeNull()
+  })
+
+  it('links the badge to the hand-off URL and takes a hand-off back after confirming', async () => {
+    mutateMock.mockResolvedValue({ ok: true, data: {} })
+    const handoff = { tracker: 'acme', ref: 'ACME-9', url: 'https://acme.test/9', status: 'doing', synced_at: null }
+    await render(<TodosPanel subjectRef="S-1" todos={[todo({ handoff })]} />)
+    const link = container.querySelector<HTMLAnchorElement>('a[href="https://acme.test/9"]')!
+    expect(link.target).toBe('_blank')
+    expect(link.rel).toContain('noopener')
+    expect(link.title).toBe('Handed off to acme: its status moves there')
+    expect(container.textContent).not.toMatch(/cairn/i)
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button[title="Take T-1 back from acme"]')?.click()
+    })
+    expect(mutateMock).not.toHaveBeenCalled()
+    await act(async () => {
+      Array.from(document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'))
+        .find((b) => b.textContent === 'Take back')
+        ?.click()
+    })
+    expect(mutateMock).toHaveBeenCalledWith('/api/v1/tasks/T-1/handoff', { method: 'DELETE' })
+    expect(container.querySelector('a[href="https://acme.test/9"]')).toBeNull()
   })
 
   it('asks for a resolution before closing a todo, and patches an ordinary move at once', async () => {

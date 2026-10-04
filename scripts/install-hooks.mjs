@@ -4,18 +4,13 @@
  *
  *   session start  -> inject the lab briefing (`croft context --brief`)
  *
- * Croft records no sessions — Cairn does — so there is no session-end hook,
+ * Croft records no sessions, so there is no session-end hook,
  * and the Stop/SessionEnd/PreCompact/per-Read entries older installs wrote are
  * taken out again (only this installer's own; anyone else's are left alone).
  *
- * Yields to Cairn. Where Cairn's own SessionStart hook is installed (an entry
- * tagged "cairn-memory": true, or OpenClaw's cairn-briefing hook linked),
- * Cairn's briefing already carries Croft's block, and a second briefing
- * competing for the top of every session is how both get skimmed. So for that
- * runtime Croft's hook is not installed (and a previous one is removed), and
- * this prints "briefing: carried by Cairn". A Cairn whose installed briefing
- * script predates Croft's block is not yielded to: Croft briefs on its own and
- * says to re-run once Cairn is upgraded.
+ * Always installs its own hook: it looks at no other product's hooks, and an
+ * earlier version that skipped Croft's hook for one is repaired by re-running
+ * this, which installs it.
  *
  * Idempotent: run it again after an upgrade and it replaces its own entries
  * without touching anyone else's. Every entry it owns is tagged, and tagging
@@ -57,9 +52,6 @@ const RETIRED_SCRIPTS = ['croft-session-end.mjs', 'croft-learn-nudge.mjs']
 
 /** Marks the entries this installer owns, so re-running replaces rather than duplicates. */
 const TAG = 'croft-memory'
-/** Marks Cairn's entries. Where its SessionStart hook is, Cairn carries Croft's briefing. */
-const CAIRN_TAG = 'cairn-memory'
-const CARRIED = 'briefing: carried by Cairn'
 
 const log = (...a) => console.log(...a)
 
@@ -217,46 +209,6 @@ const foreignHooks = (hooks) =>
     ),
   )
 
-/**
- * Cairn's SessionStart hook, by its tag or, for one installed before the tag,
- * by its script's name — the same two ways Cairn's installer knows its own.
- */
-const isCairnHook = (hook) =>
-  Boolean(hook?.[CAIRN_TAG]) || (typeof hook?.command === 'string' && hook.command.includes('cairn-context.mjs'))
-
-/**
- * Whether the Cairn script a hook runs carries Croft's block. Cairn gained it
- * in the release that added the Croft sibling line; a Cairn briefing from
- * before that is tagged exactly the same, and yielding to it would leave the
- * session with no lab briefing at all. The script is read where the entry
- * says it is; one this cannot read gets the benefit of the doubt.
- */
-const carriesCroft = (hook) => {
-  const script = typeof hook?.command === 'string' ? hook.command.match(/(\S*cairn-context\.mjs)/)?.[1] : null
-  if (!script) return true
-  const path = script.replace(/^["']/, '').replace(/^(~|\$HOME|\$\{HOME\})(?=\/)/, HOME)
-  try {
-    return /croft/i.test(readFileSync(path, 'utf8'))
-  } catch {
-    return true
-  }
-}
-
-/**
- * Cairn's briefing in one list of hooks: 'carries' (Croft stays out),
- * 'predates' (Cairn is there but too old to carry Croft's block), or null.
- */
-const cairnBriefing = (hooks) => {
-  const cairn = hooks.filter(isCairnHook)
-  if (!cairn.length) return null
-  return cairn.some(carriesCroft) ? 'carries' : 'predates'
-}
-
-const cairnBriefs = (hooks, event = 'SessionStart') =>
-  cairnBriefing((Array.isArray(hooks?.[event]) ? hooks[event] : []).flatMap((g) => g?.hooks ?? []))
-
-const PREDATES = "Cairn's briefing here predates Croft's block — Croft briefs on its own; after upgrading Cairn, re-run `croft setup`"
-
 /** Events older installs of this script wrote to, and that it now only cleans. */
 const RETIRED_EVENTS = ['PreToolUse', 'SessionEnd', 'PreCompact', 'Stop']
 
@@ -289,23 +241,15 @@ const installClaude = () => {
   settings.hooks ??= {}
 
   const retired = RETIRED_EVENTS.filter((event) => strip(settings.hooks, event))
-  const cairn = cairnBriefs(settings.hooks)
-  const carried = cairn === 'carries'
-  if (carried) {
-    strip(settings.hooks, 'SessionStart')
-  } else {
-    const groups = (settings.hooks.SessionStart ?? []).filter((g) => !(g.hooks ?? []).some(isMine))
-    groups.push({
-      matcher: 'startup|resume|clear|compact',
-      hooks: [{ type: 'command', command: `node ${CONTEXT}`, [TAG]: true, timeout: 10 }],
-    })
-    settings.hooks.SessionStart = groups
-  }
+  const groups = (settings.hooks.SessionStart ?? []).filter((g) => !(g.hooks ?? []).some(isMine))
+  groups.push({
+    matcher: 'startup|resume|clear|compact',
+    hooks: [{ type: 'command', command: `node ${CONTEXT}`, [TAG]: true, timeout: 10 }],
+  })
+  settings.hooks.SessionStart = groups
 
   const wrote = writeJson(path, settings, before)
-  if (carried) log(`  claude: ${CARRIED}`)
-  else if (cairn === 'predates') log(`  claude: ${PREDATES}`)
-  if (!carried && wrote) log('  claude: SessionStart (lab briefing)')
+  if (wrote) log('  claude: SessionStart (lab briefing)')
   if (wrote && retired.length) log(`  claude: removed Croft's old ${retired.join(', ')} hook(s)`)
 }
 
@@ -333,33 +277,23 @@ const installCodex = () => {
   const env = 'CROFT_AGENT=codex CROFT_PLATFORM=codex'
 
   const retired = RETIRED_EVENTS.filter((event) => strip(config.hooks, event))
-  const cairn = cairnBriefs(config.hooks)
-  const carried = cairn === 'carries'
-  if (carried) {
-    strip(config.hooks, 'SessionStart')
-  } else {
-    const groups = (config.hooks.SessionStart ?? []).filter((g) => !(g.hooks ?? []).some(isMine))
-    groups.push({
-      matcher: 'startup|resume|clear',
-      hooks: [{ type: 'command', command: `${env} node ${CONTEXT}`, [TAG]: true, timeout: 10 }],
-    })
-    config.hooks.SessionStart = groups
-  }
+  const groups = (config.hooks.SessionStart ?? []).filter((g) => !(g.hooks ?? []).some(isMine))
+  groups.push({
+    matcher: 'startup|resume|clear',
+    hooks: [{ type: 'command', command: `${env} node ${CONTEXT}`, [TAG]: true, timeout: 10 }],
+  })
+  config.hooks.SessionStart = groups
 
   // The trust warning is printed only when the file actually moved. Printed
   // every run it is wallpaper, and the one run where it matters reads the same
   // as the twenty where it did not.
   const wrote = writeJson(path, config, before)
-  if (carried) log(`  codex: ${CARRIED}`)
-  else if (cairn === 'predates') log(`  codex: ${PREDATES}`)
   if (wrote) {
-    if (!carried) log('  codex: SessionStart (lab briefing)')
+    log('  codex: SessionStart (lab briefing)')
     if (retired.length) log(`  codex: removed Croft's old ${retired.join(', ')} hook(s)`)
-    if (!carried) {
-      log('  codex: the entry must be trusted on next launch — [hooks.state] in config.toml')
-      log('  codex: needs CROFT_API_KEY_CODEX (`croft setup` pairs one), or it writes as')
-      log('         whoever owns the plain CROFT_API_KEY')
-    }
+    log('  codex: the entry must be trusted on next launch — [hooks.state] in config.toml')
+    log('  codex: needs CROFT_API_KEY_CODEX (`croft setup` pairs one), or it writes as')
+    log('         whoever owns the plain CROFT_API_KEY')
   }
 
   // Said, never done. These are somebody else's hooks, and this installer has
@@ -416,20 +350,11 @@ const installHermes = () => {
   const hooks = JSON.parse(JSON.stringify(before))
   const command = `env CROFT_AGENT=hermes CROFT_PLATFORM=hermes CROFT_CLI=${hookCli} node ${CONTEXT}`
   const current = Array.isArray(hooks.pre_llm_call) ? hooks.pre_llm_call : []
-  const cairn = cairnBriefing(current)
-  const carried = cairn === 'carries'
-  if (cairn === 'predates') log(`  Hermes Agent by Nous Research: ${PREDATES}`)
   const others = current.filter((entry) => !isMine(entry))
-  if (carried) {
-    if (others.length) hooks.pre_llm_call = others
-    else delete hooks.pre_llm_call
-  } else {
-    hooks.pre_llm_call = [...others, { command, timeout: 10 }]
-  }
-  if (carried) log(`  Hermes Agent by Nous Research: ${CARRIED}`)
+  hooks.pre_llm_call = [...others, { command, timeout: 10 }]
 
   if (canonicalHermesHooks(before) === canonicalHermesHooks(hooks)) {
-    return carried ? undefined : log('  Hermes Agent by Nous Research: pre_llm_call — unchanged')
+    return log('  Hermes Agent by Nous Research: pre_llm_call — unchanged')
   }
   if (DRY) return log('  Hermes Agent by Nous Research: would configure pre_llm_call')
 
@@ -444,7 +369,6 @@ const installHermes = () => {
   // A zero exit from `config set` is a claim, not a result. No Hermes runs on
   // any machine here, so every promise this installer makes about it rests on
   // reading back what it wrote rather than trusting the status it was handed.
-  if (carried) return log('  Hermes Agent by Nous Research: removed Croft\'s pre_llm_call entry')
   if (!hermesHookInstalled()) {
     console.error('  Hermes Agent by Nous Research: `hermes config set` reported success but the hook is not in the config it reads back — nothing was installed')
     process.exitCode = 1
@@ -484,9 +408,6 @@ const hermesHookInstalled = () => {
  * sync-agent-files keeps it current, like the other two hooks), and OpenClaw
  * is told about it with its own documented command, `hooks install --link`,
  * which adds that one directory to extraDirs and enables the hook.
- *
- * Not linked where Cairn's cairn-briefing hook is: Cairn's briefing carries
- * Croft's block there.
  */
 const OPENCLAW_HOOK = join(HOME, '.croft', 'hooks', 'openclaw', 'croft-briefing')
 const OPENCLAW_HOOK_FILES = ['HOOK.md', 'handler.ts']
@@ -530,15 +451,9 @@ const openclawRunsGateway = () => {
   // `mode: "remote"` is OpenClaw's own word for a client: this machine talks to
   // someone else's gateway (a laptop reaching clawdius), and such a config still
   // carries `agents` defaults. Counting it as a gateway paired a key nothing on
-  // the machine reads and linked a hook no gateway here loads (CAIRN-332).
+  // the machine reads and linked a hook no gateway here loads.
   if (gateway.mode === 'remote') return false
   return Boolean(gateway.mode || gateway.port || config?.agents || config?.channels)
-}
-
-/** Cairn's own briefing hook, enabled in this gateway's config. */
-const cairnBriefingLinked = () => {
-  const internal = readJson(openclawConfig())?.hooks?.internal
-  return internal?.enabled !== false && internal?.entries?.['cairn-briefing']?.enabled === true
 }
 
 const openclawLinked = () => {
@@ -599,13 +514,6 @@ const installOpenclaw = () => {
       : `no config at ${openclawConfig()}`
     log(`  openclaw: ${why} — this account runs no gateway; skipped.`)
     log('            Run the installer as the gateway\'s user, or pass --openclaw to link here anyway.')
-    return
-  }
-  if (cairnBriefingLinked()) {
-    log(`  openclaw: ${CARRIED}`)
-    if (openclawLinked()) {
-      log(`  openclaw: ${OPENCLAW_HOOK_NAME} is enabled too — set hooks.internal.entries.${OPENCLAW_HOOK_NAME}.enabled to false in ${openclawConfig()}`)
-    }
     return
   }
   if (DRY) {

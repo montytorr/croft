@@ -2,7 +2,7 @@ import { visit, SKIP } from 'unist-util-visit'
 
 /**
  * Bare subject refs like `S-12`. A single letter on purpose (see the contract):
- * it cannot be mistaken for a Cairn project key, and nothing else in prose
+ * it cannot be mistaken for a tracker's project key, and nothing else in prose
  * looks like `S-` followed by digits often enough to be worth guarding.
  */
 const REF = /\bS-(\d{1,7})\b/g

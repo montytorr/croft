@@ -77,6 +77,8 @@ export const GET = route({
       await visibleTasksOr(actor.userId),
     )
       .not('status', 'in', '("done","cancelled")')
+      // Handed-off todos are worked in their tracker, so they are not offered here.
+      .is('handoff_ref', null)
       .neq('projects.status', 'archived')
     const scoped = projectKey ? base.eq('projects.key', projectKey) : base
 

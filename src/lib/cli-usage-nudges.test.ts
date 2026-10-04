@@ -270,11 +270,11 @@ describe('the briefing', () => {
   it('carries the working rules in a few hundred bytes', async () => {
     const base = await serve(() => briefing, [])
     const { stdout } = await run(['context', '--project', 'ACME'], base)
-    const start = stdout.indexOf('Exploring or proving an idea → croft check first')
+    const start = stdout.indexOf('Lab work (exploring, proving an idea')
     expect(start).toBeGreaterThan(-1)
     const rules = stdout.slice(start).trim()
     expect(Buffer.byteLength(rules)).toBeLessThanOrEqual(360)
-    for (const rule of ['a Cairn task (croft push)', '--kind finding|attempt|decision', 'Claim the todo you work', '--conclusion -', 'done --resolution']) {
+    for (const rule of ['Croft holds lab work only', '--kind finding|attempt|decision', 'Claim the todo you work', '--conclusion -', 'done --resolution']) {
       expect(rules).toContain(rule)
     }
   })

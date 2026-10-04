@@ -44,8 +44,8 @@ export const laneOf = (todo: Pick<SubjectTodo, 'status'>) => asStatus(todo.statu
  */
 export const needsResolution = (from: string, to: TaskStatus) => isTerminal(to) && !isTerminal(asStatus(from))
 
-/** A pushed todo lives in Cairn: its status is Cairn's, and nothing here moves it. */
-export const isPushed = (todo: Pick<SubjectTodo, 'cairn_ref'>) => Boolean(todo.cairn_ref)
+/** A handed-off todo lives in another tracker: its status is that tracker's, and nothing here moves it. */
+export const isHandedOff = (todo: Pick<SubjectTodo, 'handoff'>) => Boolean(todo.handoff)
 
 export const counts = (todos: Pick<SubjectTodo, 'status'>[]) => {
   const done = todos.filter((t) => t.status === 'done').length

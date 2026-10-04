@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { conclusionMissing, nextConcludedAt, noteContentHash, stageNoteHash, stageNoteText } from './subjects'
-import {
-  cairnOutcomeHash,
-  cairnOutcomeNote,
-  closedInCairnKind,
-  closedInCairnResolution,
-} from './cairn-link'
+import { handoffOutcomeHash, handoffOutcomeNote, closedInKind, closedInResolution } from './handoff'
 import { parseRef } from './tasks'
 import { parseSubjectRef, subjectRef, isConcluding } from '@/lib/lab/types'
 import { PROJECT_KEY_RULE } from '@/lib/project-rename'
@@ -36,7 +31,7 @@ describe('single-letter project keys', () => {
     expect(parseRef('t-41')).toEqual({ key: 'T', number: 41 })
   })
 
-  it('stay invisible to Cairn, whose refs need a key of two or more', () => {
+  it('stay invisible to trackers whose refs need a key of two or more', () => {
     const CAIRN_REF = /\b([A-Z][A-Z0-9]{1,9})-(\d{1,6})\b/
     expect(CAIRN_REF.test('T-41')).toBe(false)
     expect(CAIRN_REF.test('S-12')).toBe(false)
@@ -107,24 +102,27 @@ describe('notes', () => {
   })
 })
 
-describe('cairn', () => {
+describe('hand-off outcomes', () => {
   it('writes the outcome line with the resolution when there is one', () => {
-    expect(cairnOutcomeNote('CAIRN-331', 'done', ' Shipped in v2. ')).toBe('CAIRN-331 done: Shipped in v2.')
-    expect(cairnOutcomeNote('CAIRN-331', 'cancelled', null)).toBe('CAIRN-331 cancelled')
+    expect(handoffOutcomeNote('CAIRN-331', 'done', ' Shipped in v2. ')).toBe('CAIRN-331 done: Shipped in v2.')
+    expect(handoffOutcomeNote('CAIRN-331', 'cancelled', null)).toBe('CAIRN-331 cancelled')
   })
 
   it('keys the outcome on ref and status, so a revised resolution is not a second note', () => {
-    expect(cairnOutcomeHash('CAIRN-331', 'done')).toBe(cairnOutcomeHash('CAIRN-331', 'done'))
-    expect(cairnOutcomeHash('CAIRN-331', 'done')).not.toBe(cairnOutcomeHash('CAIRN-331', 'cancelled'))
+    expect(handoffOutcomeHash('cairn', 'CAIRN-331', 'done')).toBe(handoffOutcomeHash('cairn', 'CAIRN-331', 'done'))
+    expect(handoffOutcomeHash('cairn', 'CAIRN-331', 'done')).not.toBe(
+      handoffOutcomeHash('cairn', 'CAIRN-331', 'cancelled'),
+    )
+    expect(handoffOutcomeHash('cairn', 'X-1', 'done')).not.toBe(handoffOutcomeHash('github', 'X-1', 'done'))
   })
 
-  it('closes a todo saying where it was closed, with Cairn\'s kind or `verified`', () => {
-    expect(closedInCairnResolution('CAIRN-331', ' Shipped in v2. ')).toBe('Closed in Cairn as CAIRN-331: Shipped in v2.')
-    expect(closedInCairnResolution('CAIRN-331', null)).toBe('Closed in Cairn as CAIRN-331')
-    expect(closedInCairnKind('wont-fix')).toBe('wont-fix')
+  it('closes a todo saying where it was closed, with the tracker\'s kind or `verified`', () => {
+    expect(closedInResolution('cairn', 'CAIRN-331', ' Shipped in v2. ')).toBe('Closed in cairn as CAIRN-331: Shipped in v2.')
+    expect(closedInResolution('github', 'o/r#4', null)).toBe('Closed in github as o/r#4')
+    expect(closedInKind('wont-fix')).toBe('wont-fix')
     // A kind Croft does not have, or none, must not fail the close.
-    expect(closedInCairnKind('shipped')).toBe('verified')
-    expect(closedInCairnKind(null)).toBe('verified')
+    expect(closedInKind('shipped')).toBe('verified')
+    expect(closedInKind(null)).toBe('verified')
   })
 
 

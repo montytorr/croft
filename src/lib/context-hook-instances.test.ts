@@ -76,10 +76,17 @@ describe('the SessionStart briefing hook', () => {
   })
 
   it('stays out of every summariser run', async () => {
-    for (const name of ['AGENT_MEMORY_SUMMARISER', 'CAIRN_SUMMARISER', 'QUARRY_SUMMARISER', 'CROFT_SUMMARISER']) {
+    for (const name of ['AGENT_MEMORY_SUMMARISER', 'CROFT_SUMMARISER']) {
       const { code, stdout } = await hook('echo "Croft — lab: 1 exploring"', { env: { [name]: '1' } })
       expect(code, name).toBe(0)
       expect(stdout, name).toBe('')
+    }
+  })
+
+  it('reads no other product\'s summariser flag', async () => {
+    for (const name of ['CAIRN_SUMMARISER', 'QUARRY_SUMMARISER']) {
+      const { stdout } = await hook('echo "Croft — lab: 1 exploring"', { env: { [name]: '1' } })
+      expect(stdout, name).toContain('Croft — lab: 1 exploring')
     }
   })
 

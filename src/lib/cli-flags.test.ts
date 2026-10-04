@@ -29,7 +29,8 @@ const knownFlags = (): Set<string> => {
 /** Flags named in the help text, which is what the CLI promises. */
 const helpFlags = (): Set<string> => {
   const help = /const HELP = `([\s\S]*?)`/.exec(source) ?? /ALWAYS START HERE([\s\S]*?)`/.exec(source)
-  const text = help ? help[1]! : source
+  const inherited = /const HELP_INHERITED = `([\s\S]*?)`/.exec(source)
+  const text = help ? `${help[1]!}${inherited?.[1] ?? ''}` : source
   return new Set([...text.matchAll(/--([a-z][a-z0-9-]+)/g)].map((m) => m[1]!))
 }
 

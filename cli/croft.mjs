@@ -1055,7 +1055,7 @@ const KNOWN_FLAGS = new Set([
   'label', 'limit', 'link', 'maintenance', 'member', 'message', 'mine', 'name', 'no-hooks', 'no-jobs', 'no-parent',
   'no-skill', 'no-start', 'older', 'output', 'owner', 'parent', 'pretty', 'priority', 'project', 'reason',
   'remote', 'repo', 'resolution', 'runtimes', 'scope', 'session', 'stage', 'start', 'status', 'summary', 'tag',
-  'tasks', 'title', 'to', 'type', 'url', 'version', 'visibility',
+  'tasks', 'title', 'to', 'tracker', 'type', 'undo', 'url', 'version', 'visibility',
 ])
 
 const REPEATABLE = new Set(['tag', 'label', 'member'])
@@ -1882,6 +1882,8 @@ const request = async (method, path, body, { soft = false, onError } = {}) => {
   try {
     payload = JSON.parse(text)
   } catch {
+    // Said to the caller's refusal handler too, so a route an older server lacks (an HTML 404) is told apart.
+    onError?.({ success: false, error: `non-JSON response (${res.status})`, code: 'non_json' }, res.status)
     if (soft) return null
     die(`non-JSON response (${res.status}): ${text.slice(0, 200)}`)
   }
@@ -2337,7 +2339,10 @@ const renderContext = (d, { fileOnly = false } = {}) => {
  * stays a briefing.
  */
 const LAB_RULE =
-  'Exploring or proving an idea → croft check first; changing a repo for real → a Cairn task (croft push).'
+  'Lab work (exploring, proving an idea, a subject\'s todos) → Croft: croft check first. Croft holds lab work only.'
+
+/** Said only where a lab project has a hand-off target, so the verb exists for someone. */
+const HANDOFF_RULE = 'Committed work leaves the lab: croft handoff T-n.'
 
 const BRIEFING_RULES = [
   LAB_RULE,
@@ -2356,7 +2361,7 @@ const cellOf = (v) =>
       : String(v).replace(/[\t\r\n]+/g, ' ')
 
 // ---------------------------------------------------------------------------
-// the lab: subjects, stages, tags, and the pairing with Cairn
+// the lab: subjects, stages, tags, and handing todos off
 // ---------------------------------------------------------------------------
 const SUBJECT_REF = /^(?:[Ss]-)?(\d{1,7})$/
 const SUBJECT_NOTE_KINDS = ['note', 'finding', 'decision', 'attempt', 'handoff']
@@ -2409,11 +2414,20 @@ const subjectRow = (s) => ({
 const asList = (d, key) => (Array.isArray(d) ? d : Array.isArray(d?.[key]) ? d[key] : Array.isArray(d?.results) ? d.results : [])
 const emitSubjects = (list) => emit(list, { rows: (d) => asList(d, 'subjects').map(subjectRow), columns: SUBJECT_COLUMNS })
 
+/** `tracker:target`, one cell: where a lab project's todos go. */
+const projectHandoffCell = (project) => {
+  const { tracker, target } = projectHandoffOf(project)
+  return tracker && target ? `${tracker}:${target}` : ''
+}
+
+/** `tracker:ref status`, one cell. */
+const handoffCell = (h) => (h ? `${h.tracker}:${h.ref}${h.status ? ` ${h.status}` : ''}` : '')
+
 const todoRow = (t) => ({
   ref: t.ref ?? refOfTask(t) ?? '',
   status: t.status ?? '',
   held: t.claimed_by ?? '',
-  cairn: t.cairn_ref ? `${t.cairn_ref}${t.cairn_status ? ` ${t.cairn_status}` : ''}` : '',
+  handoff: handoffCell(handoffOf(t)),
   title: truncate(t.title, 70),
 })
 
@@ -2444,7 +2458,7 @@ const renderSubject = (s, notes, todos, { full, humanNotes = [], files = [] }) =
         ? `shared with ${(s.members ?? []).map((m) => cellOf(m)).join(', ') || 'nobody yet'}`
         : 'private'
       : '',
-    s.project?.name ? `project ${s.project.name}${s.project.cairn_key ? ` (Cairn ${s.project.cairn_key})` : ''}` : '',
+    s.project?.name ? `project ${s.project.name}${projectHandoffCell(s.project) ? ` (hand-off ${projectHandoffCell(s.project)})` : ''}` : '',
     s.tags?.length ? `tags ${s.tags.map((t) => cellOf(t)).join(', ')}` : '',
     s.updated_at ? `updated ${DAY(s.updated_at)}` : '',
     s.archived_at ? 'archived' : '',
@@ -2456,7 +2470,7 @@ const renderSubject = (s, notes, todos, { full, humanNotes = [], files = [] }) =
   out.push('', `todos: ${open.length} open / ${todos.length - open.length} closed`)
   for (const t of full ? todos : open) {
     const row = todoRow(t)
-    out.push(`  ${row.ref}  ${row.status}${row.held ? `  held by ${row.held}` : ''}  ${row.title}${row.cairn ? `  [Cairn ${row.cairn}]` : ''}`)
+    out.push(`  ${row.ref}  ${row.status}${row.held ? `  held by ${row.held}` : ''}  ${row.title}${row.handoff ? `  [handed off ${row.handoff}]` : ''}`)
   }
   // Counts only: people's notes and files are read on purpose, not in every digest.
   if (humanNotes.length || files.length) {
@@ -2531,16 +2545,16 @@ const memberChanges = (args) => {
 }
 
 /**
- * A todo of a subject not yet in the lab stays out of Cairn unless forced:
- * Cairn has no idea who may read it, so filing it there is publishing it.
+ * A todo of a subject not yet in the lab stays out of a tracker unless forced:
+ * a tracker has no notion of who may see what, so handing it off is publishing it.
  */
 const unpublishedMessage = (todoRef, subjectRef, visibility) =>
   `${todoRef} belongs to ${subjectRef ?? 'a subject'}, which is ${visibility === 'private' ? 'private' : 'shared with its members only'}: ` +
-  `filing it in Cairn shows it to everyone there.\n` +
-  `publish the subject first (croft subject publish ${subjectRef ?? 'S-n'}), or re-run with --force to file it anyway`
+  `handing it off shows it to everyone in the tracker.\n` +
+  `publish the subject first (croft subject publish ${subjectRef ?? 'S-n'}), or re-run with --force to hand it off anyway`
 
 const unpublishedRefusal = (todoRef) => (payload) => {
-  if (payload.code === 'subject_not_published') die(`${todoRef}: ${payload.error}\nre-run with --force to link it anyway`)
+  if (payload.code === 'subject_not_published') die(`${todoRef}: ${payload.error}\nre-run with --force to hand it off anyway`)
 }
 
 /** A refusal on a visibility change, said with what to do instead. */
@@ -2554,19 +2568,56 @@ const visibilityRefusal = (ref) => (payload) => {
 }
 
 /**
- * Where `croft push T-41` with no --to files the todo: the Cairn key of its
- * subject's lab project. `{ key }`, or `{ why }` saying what is missing.
+ * Where `croft handoff T-41` files the todo when nothing says: the hand-off of
+ * its subject's lab project. `{ tracker, target }`, either possibly null.
  */
-const pushTarget = (todo, todoRef) => {
+const projectHandoff = (todo) => projectHandoffOf(todo?.subject?.project)
+
+/** What is missing for a hand-off, said with the flags that supply it. */
+const missingTarget = (todo, todoRef, tracker) => {
   const subject = todo?.subject
-  const key = subject?.project?.cairn_key
-  if (key) return { key: String(key).toUpperCase() }
   const why = !subject
-    ? `${todoRef} is not part of a subject, so there is no lab project to take a Cairn key from`
+    ? `${todoRef} is not part of a subject, so there is no lab project to take a target from`
     : !subject.project
       ? `${todoRef}'s subject ${subject.ref ?? ''} is in no lab project (croft subject edit ${subject.ref ?? 'S-n'} --project <name>)`
-      : `${todoRef}'s lab project ${subject.project.name} has no Cairn key (an administrator sets one in Settings)`
-  return { why: `${why}\nsay where it goes: croft push ${todoRef} --to <CAIRN_KEY>` }
+      : `${todoRef}'s lab project ${subject.project.name} has no hand-off target (an administrator sets one in Settings)`
+  return `${why}\nsay where it goes: croft handoff ${todoRef} --to <TARGET>${tracker ? '' : ' --tracker <NAME>'}`
+}
+
+/** The host of this Croft instance: what an external ref says the todo came from. */
+const instanceHost = () => {
+  try {
+    return new URL(BASE).host
+  } catch {
+    return String(BASE)
+  }
+}
+
+const TRACKER_NAME = /^[a-z][a-z0-9-]{1,31}$/
+
+/**
+ * Which tracker a hand-off goes to: --tracker, then the subject's lab project,
+ * then CROFT_TRACKER, then `fallback`, then the only adapter this machine has.
+ * Dies saying what to pass when that leaves more than one, or none.
+ */
+const chooseTracker = (todo, fallback = null) => {
+  const flagged = flags.tracker === undefined ? null : String(need(flags.tracker, '--tracker needs a name, e.g. --tracker github')).trim().toLowerCase()
+  const name =
+    flagged ??
+    projectHandoff(todo).tracker ??
+    (process.env.CROFT_TRACKER?.trim().toLowerCase() || null) ??
+    fallback
+  if (name) {
+    if (!TRACKER_NAME.test(name)) die(`"${name}" is not a tracker name: lowercase letters, digits and dashes`)
+    return name
+  }
+  const here = availableAdapters().map((a) => a.name)
+  if (here.length === 1) return here[0]
+  die(
+    here.length
+      ? `which tracker? ${here.length} are available here (${here.join(', ')}): pass --tracker <name>, or set CROFT_TRACKER`
+      : 'which tracker? none has an adapter on this machine: pass --tracker <name> (with --link to record a task made by hand)',
+  )
 }
 
 const tagChanges = (args) => {
@@ -2588,26 +2639,20 @@ const conclusionRefusal = (ref, stage) => (payload) => {
   )
 }
 
-/**
- * Cairn's CLI, found the way Quarry finds its own: an explicit override, then
- * where `cairn setup` installs it, then PATH. null when there is none.
- */
-const resolveCairn = () => {
-  const override = process.env.CROFT_CAIRN_BIN?.trim()
-  if (override) return existsSync(override) ? override : die(`CROFT_CAIRN_BIN=${override} does not exist`)
-  const installed = join(HOME, '.local', 'bin', 'cairn')
-  if (existsSync(installed)) return installed
-  for (const dir of (process.env.PATH ?? '').split(':')) {
-    if (dir && existsSync(join(dir, 'cairn'))) return join(dir, 'cairn')
-  }
-  return null
-}
+// ---- Tracker adapters ----
+// Everything Croft knows about another tracker lives in this section: its name,
+// whether this machine can reach it, how to file a todo there and how to read
+// the todo back. Nothing outside it names a product; `croft handoff` and
+// `croft sync` only call the interface:
+//
+//   { name, available() → bool,
+//     create({ title, body, target, type, todoRef, todoUrl }) → { ref, url } (dies on failure),
+//     show(ref) → { status, resolution?, resolutionKind?, url? } | { error } }
+//
+// An adapter needs the tracker's own CLI and credentials on this machine;
+// Croft stores no key for it and makes no request to it from the server.
 
-const NO_CAIRN =
-  'croft push needs Cairn\'s CLI, and `cairn` is not in ~/.local/bin or on PATH. ' +
-  'Install it (`cairn setup --url <your Cairn>`), or point CROFT_CAIRN_BIN at it.'
-
-const runCairn = (bin, args, input) => {
+const runTool = (bin, args, input) => {
   // A script path (a checkout, a test double) runs under this node.
   const [cmd, argv] = /\.m?js$/.test(bin) ? [process.execPath, [bin, ...args]] : [bin, args]
   return spawnSync(cmd, argv, {
@@ -2617,6 +2662,28 @@ const runCairn = (bin, args, input) => {
     stdio: ['pipe', 'pipe', 'pipe'],
   })
 }
+
+/** An explicit override, then `extraDirs`, then PATH. null when there is none. */
+const findTool = (name, envVar, extraDirs = []) => {
+  const override = process.env[envVar]?.trim()
+  if (override) return existsSync(override) ? override : die(`${envVar}=${override} does not exist`)
+  for (const dir of [...extraDirs, ...(process.env.PATH ?? '').split(':')]) {
+    if (dir && existsSync(join(dir, name))) return join(dir, name)
+  }
+  return null
+}
+
+const firstLine = (run) => String(run.stderr || run.error?.message || `exit ${run.status}`).trim().split('\n')[0]
+
+/** The footer every filed todo carries: where it came from. */
+const originLine = (todoRef, todoUrl) => `From Croft ${todoRef}: ${todoUrl}`
+
+// -- cairn --------------------------------------------------------------------
+const resolveCairn = () => findTool('cairn', 'CROFT_CAIRN_BIN', [join(HOME, '.local', 'bin')])
+
+const NO_CAIRN =
+  'croft handoff needs Cairn\'s CLI, and `cairn` is not in ~/.local/bin or on PATH. ' +
+  'Install it (`cairn setup --url <your Cairn>`), or point CROFT_CAIRN_BIN at it.'
 
 /**
  * The ref `cairn add` printed. Its TSV is `key<TAB>value` per field; `ref`
@@ -2641,7 +2708,185 @@ const parseCairnRef = (stdout) => {
 /** Croft's todo types are Cairn's; anything unknown files as a feature. */
 const CAIRN_TYPES = { feature: 'feature', bug: 'bug', improvement: 'improvement', chore: 'chore', spike: 'spike', docs: 'docs' }
 
-/** Every todo paired with a Cairn task: one listing of T, or subject by subject. */
+/** A Cairn from before external refs refuses the flag by name. */
+const REJECTS_EXTERNAL_REF = /unknown flag --external-(?:ref|url)/i
+
+/** Cairn's own ref shape. Anything else is never handed to its CLI as an argument. */
+const CAIRN_TASK_REF = /^[A-Z][A-Z0-9]{0,9}-\d{1,7}$/
+
+/**
+ * Cairn's parser reads any argument starting with `--` as a flag and has no
+ * `--` terminator, so a title that starts that way would be taken as an
+ * option. It keeps its words; the dashes become a dash it cannot misread.
+ */
+const safeTitle = (title) => String(title).replace(/^-{2,}\s*/, '– ')
+
+const cairnAdapter = {
+  name: 'cairn',
+  available: () => Boolean(resolveCairn()),
+  create: ({ title, body, target, type, todoRef, todoUrl }) => {
+    const bin = resolveCairn()
+    if (!bin) die(NO_CAIRN)
+    const key = String(target).toUpperCase()
+    if (!/^[A-Z][A-Z0-9]{0,9}$/.test(key)) die(`"${target}" is not a Cairn project key, e.g. CAIRN`)
+    const kind = CAIRN_TYPES[type] ?? 'feature'
+    const description = String(body ?? '').trim()
+    const text = [description, originLine(todoRef, todoUrl)].filter(Boolean).join('\n\n')
+    const args = ['add', safeTitle(title), '--project', key, '--type', kind, '--body', '-', '--no-start']
+    // Cairn refuses a bug or spike with no real body; the line saying where it
+    // came from is not one, and the description is what there is.
+    if (!description && ['bug', 'spike'].includes(kind)) args.push('--force-empty')
+
+    let run = runTool(bin, [...args, '--external-ref', `croft:${instanceHost()}/${todoRef}`, '--external-url', todoUrl], text)
+    if (run.status !== 0 && !run.error && REJECTS_EXTERNAL_REF.test(String(run.stderr))) {
+      run = runTool(bin, [...args, '--label', `croft:${todoRef}`], text)
+    }
+    if (run.error) die(`could not run ${bin}: ${run.error.message}`)
+    if (run.stderr) process.stderr.write(String(run.stderr).replace(/^/gm, 'cairn: '))
+    if (run.status !== 0) die(`cairn add failed (exit ${run.status}); nothing was linked`, run.status === UNDECIDED_EXIT ? UNDECIDED_EXIT : 1)
+    const ref = parseCairnRef(run.stdout)
+    // The external ref is this todo's, for good: after a take-back, Cairn
+    // answers with the task the earlier hand-off filed, which may be closed.
+    // Linking it silently would let the next sync close the todo with it.
+    if (ref && /already filed as/i.test(String(run.stderr))) {
+      die(
+        `Cairn already has ${ref} for ${todoRef}, from an earlier hand-off; nothing new was filed.\n` +
+          `if that is the task, record it again: croft handoff ${todoRef} --link ${ref} --tracker cairn`,
+      )
+    }
+    if (!ref) {
+      die(
+        `cairn add exited 0 but named no task ref:\n${String(run.stdout).slice(0, 400)}\n` +
+          `find it in Cairn (external ref croft:${instanceHost()}/${todoRef}) and record it: croft handoff ${todoRef} --link <REF> --tracker cairn`,
+      )
+    }
+    return { ref, url: /^url\t(https?:\/\/\S+)\s*$/m.exec(String(run.stdout))?.[1] ?? null }
+  },
+  show: (ref) => {
+    const bin = resolveCairn()
+    if (!bin) return { error: 'no cairn CLI here' }
+    if (!CAIRN_TASK_REF.test(String(ref))) return { error: `"${ref}" is not a Cairn task ref` }
+    const run = runTool(bin, ['show', ref, '--json'])
+    let task = null
+    try {
+      task = run.status === 0 ? JSON.parse(run.stdout) : null
+    } catch {
+      task = null
+    }
+    if (!task?.status) return { error: firstLine(run) }
+    return {
+      status: String(task.status),
+      resolution: task.resolution ? String(task.resolution) : undefined,
+      resolutionKind: task.resolution_kind ?? task.resolutionKind ?? undefined,
+      url: typeof task.url === 'string' ? task.url : null,
+    }
+  },
+}
+
+// -- github -------------------------------------------------------------------
+const resolveGh = () => findTool('gh', 'CROFT_GH_BIN')
+
+// A letter or digit first: a repository starting with a dash would read as a flag.
+const GH_REPO = /^[A-Za-z0-9][A-Za-z0-9_.-]*\/[A-Za-z0-9_.][A-Za-z0-9_.-]*$/
+const GH_REF = /^([A-Za-z0-9][A-Za-z0-9_.-]*\/[A-Za-z0-9_.][A-Za-z0-9_.-]*)#(\d+)$/
+
+const githubAdapter = {
+  name: 'github',
+  available: () => Boolean(resolveGh()),
+  create: ({ title, body, target, todoRef, todoUrl }) => {
+    const bin = resolveGh()
+    if (!bin) die('croft handoff to github needs the `gh` CLI on PATH (or CROFT_GH_BIN), signed in with `gh auth login`')
+    if (!GH_REPO.test(String(target))) die(`"${target}" is not a repository: use owner/repo`)
+    const text = [String(body ?? '').trim(), '---', originLine(todoRef, todoUrl)].filter(Boolean).join('\n\n')
+    const run = runTool(bin, ['issue', 'create', `--repo=${target}`, `--title=${title}`, '--body-file', '-'], text)
+    if (run.error) die(`could not run ${bin}: ${run.error.message}`)
+    if (run.stderr) process.stderr.write(String(run.stderr).replace(/^/gm, 'gh: '))
+    if (run.status !== 0) die(`gh issue create failed (exit ${run.status}); nothing was linked`)
+    const issue = /https:\/\/github\.com\/([^/\s]+\/[^/\s]+)\/issues\/(\d+)/.exec(String(run.stdout))
+    if (!issue) {
+      die(
+        `gh issue create exited 0 but printed no issue URL:\n${String(run.stdout).slice(0, 400)}\n` +
+          `find the issue and record it: croft handoff ${todoRef} --link ${target}#<N> --tracker github`,
+      )
+    }
+    return { ref: `${issue[1]}#${issue[2]}`, url: issue[0] }
+  },
+  show: (ref) => {
+    const bin = resolveGh()
+    if (!bin) return { error: 'no gh CLI here' }
+    const parsed = GH_REF.exec(ref)
+    if (!parsed) return { error: `"${ref}" is not owner/repo#N` }
+    const run = runTool(bin, ['issue', 'view', parsed[2], '-R', parsed[1], '--json', 'state,stateReason,url'])
+    let issue = null
+    try {
+      issue = run.status === 0 ? JSON.parse(run.stdout) : null
+    } catch {
+      issue = null
+    }
+    if (!issue?.state) return { error: firstLine(run) }
+    const url = typeof issue.url === 'string' ? issue.url : null
+    if (issue.state !== 'CLOSED') return { status: 'todo', url }
+    // Only a completed close is done. Not planned, a duplicate, or a reason
+    // this code has never seen closed the issue without doing the work.
+    if (issue.stateReason === 'COMPLETED' || issue.stateReason == null) {
+      return { status: 'done', resolution: 'closed as completed', url }
+    }
+    const reason = String(issue.stateReason).toLowerCase().replace(/_/g, ' ')
+    return { status: 'cancelled', resolution: `closed as ${reason}`, resolutionKind: issue.stateReason === 'DUPLICATE' ? 'duplicate' : 'wont-fix', url }
+  },
+}
+
+const TRACKER_ADAPTERS = { cairn: cairnAdapter, github: githubAdapter }
+const adapterFor = (name) => (Object.hasOwn(TRACKER_ADAPTERS, name) ? TRACKER_ADAPTERS[name] : null)
+const availableAdapters = () => Object.values(TRACKER_ADAPTERS).filter((a) => a.available())
+
+// -- servers older than 0.7 ---------------------------------------------------
+// They answer `cairn_ref`/`cairn_key` and take the link at /cairn-link.
+
+/** A todo's hand-off, from whichever server answered. */
+const handoffOf = (todo) =>
+  todo?.handoff ??
+  (todo?.cairn_ref ? { tracker: 'cairn', ref: todo.cairn_ref, url: null, status: todo.cairn_status ?? null, synced_at: null } : null)
+
+/** Whether a task row comes from a server that reports hand-offs at all. */
+const reportsHandoff = (todo) => 'handoff' in todo || 'cairn_ref' in todo
+
+/** The tracker and target a lab project sends its todos to. */
+const projectHandoffOf = (project) => ({
+  tracker: project?.handoff_tracker ?? (project?.cairn_key ? 'cairn' : null),
+  target: project?.handoff_target ?? project?.cairn_key ?? null,
+})
+
+class LegacyServer extends Error {}
+
+/**
+ * POST /handoff; where that route does not exist (a 0.6 server), the cairn
+ * tracker's old /cairn-link takes the same facts. `onError` is for refusals.
+ */
+/** A server refusal for one todo of a sync, reported on its row. */
+class SyncRowError extends Error {}
+
+const postHandoff = async (todoRef, body, onError) => {
+  try {
+    return await request('POST', `/api/v1/tasks/${todoRef}/handoff`, body, {
+      onError: (payload, status) => {
+        if (status === 404 && payload.code === 'non_json' && body.tracker === 'cairn') throw new LegacyServer()
+        onError?.(payload, status)
+      },
+    })
+  } catch (error) {
+    if (!(error instanceof LegacyServer)) throw error
+  }
+  const legacy = { cairnRef: body.ref }
+  if (body.status) legacy.cairnStatus = body.status
+  if (body.resolution) legacy.cairnResolution = body.resolution
+  if (body.resolutionKind) legacy.cairnResolutionKind = body.resolutionKind
+  if (body.force) legacy.force = true
+  return request('POST', `/api/v1/tasks/${todoRef}/cairn-link`, legacy, { onError })
+}
+// ---- end of tracker adapters ----
+
+/** Every handed-off todo: one listing of T, or subject by subject. */
 const linkedTodos = async () => {
   // The list pages at 200, the most the server takes.
   const PAGE = 200
@@ -2652,27 +2897,26 @@ const linkedTodos = async () => {
     tasks.push(...page)
     if (page.length < PAGE || (typeof listed?.count === 'number' && tasks.length >= listed.count)) break
   }
-  if (tasks.length && tasks.some((t) => 'cairn_ref' in t)) {
-    return tasks.filter((t) => t.cairn_ref).map((t) => ({ ...t, ref: refOfTask(t) ?? `${TODO_KEY}-${t.number}` }))
+  if (tasks.length && tasks.some(reportsHandoff)) {
+    return tasks.filter((t) => handoffOf(t)).map((t) => ({ ...t, ref: refOfTask(t) ?? `${TODO_KEY}-${t.number}` }))
   }
   const subjects = asList(await request('GET', '/api/v1/subjects?archived=include', undefined, { soft: true }), 'subjects')
   const todos = await Promise.all(
     subjects.map((s) => request('GET', `/api/v1/subjects/${s.ref}/todos`, undefined, { soft: true })),
   )
-  return todos.flatMap((list) => asList(list, 'todos')).filter((t) => t.cairn_ref)
+  return todos.flatMap((list) => asList(list, 'todos')).filter((t) => handoffOf(t))
 }
 
-/** Done and cancelled, in Croft and in Cairn alike. */
+/** Done and cancelled, in Croft and in any tracker alike. */
 const TERMINAL = new Set(['done', 'cancelled'])
 
 /**
- * The briefing in at most five lines, for a SessionStart hook — Croft's own,
- * or Cairn's when it carries Croft's block. Silent on every failure: a
+ * The briefing in at most five lines, for a SessionStart hook. Silent on every failure: a
  * briefing that errors is worse than none, and this runs unasked at the top
  * of every session.
  */
 const BRIEF_DEADLINE_MS = Number(process.env.CROFT_BRIEF_DEADLINE_MS ?? 2500)
-const renderBrief = (d, stages) => {
+const renderBrief = (d, stages, projects) => {
   const concluding = Array.isArray(stages)
     ? new Set(stages.filter((s) => CONCLUDING.has(s.category)).map((s) => s.name))
     : SEED_CONCLUDING
@@ -2687,7 +2931,8 @@ const renderBrief = (d, stages) => {
     const open = s.todos?.open ?? 0
     lines.push(`  ${s.ref} ${cellOf(s.stage)}  ${truncate(s.title, 60)}${open ? ` — ${open} todo${open === 1 ? '' : 's'}` : ''}`)
   }
-  lines.push(LAB_RULE)
+  // One line, so the briefing stays at five.
+  lines.push(asList(projects, 'projects').some((p) => projectHandoffCell(p)) ? `${LAB_RULE} ${HANDOFF_RULE}` : LAB_RULE)
   return `${lines.join('\n')}\n`
 }
 
@@ -2707,13 +2952,14 @@ const brief = async () => {
       return null
     }
   }
-  const [data, stages] = await Promise.all([
+  const [data, stages, projects] = await Promise.all([
     get('/api/v1/subjects/brief'),
     get('/api/v1/stages'),
+    get('/api/v1/lab-projects'),
   ])
   if (!data) return
   if (FORMAT === 'json') return emit(data)
-  const text = renderBrief(data, stages)
+  const text = renderBrief(data, stages, projects)
   if (text) process.stdout.write(text)
 }
 
@@ -2738,8 +2984,8 @@ const HELP = `croft — the lab board: subjects to explore and prove, their todo
     croft check "<subject>"        what the lab already tried, found or concluded
                                    searches subjects, todos and work-log notes;
                                    --kinds subject,task,note; --assignee me|<who>
-    Exploring or proving an idea → croft check first; changing a repo for real
-    → a Cairn task (croft push).
+    Lab work (exploring, proving an idea, a subject's todos) → Croft.
+    Croft holds lab work only; committed work leaves it: croft handoff T-n.
 
   subjects (refs S-12)
     croft subject add "<title>" [--stage S] [--tag t]... [--project P] [--owner me] [--body -]
@@ -2772,46 +3018,40 @@ const HELP = `croft — the lab board: subjects to explore and prove, their todo
     croft stages                   the pipeline, in order, with each stage's category
     croft tags                     the tags subjects can carry
     croft projects                 the lab projects (Trig, Croft…) a subject can be
-                                   part of, each with the Cairn key its todos go to
+                                   part of, each with the tracker and target its
+                                   todos are handed off to
 
-  todos (refs T-41) — the task verbs
-    croft next [--assignee me|<who>]       what to pick up, and why
-    croft list [--status S] [--type T] [--label L] [--mine] [--assignee me|<who>]
-                                   todos (project T unless --project K)
+  todos (refs T-41), worked here until they are handed off
     croft show T-41 [--full]       a digest unless --full
-    croft log T-41 [--kind K]      the work log
+    croft list [--status S] [--type T] [--mine] [--assignee me|<who>]
+                                   todos (--project K for another container)
     croft claim T-41               exits 9 if another agent holds it
-    croft beat T-41                keep a claim alive
+    croft note T-41 "<text>" [--kind note|finding|decision|attempt|handoff]
     croft checkpoint T-41 --summary "<where things stand>"
     croft release T-41 [--force]   --force only to drop another session's claim
-    croft block T-41 --reason "<why>"   |   croft unblock T-41
-    croft note T-41 "<text>" [--kind note|finding|decision|attempt|handoff]
-    croft update T-41 [--title T] [--status S] [--type T] [--priority P] [--assignee <who>] [--body -]
-    croft comment T-41 "<text>"
     croft done T-41 --resolution "<what was actually done>" [--kind fixed|verified|answered|…]
     croft cancel T-41 --resolution "<why it is being dropped>" [--kind wont-fix]
     croft done T-41 --duplicate-of T-31 --resolution "…"
-    croft commit T-41 <sha> [--repo PATH] [--branch NAME] [--message TEXT] [--url URL]
-    croft run T-41 "<command>" --status passed|failed|skipped [--exit-code N]
-                                   record what you already did; nothing is run
-    croft attach T-41 <file>  |  croft files T-41  |  croft history T-41
-    croft children T-41  |  croft deps T-41  |  croft blockedby T-41 T-40  |  croft unblockedby T-41 T-40
-    croft add "<title>" --project K [--type bug] [--priority high] [--body -] [--parent T-40]
-                                   a todo with no subject; prefer subject todo
     croft people                   who work can be assigned to
 
-  pairing with Cairn
-    croft push T-41 [--to <CAIRN_KEY>] [--type T]
-                                   files it in Cairn (cairn add … --label croft:T-41)
-                                   and links it; from then on Cairn owns its status.
-                                   Without --to: the Cairn key of its subject's project.
+  handing a todo off to a task tracker
+    croft handoff T-41 [--to <TARGET>] [--tracker <NAME>] [--type T]
+                                   files it in the tracker through its adapter and
+                                   links it; from then on the tracker owns its status.
+                                   Tracker and target default to its subject's lab
+                                   project (croft projects); else --tracker, then
+                                   CROFT_TRACKER, then the only adapter on this machine.
                                    A todo of a private or members subject is refused:
-                                   publish the subject, or --force to file it anyway
-                                   Needs the cairn CLI (PATH, ~/.local/bin or CROFT_CAIRN_BIN)
-    croft push T-41 --link CAIRN-331       record a link made by hand
+                                   publish the subject, or --force to hand it off anyway
+    croft handoff T-41 --link <REF> [--url URL] [--tracker <NAME>]
+                                   record a task made by hand (any tracker name)
+    croft handoff T-41 --undo      take it back; nothing is done in the tracker
+    croft sync                     pull the status of every handed-off todo back, for
+                                   each tracker with an adapter here; the rest are skipped
+    adapters: ${Object.keys(TRACKER_ADAPTERS).join(', ')}        each uses that tool's own CLI and sign-in on this machine
     croft push T-41 <sha> [--repo PATH] [--branch NAME] [--remote NAME] [--url URL]
-                                   with a sha: records a git push, as commit does
-    croft sync                     pull the status of every paired todo back from Cairn
+                                   records a git push, as commit does
+                                   (push T-41 with no sha is deprecated: use handoff)
 
   briefing
     croft context --brief [--cwd D]        the lab in five lines; silent when there is
@@ -2819,31 +3059,12 @@ const HELP = `croft — the lab board: subjects to explore and prove, their todo
     croft context [--scope project|all] [--project K]
                                    what you hold, what is in flight, stale claims
 
-  labels and task projects
-    croft labels  |  croft labels rename <from> <to>  |  croft labels remove <label>
-    croft project list [--archived]   the task containers (every todo is in T)
-    croft project create <KEY> "<title>" [--body -]   KEY is 1-10 uppercase, starting with a letter
-    croft project rename <KEY> "<title>"  |  croft project rekey <KEY> <NEW>
-    croft project rename <KEY> --key <NEW>
-    croft project archive|restore <KEY>  |  croft project delete <KEY> --confirm <KEY>
-    croft task delete <ref> --confirm <ref>       junk only; refuses a task with history
-    croft map [<KEY>|none]         which project this directory is
-
   instances
     croft instance [list]                        which Croft instance a command uses
     croft instance policy ask | default <name>   in a directory with no route
     croft instance add <name> --url <url> [--default] [--adopt]
     croft <command> --instance <name>            use that instance (or CROFT_INSTANCE=<name>)
-    croft route                                  which instance this directory uses, and why
-    croft route add <instance> [--folder|--session] [--dir D] [--force]
-    croft route list | remove [--folder] [--dir D]
     croft --version                              this CLI, the server, and whether they match
-
-  maintenance
-    croft reconcile [--older N] [--dry-run]   release your own claims that went quiet (2h);
-                                   as CROFT_AGENT=maintenance: every quiet claim
-    croft reconcile|sync --all-instances      once per instance on a machine with several
-    croft replay                   send writes put aside while the server was down
 
   connect a machine
     croft setup --url <instance>   pair keys in the browser, install the CLI, skill,
@@ -2865,8 +3086,51 @@ const HELP = `croft — the lab board: subjects to explore and prove, their todo
     --body -  /  --resolution -  /  --conclusion -   read the value from stdin
     bodies are markdown: ## headings, - lists, code in backticks
 
+  croft help --all               the inherited task verbs too: dependencies, labels,
+                                 routing, maintenance and the rest
+
   exit codes: 1 error · 2 unknown or ignored flag · 9 already claimed · 10 which instance?
-  env: CROFT_BASE_URL, CROFT_API_KEY, CROFT_CAIRN_BIN
+  env: CROFT_BASE_URL, CROFT_API_KEY, CROFT_TRACKER
+`
+
+/** \`croft help --all\`: the verbs inherited from the task tracker Croft was forked from, still working on a todo. */
+const HELP_INHERITED = `
+  inherited task verbs (they work on todos; the lab verbs above are enough for most work)
+    croft next [--assignee me|<who>]       what to pick up, and why
+    croft log T-41 [--kind K]      the work log
+    croft beat T-41                keep a claim alive
+    croft block T-41 --reason "<why>"   |   croft unblock T-41
+    croft update T-41 [--title T] [--status S] [--type T] [--priority P] [--assignee <who>] [--body -]
+    croft comment T-41 "<text>"
+    croft commit T-41 <sha> [--repo PATH] [--branch NAME] [--message TEXT] [--url URL]
+    croft run T-41 "<command>" --status passed|failed|skipped [--exit-code N]
+                                   record what you already did; nothing is run
+    croft attach T-41 <file>  |  croft files T-41  |  croft history T-41
+    croft children T-41  |  croft deps T-41  |  croft blockedby T-41 T-40  |  croft unblockedby T-41 T-40
+    croft list --label L           filter by label
+    croft add "<title>" --project K [--type bug] [--priority high] [--body -] [--parent T-40]
+                                   refused without a subject: croft subject todo S-12 "<title>"
+
+  labels and task projects
+    croft labels  |  croft labels rename <from> <to>  |  croft labels remove <label>
+    croft project list [--archived]   the task containers (every todo is in T)
+    croft project create <KEY> "<title>" [--body -]   KEY is 1-10 uppercase, starting with a letter
+    croft project rename <KEY> "<title>"  |  croft project rekey <KEY> <NEW>
+    croft project rename <KEY> --key <NEW>
+    croft project archive|restore <KEY>  |  croft project delete <KEY> --confirm <KEY>
+    croft task delete <ref> --confirm <ref>       junk only; refuses a task with history
+    croft map [<KEY>|none]         which project this directory is
+
+  routing
+    croft route                                  which instance this directory uses, and why
+    croft route add <instance> [--folder|--session] [--dir D] [--force]
+    croft route list | remove [--folder] [--dir D]
+
+  maintenance
+    croft reconcile [--older N] [--dry-run]   release your own claims that went quiet (2h);
+                                   as CROFT_AGENT=maintenance: every quiet claim
+    croft reconcile|sync --all-instances      once per instance on a machine with several
+    croft replay                   send writes put aside while the server was down
 `
 
 const need = (v, msg) => (v === undefined || v === true ? die(msg) : v)
@@ -3076,7 +3340,7 @@ const openclawRunsGateway = () => {
   // `mode: "remote"` is OpenClaw's own word for a client: this machine talks to
   // someone else's gateway (a laptop reaching clawdius), and such a config still
   // carries `agents` defaults. Counting it as a gateway paired a key nothing on
-  // the machine reads and linked a hook no gateway here loads (CAIRN-332).
+  // the machine reads and linked a hook no gateway here loads.
   if (gateway.mode === 'remote') return false
   return Boolean(gateway.mode || gateway.port || config?.agents || config?.channels)
 }
@@ -3221,6 +3485,81 @@ const listTaskProjects = async () => {
   emit(rows, { columns })
 }
 
+/**
+ * The body of `croft handoff` (and of the deprecated `push T-41`). `legacyTracker`
+ * is the tracker an old spelling always meant, used when nothing else names one.
+ */
+const handOff = async ({ legacyTracker }) => {
+  const ref = need(positional[0], 'usage: croft handoff T-41 [--to <TARGET>] [--tracker <NAME>]   |   --link <REF> [--url URL]   |   --undo')
+
+  if (flags.undo) {
+    const taken = await request('DELETE', `/api/v1/tasks/${ref}/handoff`)
+    if (FORMAT !== 'tsv') return emit(taken)
+    process.stderr.write(`${ref} is back in Croft: its status moves here again\n`)
+    return emit([{ ref, status: taken?.status ?? '', title: truncate(taken?.title, 70) }], { columns: ['ref', 'status', 'title'] })
+  }
+
+  const todo = await request('GET', `/api/v1/tasks/${ref}`)
+  const todoRef = refOfTask(todo) ?? ref
+  // The old spelling's --to named a key in its one tracker, whatever the project says.
+  const tracker = legacyTracker && flags.tracker === undefined && flags.to !== undefined ? legacyTracker : chooseTracker(todo, legacyTracker)
+  const refusal = unpublishedRefusal(todoRef)
+  const subjectRef = todo.subject?.ref ?? todo.subject_ref ?? (todo.subject_number ? `S-${todo.subject_number}` : null)
+
+  if (flags.link !== undefined) {
+    const linkRef = String(need(flags.link, '--link needs the task\'s ref in the tracker, e.g. --link <REF>')).trim()
+    if (!linkRef || linkRef.length > 200 || /\s/.test(linkRef)) die(`"${linkRef}" is not a task ref: 1-200 characters, no spaces`)
+    const body = { tracker, ref: linkRef }
+    if (flags.url) body.url = String(flags.url)
+    if (flags.force) body.force = true
+    return emit(await postHandoff(todoRef, body, refusal))
+  }
+
+  const existing = handoffOf(todo)
+  if (existing && !flags.force) {
+    die(`${todoRef} is already handed off to ${existing.tracker} as ${existing.ref} — \`croft sync\` pulls its status; --undo takes it back; --force hands off again`)
+  }
+  const adapter = adapterFor(tracker)
+  if (!adapter) die(`no adapter for "${tracker}" here (adapters: ${Object.keys(TRACKER_ADAPTERS).join(', ')}): file it by hand, then croft handoff ${todoRef} --link <REF> --tracker ${tracker}`)
+  // Checked here, before the tracker is touched: the server refuses the link
+  // too, but by then the task would already exist.
+  const visibility = todo.subject?.visibility
+  if (visibility && visibility !== 'lab' && !flags.force) die(unpublishedMessage(todoRef, todo.subject.ref, visibility))
+
+  const fromProject = projectHandoff(todo)
+  let target = flags.to === undefined ? null : String(need(flags.to, '--to needs where it goes in the tracker, e.g. --to <KEY> or --to owner/repo'))
+  if (!target) {
+    if (fromProject.tracker !== tracker || !fromProject.target) die(missingTarget(todo, todoRef, flags.tracker !== undefined))
+    target = String(fromProject.target)
+    process.stderr.write(`handing off to ${tracker} ${target}, ${todo.subject.project.name}'s hand-off target\n`)
+  }
+
+  const number = String(todoRef).split('-')[1]
+  const todoUrl = `${BASE}/projects/${TODO_KEY}/tasks/${number}`
+  const created = adapter.create({
+    title: todo.title,
+    body: todo.description,
+    target,
+    type: flags.type ?? todo.type,
+    todoRef,
+    todoUrl,
+  })
+  // Said before the link is recorded, so a failure below still leaves the
+  // ref on screen rather than a task nobody knows was filed.
+  process.stderr.write(`filed ${created.ref} in ${tracker}\n`)
+  const body = { tracker, ref: created.ref }
+  if (created.url) body.url = created.url
+  if (flags.force) body.force = true
+  const linked = await postHandoff(todoRef, body, (payload) =>
+    die(`${created.ref} was filed, but Croft refused the link: ${payload.error}\nrecord it once that is fixed: croft handoff ${todoRef} --link ${created.ref} --tracker ${tracker}`),
+  )
+  if (FORMAT !== 'tsv') return emit({ ref: todoRef, tracker, handoffRef: created.ref, ...(linked && typeof linked === 'object' ? linked : {}) })
+  emit([{ ref: todoRef, tracker, handoff: created.ref, subject: subjectRef ?? '', title: truncate(todo.title, 70) }], {
+    columns: ['ref', 'tracker', 'handoff', 'subject', 'title'],
+  })
+  process.stderr.write(`${todoRef} -> ${created.ref}: ${tracker} owns its status from here; \`croft sync\` pulls it back\n`)
+}
+
 const commands = {
   async check() {
     const q = need(positional[0], 'usage: croft check "<subject>"')
@@ -3325,7 +3664,7 @@ const commands = {
 
   /**
    * The lab projects (Trig, Croft…): what a subject can be part of, and the
-   * Cairn project each one's todos go to on `croft push T-n`. The task
+   * tracker and target each one's todos go to on `croft handoff T-n`. The task
    * containers this used to list are an internal detail now — every todo
    * lives in `T` — and are still listed by `croft project list`.
    */
@@ -3335,8 +3674,8 @@ const commands = {
       rows: (d) =>
         [...asList(d, 'projects')]
           .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-          .map((p) => ({ project: cellOf(p.name), cairn: p.cairn_key ?? '', subjects: p.subjects ?? '' })),
-      columns: ['project', 'cairn', 'subjects'],
+          .map((p) => ({ project: cellOf(p.name), handoff: projectHandoffCell(p), subjects: p.subjects ?? '' })),
+      columns: ['project', 'handoff', 'subjects'],
     })
   },
 
@@ -3346,8 +3685,8 @@ const commands = {
   },
 
   async add() {
-    const title = need(positional[0], 'usage: croft add "<title>" --project <KEY>')
-    const project = need(flags.project, 'a --project is required')
+    const title = need(positional[0], 'usage: croft add "<title>" --project <KEY>   (a lab todo belongs to a subject: croft subject todo S-12 "<title>")')
+    const project = need(flags.project, 'a --project is required. A lab todo belongs to a subject: croft subject todo S-12 "<title>"')
 
     /**
      * A bug or a spike with no body is not yet a report — it is a title.
@@ -4093,7 +4432,7 @@ const commands = {
         const todos = (current.todos?.open ?? 0) + (current.todos?.done ?? 0)
         die(
           `This permanently deletes ${ref} "${current.title}", its ${todos} todo(s), its log, notes and files. ` +
-            `Cairn tasks pushed from its todos stay in Cairn.\nRe-run with --confirm ${ref} if that is what you want.`,
+            `Todos handed off to another tracker stay there.\nRe-run with --confirm ${ref} if that is what you want.`,
         )
       }
       const deleted = await request('DELETE', `/api/v1/subjects/${ref}?confirm=${encodeURIComponent(ref)}`)
@@ -4194,7 +4533,7 @@ const commands = {
         }
       }
       if (FORMAT !== 'tsv') return emit(shown)
-      return emit([shown], { rows: (d) => d.map(todoRow), columns: ['ref', 'status', 'held', 'cairn', 'title'] })
+      return emit([shown], { rows: (d) => d.map(todoRow), columns: ['ref', 'status', 'held', 'handoff', 'title'] })
     }
 
     die(verb ? `unknown subject verb "${verb}"\n${usage}` : usage)
@@ -4220,28 +4559,27 @@ const commands = {
   },
 
   /**
-   * Two verbs under one name, told apart by --to.
+   * `handoff T-41` is the hand-over: the lab has proved the idea and the work
+   * is committed, which belongs in a task tracker. It files the todo there
+   * through the tracker's adapter and records the link; from then on the
+   * tracker owns the status and `croft sync` reads it back.
    *
-   * `push T-41 --to CAIRN` is the hand-over: the lab has proved the idea and
-   * a repo is about to change for real, which is Cairn's work. It files the
-   * todo in Cairn through Cairn's own CLI (so Cairn's routing, keys and
-   * checks apply) and records the link; from then on Cairn owns the status
-   * and `croft sync` reads it back.
-   *
-   * `push <ref> <sha>` records a git push, as it always has.
+   *   handoff T-41 [--to TARGET] [--tracker NAME]   file it, then link it
+   *   handoff T-41 --link REF [--url URL]           link a task made by hand
+   *   handoff T-41 --undo                           take it back (nothing is done there)
+   */
+  async handoff() {
+    return handOff({ legacyTracker: null })
+  },
+
+  /**
+   * Two verbs under one name. `push <ref> <sha>` records a git push, as it
+   * always has. `push T-41` with no sha is the deprecated (0.7) spelling of
+   * `handoff`, removed in 0.8.
    */
   async push() {
-    const ref = need(positional[0], 'usage: croft push T-41 [--to <CAIRN_KEY>]   |   croft push <ref> <sha>')
-
-    if (flags.link !== undefined) {
-      const cairnRef = String(need(flags.link, '--link needs the Cairn ref, e.g. --link CAIRN-331')).toUpperCase()
-      if (!/^[A-Z][A-Z0-9]{0,9}-\d+$/.test(cairnRef)) die(`"${cairnRef}" is not a Cairn task ref`)
-      return emit(await request('POST', `/api/v1/tasks/${ref}/cairn-link`, { cairnRef, ...(flags.force ? { force: true } : {}) }, {
-        onError: unpublishedRefusal(ref),
-      }))
-    }
-
-    if (flags.to === undefined && positional[1] !== undefined) {
+    const ref = need(positional[0], 'usage: croft push <ref> <sha>   (to hand a todo off: croft handoff T-41)')
+    if (flags.to === undefined && flags.link === undefined && positional[1] !== undefined) {
       const sha = positional[1]
       const payload = { event: 'git_push', sha }
       if (flags.repo) payload.repo = flags.repo
@@ -4250,110 +4588,58 @@ const commands = {
       if (flags.url) payload.url = flags.url
       return emit(await request('POST', `/api/v1/tasks/${ref}/activity`, payload))
     }
-
-    // An explicit --to wins; without one, the subject's lab project says where.
-    let key = flags.to === undefined ? null : String(need(flags.to, '--to needs the Cairn project key, e.g. --to CAIRN')).toUpperCase()
-    if (key && !/^[A-Z][A-Z0-9]{0,9}$/.test(key)) die(`"${key}" is not a Cairn project key`)
-    const bin = resolveCairn()
-    if (!bin) die(NO_CAIRN)
-
-    const todo = await request('GET', `/api/v1/tasks/${ref}`)
-    const todoRef = refOfTask(todo) ?? ref
-    if (todo.cairn_ref && !flags.force) {
-      die(`${todoRef} is already paired with ${todo.cairn_ref} — \`croft sync\` pulls its status; --force files another`)
-    }
-    // Checked here, before Cairn is touched: the server refuses the link too,
-    // but by then the Cairn task would already exist.
-    const visibility = todo.subject?.visibility
-    if (visibility && visibility !== 'lab' && !flags.force) die(unpublishedMessage(todoRef, todo.subject.ref, visibility))
-    if (!key) {
-      const target = pushTarget(todo, todoRef)
-      if (!target.key) die(target.why)
-      key = target.key
-      process.stderr.write(`filing in ${key}, ${todo.subject.project.name}'s Cairn project\n`)
-    }
-    const subjectRef =
-      todo.subject?.ref ?? todo.subject_ref ?? (todo.subject_number ? `S-${todo.subject_number}` : null)
-    const type = flags.type ?? CAIRN_TYPES[todo.type] ?? 'feature'
-    const description = String(todo.description ?? '').trim()
-    const body = [description, `From Croft ${todoRef}${subjectRef ? ` (subject ${subjectRef})` : ''}`]
-      .filter(Boolean)
-      .join('\n\n')
-    const args = ['add', todo.title, '--project', key, '--type', type, '--label', `croft:${todoRef}`, '--body', '-', '--no-start']
-    // Cairn refuses a bug or spike with no real body; the line saying where it
-    // came from is not one, and the description is what there is.
-    if (!description && ['bug', 'spike'].includes(type)) args.push('--force-empty')
-
-    const run = runCairn(bin, args, body)
-    if (run.error) die(`could not run ${bin}: ${run.error.message}`)
-    if (run.stderr) process.stderr.write(run.stderr.replace(/^/gm, 'cairn: '))
-    if (run.status !== 0) die(`cairn add failed (exit ${run.status}); nothing was linked`, run.status === UNDECIDED_EXIT ? UNDECIDED_EXIT : 1)
-    const cairnRef = parseCairnRef(run.stdout)
-    if (!cairnRef) {
-      die(
-        `cairn add exited 0 but named no task ref:\n${String(run.stdout).slice(0, 400)}\n` +
-          `find it in Cairn (label croft:${todoRef}) and record it: croft push ${todoRef} --link <CAIRN-REF>`,
-      )
-    }
-    // Said before the link is recorded, so a failure below still leaves the
-    // ref on screen rather than a Cairn task nobody knows was filed.
-    process.stderr.write(`filed ${cairnRef} in Cairn\n`)
-    const linked = await request('POST', `/api/v1/tasks/${todoRef}/cairn-link`, { cairnRef, ...(flags.force ? { force: true } : {}) }, {
-      onError: (payload) =>
-        die(`${cairnRef} was filed, but Croft refused the link: ${payload.error}\nrecord it once that is fixed: croft push ${todoRef} --link ${cairnRef}`),
-    })
-    if (FORMAT !== 'tsv') return emit({ ref: todoRef, cairnRef, ...(linked && typeof linked === 'object' ? linked : {}) })
-    emit([{ ref: todoRef, cairn: cairnRef, subject: subjectRef ?? '', title: truncate(todo.title, 70) }], {
-      columns: ['ref', 'cairn', 'subject', 'title'],
-    })
-    process.stderr.write(
-      `${todoRef} -> ${cairnRef}: Cairn owns its status from here (\`cairn claim ${cairnRef}\` when you start it); ` +
-        '`croft sync` pulls it back\n',
-    )
+    process.stderr.write(`croft: \`push ${ref}\` without a sha is deprecated (0.7), removed in 0.8: use \`croft handoff ${ref}\`\n`)
+    return handOff({ legacyTracker: 'cairn' })
   },
 
-  /** Pull linked todo statuses through this machine's Cairn CLI and credentials. */
+  /** Pull the status of every handed-off todo back, through each tracker's own CLI and credentials. */
   async sync() {
-    const bin = resolveCairn()
-    if (!bin) die("croft sync needs this machine's Cairn CLI. Install it with `cairn setup --url <your Cairn>`, or set CROFT_CAIRN_BIN.")
     const rows = []
     for (const todo of await linkedTodos()) {
-      const run = runCairn(bin, ['show', todo.cairn_ref, '--json'])
-      let cairnTask = null
-      try {
-        cairnTask = run.status === 0 ? JSON.parse(run.stdout) : null
-      } catch {
-        cairnTask = null
-      }
-      const cairnStatus = cairnTask?.status
-      if (!cairnStatus) {
-        const why = String(run.stderr || run.error?.message || `exit ${run.status}`).trim().split('\n')[0]
-        rows.push({ ref: todo.ref, cairn: todo.cairn_ref, status: todo.cairn_status ?? '', result: `unread: ${truncate(why, 60)}` })
+      const handoff = handoffOf(todo)
+      const row = { ref: todo.ref, tracker: handoff.tracker, handoff: handoff.ref }
+      const adapter = adapterFor(handoff.tracker)
+      if (!adapter?.available()) {
+        rows.push({ ...row, status: handoff.status ?? '', result: `skipped: no ${handoff.tracker} adapter on this machine` })
         continue
       }
-      // An ended Cairn task whose todo is still open is sent again: the
-      // server closes the todo (Cairn owns its status once pushed).
-      const ended = TERMINAL.has(cairnStatus)
+      const shown = adapter.show(handoff.ref)
+      if (!shown.status) {
+        rows.push({ ...row, status: handoff.status ?? '', result: `unread: ${truncate(shown.error ?? 'no answer', 60)}` })
+        continue
+      }
+      // An ended task whose todo is still open is sent again: the server
+      // closes the todo (the tracker owns its status once handed off).
+      const ended = TERMINAL.has(shown.status)
       const stillOpen = ended && todo.status !== undefined && !TERMINAL.has(todo.status)
-      if (cairnStatus === todo.cairn_status && !stillOpen) {
-        rows.push({ ref: todo.ref, cairn: todo.cairn_ref, status: cairnStatus, result: 'unchanged' })
+      if (shown.status === handoff.status && !stillOpen) {
+        rows.push({ ...row, status: shown.status, result: 'unchanged' })
         continue
       }
-      const link = { cairnRef: todo.cairn_ref, cairnStatus }
-      // The subject's outcome note: `CAIRN-331 done: <resolution>`.
-      if (ended && cairnTask.resolution) link.cairnResolution = String(cairnTask.resolution)
-      if (ended && (cairnTask.resolution_kind ?? cairnTask.resolutionKind)) {
-        link.cairnResolutionKind = String(cairnTask.resolution_kind ?? cairnTask.resolutionKind)
+      const body = { tracker: handoff.tracker, ref: handoff.ref, status: shown.status }
+      if (shown.url && !handoff.url) body.url = shown.url
+      // The subject's outcome note: `<ref> done: <resolution>`.
+      if (ended && shown.resolution) body.resolution = shown.resolution
+      if (ended && shown.resolutionKind) body.resolutionKind = String(shown.resolutionKind)
+      // One todo the server refuses is that row's answer, not the end of the run.
+      let linked
+      try {
+        linked = await postHandoff(todo.ref, body, (payload) => {
+          throw new SyncRowError(payload.error ?? payload.code ?? 'refused')
+        })
+      } catch (error) {
+        if (!(error instanceof SyncRowError)) throw error
+        rows.push({ ...row, status: shown.status, result: `refused: ${truncate(error.message, 60)}` })
+        continue
       }
-      const linked = await request('POST', `/api/v1/tasks/${todo.ref}/cairn-link`, link)
       const result = [
-        cairnStatus === todo.cairn_status ? 'unchanged' : `was ${todo.cairn_status ?? 'unknown'}`,
+        shown.status === handoff.status ? 'unchanged' : `was ${handoff.status ?? 'unknown'}`,
         linked?.noted ? 'noted' : '',
         linked?.closed ? 'closed' : '',
       ].filter(Boolean).join(' · ')
-      rows.push({ ref: todo.ref, cairn: todo.cairn_ref, status: cairnStatus, result })
+      rows.push({ ...row, status: shown.status, result })
     }
-    emit(rows, { columns: ['ref', 'cairn', 'status', 'result'] })
+    emit(rows, { columns: ['ref', 'tracker', 'handoff', 'status', 'result'] })
   },
 
   async context() {
@@ -4858,7 +5144,7 @@ const commands = {
       line(`  job     node ${tilde(join(releaseDir, 'scripts', 'install-cron.mjs'))} --remove --only agent-files`)
       // Only what this run set up: listing Claude's and Codex's files to a
       // machine that set up OpenClaw alone sends someone to edit files Croft
-      // never touched (CAIRN-332).
+      // never touched.
       const hookHomes = {
         'claude-code': '~/.claude/settings.json',
         codex: '~/.codex/hooks.json',
@@ -5007,7 +5293,7 @@ if (flags.version || command === 'version') {
 }
 
 if (!command || flags.help || command === 'help') {
-  process.stdout.write(HELP)
+  process.stdout.write(flags.all ? `${HELP}${HELP_INHERITED}` : HELP)
   process.exit(0)
 }
 if (!commands[command]) {
@@ -5021,7 +5307,7 @@ if (!commands[command]) {
  */
 const TASK_VERBS = new Set([
   'claim', 'beat', 'release', 'checkpoint', 'block', 'unblock', 'log', 'comment', 'done',
-  'cancel', 'update', 'commit', 'push', 'run', 'attach', 'files', 'children', 'history', 'deps',
+  'cancel', 'update', 'commit', 'push', 'handoff', 'run', 'attach', 'files', 'children', 'history', 'deps',
   'blockedby', 'unblockedby',
 ])
 if (/^[Ss]-\d+$/.test(positional[0] ?? '')) {

@@ -179,12 +179,10 @@ describe('writes to a task in an archived project', () => {
     expect((await response.json()).code).toBe('conflict')
   })
 
-  it('refuses filing a new task into the archived project with 409 conflict', async () => {
+  it('refuses filing a new task into the archived project, as it does into any project: a todo needs a subject', async () => {
     const response = await addTaskToProject()
-    expect(response.status).toBe(409)
-    const body = await response.json()
-    expect(body.code).toBe('conflict')
-    expect(body.error).toContain(KEY)
+    expect(response.status).toBe(422)
+    expect((await response.json()).code).toBe('subject_required')
   })
 
   it('restores the project, after which the same writes succeed', async () => {
@@ -199,7 +197,8 @@ describe('writes to a task in an archived project', () => {
     const claimed = await claim(ref)
     expect(claimed.status).toBe(200)
 
+    // Restoring the project does not make a subjectless task welcome.
     const created = await addTaskToProject()
-    expect(created.status).toBe(201)
+    expect(created.status).toBe(422)
   })
 })

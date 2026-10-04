@@ -42,7 +42,7 @@ const BoardPage = async ({
   const query = new URLSearchParams(
     Object.entries(params).filter((entry): entry is [string, string] => entry[1] !== undefined),
   ).toString()
-  // Each card carries its subject and Cairn push; the lab projects are the
+  // Each card carries its subject and hand-off; the lab projects are the
   // lab-project filter's options.
   const viewer = { id: user.id, role: user.role }
   const [{ tasks, projects, closedHidden }, labProjects] = await Promise.all([

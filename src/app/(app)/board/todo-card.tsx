@@ -5,13 +5,14 @@ import Link from 'next/link'
 import { MarkdownPreview } from '@/components/markdown'
 import { Avatar, LabelPill, PriorityIcon, ProjectIcon, TypePill } from '@/components/icons'
 import { cn } from '@/lib/utils'
-import { CairnBadge, SubjectChip } from '../todos/todo-bits'
+import { HandoffBadge } from '@/components/handoff-badge'
+import { SubjectChip } from '../todos/todo-bits'
 import type { LabBoardTask } from './lab-lanes'
 
 /**
  * A todo on `/board`: its ref, its title, and the subject it is for. A todo
- * pushed to Cairn is Cairn's to move, so it does not pick up; it shows where
- * it went instead.
+ * handed off to another tracker is moved there, so it does not pick up; it
+ * shows where it went instead.
  */
 export const TodoCard = ({
   task,
@@ -24,7 +25,7 @@ export const TodoCard = ({
   /** Off inside a subject's own lane, where it would repeat the lane's name. */
   showSubject?: boolean
 }) => {
-  const pushed = Boolean(task.cairn_ref)
+  const pushed = Boolean(task.handoff)
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: task.id, disabled: pushed })
   const href = `/projects/${task.project_key}/tasks/${task.number}`
   const loud = task.priority === 'urgent' || task.priority === 'high'
@@ -42,7 +43,7 @@ export const TodoCard = ({
         // where it came from, not a second copy.
         isDragging && 'opacity-40',
       )}
-      title={pushed ? `In Cairn as ${task.cairn_ref}: moved there, not here` : undefined}
+      title={task.handoff ? `Handed off to ${task.handoff.tracker} as ${task.handoff.ref}: moves there, not here` : undefined}
     >
       <div className="mb-1 flex h-[1rem] items-center gap-1.5">
         {showProjectBadge && <ProjectIcon size={11} projectKey={task.project_key} />}
@@ -92,7 +93,7 @@ export const TodoCard = ({
           {showSubject && task.subject ? (
             <SubjectChip subject={task.subject} className="max-w-full" />
           ) : null}
-          <CairnBadge cairnRef={task.cairn_ref} cairnStatus={task.cairn_status} />
+          <HandoffBadge handoff={task.handoff} />
           {task.has_resolution ? (
             <span className="text-status-done text-[0.6875rem]">{task.resolution_kind ?? 'resolved'}</span>
           ) : null}

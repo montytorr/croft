@@ -26,7 +26,6 @@ import { GET as showSubjectRoute } from '@/app/api/v1/subjects/[ref]/route'
 import { POST as addTodoRoute } from '@/app/api/v1/subjects/[ref]/todos/route'
 import { POST as publishRoute } from '@/app/api/v1/subjects/[ref]/publish/route'
 import { GET as showTaskRoute, PATCH as patchTaskRoute } from '@/app/api/v1/tasks/[ref]/route'
-import { POST as createProjectRoute } from '@/app/api/v1/projects/route'
 import { DELETE as deleteProjectRoute } from '@/app/api/v1/projects/[id]/route'
 import { POST as reconcileRoute } from '@/app/api/v1/reconcile/route'
 import { getTask } from '@/lib/data'
@@ -181,8 +180,8 @@ describe('a lab task that points at a private todo', () => {
 describe('deleting a project', () => {
   it('refuses an outsider or an administrator a project holding a private todo they cannot see', async () => {
     as(A)
-    const project = await call(createProjectRoute, 'POST', '/projects', {}, { key: KEY, title: `Audit ${RUN}` })
-    expect(project.status).toBe(201)
+    // Inserted, not created through the API: Croft refuses any task project but its todo list.
+    await q('insert into projects (owner_user_id, key, title) values ($1, $2, $3)', [A, KEY, `Audit ${RUN}`])
     const moved = await call(patchTaskRoute, 'PATCH', `/tasks/${TP.ref}`, { ref: TP.ref }, { project: KEY })
     expect(moved.status).toBe(200)
     Object.assign(TP, { ref: moved.json.data.ref })

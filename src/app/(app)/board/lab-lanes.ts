@@ -11,7 +11,7 @@ import { parseSubjectRef, type LabTodo } from '@/lib/lab/types'
  * task project a todo is filed in, and shared links carry it.
  */
 
-/** A board card: `listBoardTasks` carries each todo's subject and Cairn push. */
+/** A board card: `listBoardTasks` carries each todo's subject and hand-off. */
 export type LabBoardTask = BoardTask
 
 export const LAB_LANES = ['subject', 'labProject'] as const

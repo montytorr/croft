@@ -3,11 +3,12 @@ import { route } from '@/lib/api/handler'
 import { ok, fail } from '@/lib/api/response'
 import { failFromDb } from '@/lib/api/db-errors'
 import { admin } from '@/lib/db/client'
-import { TASK_LIST_LAB_FIELDS, withSubjectRefs } from '@/lib/api/tasks'
-import { createTaskInProject } from '@/lib/api/task-create'
+import { findTask, TASK_LIST_LAB_FIELDS, withSubjectRefs } from '@/lib/api/tasks'
+import { withHandoffs } from '@/lib/api/handoff-shape'
 import { resolveProject } from '@/lib/api/project-keys'
 import { resolveAssignee, withAssignees } from '@/lib/api/people'
 import { resolveTodoFilters, withTaskSubjects } from '@/lib/api/lab-todos'
+import { createTaskInProject } from '@/lib/api/task-create'
 import { createTaskSchema, TASK_STATUSES, TASK_TYPES } from '@/schemas/task'
 import { restrictTo, visibleTasksOr } from '@/lib/api/visibility'
 
@@ -137,26 +138,42 @@ export const GET = route<{ id: string }>({
       offset,
       limit,
       // `subject_ref` for the CLI's pairing; `subject` (ref, title, lab project) for the lab's lists.
-      tasks: await withTaskSubjects(await withAssignees(withSubjectRefs(data ?? []) as unknown as (Record<string, unknown> & { id: string })[]), actor.userId),
+      tasks: await withTaskSubjects(await withAssignees(withHandoffs(withSubjectRefs(data ?? [])) as unknown as (Record<string, unknown> & { id: string })[]), actor.userId),
       ...(renamed ? { renamed_from: renamed } : {}),
     })
   },
 })
 
+/**
+ * Croft holds lab work: a todo belongs to a subject, and is filed through the
+ * subject's own route. A task with no subject has no place here.
+ */
+/**
+ * Croft holds lab work: a todo belongs to a subject. A new task here is either
+ * a sub-task, which takes its parent's subject, or refused with
+ * `subject_required` (a subject's todos are filed through the subject).
+ */
 export const POST = route<{ id: string }, z.infer<typeof createTaskSchema>>({
   schema: createTaskSchema,
   secretFields: ['title', 'description'],
   handler: async ({ actor, params, body }) => {
-    const resolved = await resolveProject<{ id: string; key: string; status: string }>(
-      params.id,
-      'id, key, status',
-    )
+    const resolved = await resolveProject<{ id: string; key: string; status: string }>(params.id, 'id, key, status')
     if (!resolved) return fail('not_found', `No project ${params.id}.`)
     const { project, renamed } = resolved
 
-    const created = await createTaskInProject(actor, project, body)
-    if (!created.ok) return created.response
+    const parent = body.parentRef ? await findTask(actor, body.parentRef, 'id, subject_id') : null
+    if (body.parentRef && !parent) return fail('not_found', `No task ${body.parentRef}.`)
+    const subjectId = (parent?.subject_id as string | null | undefined) ?? null
+    if (!subjectId) {
+      return fail(
+        'subject_required',
+        'Croft holds lab work: a todo belongs to a subject. File it under one (croft subject todo S-12 "<title>"), ' +
+          'or track it in your task tracker.',
+      )
+    }
 
+    const created = await createTaskInProject(actor, project, body, { subjectId })
+    if (!created.ok) return created.response
     return ok({ ...created.task, ...(renamed ? { renamed_from: renamed } : {}) }, { status: 201 })
   },
 })

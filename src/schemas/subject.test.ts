@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   cairnLinkSchema,
+  handoffOfProjectBody,
+  handoffSchema,
   createStageSchema,
   createSubjectNoteSchema,
   createSubjectSchema,
@@ -102,7 +104,7 @@ describe('lab project schemas', () => {
   })
 })
 
-describe('cairn schemas', () => {
+describe('deprecated cairn-link schema', () => {
   it('upper-cases and checks a Cairn ref', () => {
     expect(cairnLinkSchema.parse({ cairnRef: 'cairn-331' }).cairnRef).toBe('CAIRN-331')
     // Croft's own single-letter refs are not Cairn refs.
@@ -115,6 +117,44 @@ describe('cairn schemas', () => {
     ).toEqual({ cairnRef: 'CAIRN-331', cairnStatus: 'done', cairnResolution: 'Shipped.', cairnResolutionKind: 'fixed' })
     expect(cairnLinkSchema.parse({ cairnRef: 'CAIRN-331' })).toEqual({ cairnRef: 'CAIRN-331' })
   })
+})
 
+describe('hand-off schemas', () => {
+  it('takes a tracker and a ref, the tracker lower-cased', () => {
+    expect(handoffSchema.parse({ tracker: ' GitHub ', ref: ' owner/repo#4 ' })).toEqual({ tracker: 'github', ref: 'owner/repo#4' })
+  })
 
+  it('refuses a bad tracker, a ref with whitespace or control characters, and a non-http url', () => {
+    for (const tracker of ['', 'a', '1x', 'has space', 'x'.repeat(33)]) {
+      expect(handoffSchema.safeParse({ tracker, ref: 'X-1' }).success, tracker).toBe(false)
+    }
+    for (const ref of ['', 'a b', 'a\tb', 'a\u0000b', 'x'.repeat(201)]) {
+      expect(handoffSchema.safeParse({ tracker: 'cairn', ref }).success, ref).toBe(false)
+    }
+    expect(handoffSchema.safeParse({ tracker: 'cairn', ref: 'X-1', url: 'ftp://x' }).success).toBe(false)
+    expect(handoffSchema.safeParse({ tracker: 'cairn', ref: 'X-1', url: `https://x/${'a'.repeat(2000)}` }).success).toBe(false)
+    expect(handoffSchema.parse({ tracker: 'cairn', ref: 'X-1', url: 'https://x/1', status: 'done', force: true }).url).toBe('https://x/1')
+  })
+
+  it('reads a lab project hand-off as a pair, or null to clear it', () => {
+    expect(handoffOfProjectBody(createLabProjectSchema.parse({ name: 'x', handoffTracker: 'GitHub', handoffTarget: 'owner/repo' }))).toEqual({
+      tracker: 'github',
+      target: 'owner/repo',
+    })
+    expect(handoffOfProjectBody(updateLabProjectSchema.parse({ handoffTracker: null, handoffTarget: null }))).toBeNull()
+    expect(handoffOfProjectBody(updateLabProjectSchema.parse({ handoffTracker: '', handoffTarget: '' }))).toBeNull()
+    expect(handoffOfProjectBody(updateLabProjectSchema.parse({ name: 'x' }))).toBeUndefined()
+    expect(handoffOfProjectBody(updateLabProjectSchema.parse({ cairnKey: 'trig' }))).toEqual({ tracker: 'cairn', target: 'TRIG' })
+    expect(handoffOfProjectBody(updateLabProjectSchema.parse({ cairnKey: null }))).toBeNull()
+  })
+
+  it('wants both halves or neither, and not the alias beside them', () => {
+    expect(createLabProjectSchema.safeParse({ name: 'x', handoffTracker: 'cairn' }).success).toBe(false)
+    expect(updateLabProjectSchema.safeParse({ handoffTarget: 'CAIRN' }).success).toBe(false)
+    expect(updateLabProjectSchema.safeParse({ handoffTracker: 'cairn', handoffTarget: null }).success).toBe(false)
+    expect(createLabProjectSchema.safeParse({ name: 'x', cairnKey: 'TRIG', handoffTracker: 'cairn', handoffTarget: 'TRIG' }).success).toBe(false)
+    for (const target of ['-x', 'a b', 'x'.repeat(101)]) {
+      expect(createLabProjectSchema.safeParse({ name: 'x', handoffTracker: 'github', handoffTarget: target }).success, target).toBe(false)
+    }
+  })
 })

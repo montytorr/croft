@@ -1,5 +1,6 @@
 import { pool } from '@/lib/db/client'
 import type { UserRole } from './actor'
+import { withHandoff } from './handoff-shape'
 
 /**
  * Who is looking (v0.4, private & member-scoped subjects).
@@ -108,8 +109,12 @@ export const isTaskIdVisible = async (taskId: string, viewerId: string): Promise
  * at a task the viewer may not see. A lab task can hang under, or duplicate,
  * a private todo (its owner sees both), and the bare uuid would tell everyone
  * else that a hidden task exists — a missing one would be null.
+ *
+ * Also where a task row's raw `handoff_*` columns become its `handoff`: every
+ * route that returns one passes through here.
  */
-export const withoutHiddenLinks = async <T>(row: T, viewerId: string): Promise<T> => {
+export const withoutHiddenLinks = async <T>(unshaped: T, viewerId: string): Promise<T> => {
+  const row = withHandoff(unshaped)
   if (!row || typeof row !== 'object') return row
   const record = row as Record<string, unknown>
   const links = (['parent_id', 'duplicate_of'] as const).filter((column) => typeof record[column] === 'string')

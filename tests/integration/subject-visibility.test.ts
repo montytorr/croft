@@ -60,6 +60,7 @@ import { POST as beatRoute } from '@/app/api/v1/tasks/[ref]/beat/route'
 import { POST as blockRoute } from '@/app/api/v1/tasks/[ref]/block/route'
 import { POST as checkpointRoute } from '@/app/api/v1/tasks/[ref]/checkpoint/route'
 import { POST as cairnLinkRoute } from '@/app/api/v1/tasks/[ref]/cairn-link/route'
+import { DELETE as undoHandoffRoute, POST as handoffRoute } from '@/app/api/v1/tasks/[ref]/handoff/route'
 import { GET as attachmentRoute, DELETE as deleteAttachmentRoute } from '@/app/api/v1/attachments/[id]/route'
 import { GET as contentRoute } from '@/app/api/v1/attachments/[id]/content/route'
 import { GET as projectTasksRoute } from '@/app/api/v1/projects/[id]/tasks/route'
@@ -441,6 +442,8 @@ describe('an outsider (C) and an administrator (D) get not_found from every task
           ['POST block', call(blockRoute, 'POST', `/tasks/${ref}/block`, { ref }, { reason: 'x' })],
           ['POST checkpoint', call(checkpointRoute, 'POST', `/tasks/${ref}/checkpoint`, { ref }, { summary: 'x' })],
           ['POST cairn-link', call(cairnLinkRoute, 'POST', `/tasks/${ref}/cairn-link`, { ref }, { cairnRef: 'CAIRN-1', force: true })],
+          ['POST handoff', call(handoffRoute, 'POST', `/tasks/${ref}/handoff`, { ref }, { tracker: 'github', ref: 'o/r#1', force: true })],
+          ['DELETE handoff', call(undoHandoffRoute, 'DELETE', `/tasks/${ref}/handoff`, { ref })],
         ]
         for (const [what, pending] of cases) {
           const res = await pending
@@ -873,7 +876,7 @@ describe('no administrator exception', () => {
   })
 })
 
-describe('pushing a todo whose subject is not in the lab', () => {
+describe('handing off a todo whose subject is not in the lab', () => {
   it('says the subject\'s visibility on the todo and refuses the link without force', async () => {
     as(A)
     const shown = await call(showTaskRoute, 'GET', `/tasks/${TP.ref}`, { ref: TP.ref })
@@ -882,29 +885,46 @@ describe('pushing a todo whose subject is not in the lab', () => {
     const refused = await call(cairnLinkRoute, 'POST', `/tasks/${TP.ref}/cairn-link`, { ref: TP.ref }, { cairnRef: 'CAIRN-901' })
     expect(refused.status).toBe(409)
     expect(refused.json).toMatchObject({ code: 'subject_not_published', subject: P.ref, visibility: 'members' })
-    expect((await q('select cairn_ref from tasks where id = $1', [TP.id])).rows[0].cairn_ref).toBeNull()
+    expect(refused.json.error).toContain('cairn has no notion of who may see what')
+    expect((await q('select handoff_ref from tasks where id = $1', [TP.id])).rows[0].handoff_ref).toBeNull()
+
+    const generic = await call(handoffRoute, 'POST', `/tasks/${TP.ref}/handoff`, { ref: TP.ref }, { tracker: 'github', ref: 'o/r#9' })
+    expect(generic.status).toBe(409)
+    expect(generic.json).toMatchObject({ code: 'subject_not_published', subject: P.ref, visibility: 'members' })
+    expect(generic.json.error).toContain('github has no notion of who may see what')
 
     const forced = await call(cairnLinkRoute, 'POST', `/tasks/${TP.ref}/cairn-link`, { ref: TP.ref }, { cairnRef: 'CAIRN-901', force: true })
     expect(forced.status).toBe(200)
     expect(forced.json.data.cairn_ref).toBe('CAIRN-901')
+    expect(forced.json.data.handoff).toMatchObject({ tracker: 'cairn', ref: 'CAIRN-901' })
 
     // A lab todo needs no force.
     const lab = await call(cairnLinkRoute, 'POST', `/tasks/${TL.ref}/cairn-link`, { ref: TL.ref }, { cairnRef: 'CAIRN-902' })
     expect(lab.status).toBe(200)
   })
 
-  it('accepts local Cairn status reports only for todos the caller may see', async () => {
+  it('accepts hand-off status reports only for todos the caller may see', async () => {
     const body = { cairnRef: 'CAIRN-901', cairnStatus: 'todo', force: true }
+    const generic = { tracker: 'cairn', ref: 'CAIRN-901', status: 'todo', force: true }
     for (const outsider of [C, D]) {
       as(outsider)
       const hidden = await call(cairnLinkRoute, 'POST', `/tasks/${TP.ref}/cairn-link`, { ref: TP.ref }, body)
       expect(hidden.status).toBe(404)
       expect(JSON.stringify(hidden.json)).not.toContain('CAIRN-901')
+      const hiddenGeneric = await call(handoffRoute, 'POST', `/tasks/${TP.ref}/handoff`, { ref: TP.ref }, generic)
+      expect(hiddenGeneric.status).toBe(404)
+      expect(JSON.stringify(hiddenGeneric.json)).not.toContain('CAIRN-901')
+      expect((await call(undoHandoffRoute, 'DELETE', `/tasks/${TP.ref}/handoff`, { ref: TP.ref })).status).toBe(404)
     }
     as(A)
-    const owner = await call(cairnLinkRoute, 'POST', `/tasks/${TP.ref}/cairn-link`, { ref: TP.ref }, body)
+    const owner = await call(handoffRoute, 'POST', `/tasks/${TP.ref}/handoff`, { ref: TP.ref }, generic)
     expect(owner.status).toBe(200)
-    expect(owner.json.data).toMatchObject({ ref: TP.ref, cairn_ref: 'CAIRN-901', cairn_status: 'todo' })
+    expect(owner.json.data).toMatchObject({
+      ref: TP.ref,
+      handoff: { tracker: 'cairn', ref: 'CAIRN-901', status: 'todo' },
+      cairn_ref: 'CAIRN-901',
+      cairn_status: 'todo',
+    })
   })
 
 })
