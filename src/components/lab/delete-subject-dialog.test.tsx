@@ -44,7 +44,7 @@ describe('the delete subject dialog', () => {
   it('says what goes and what stays, and focuses Cancel', () => {
     const text = document.querySelector('[role="alertdialog"]')!.textContent
     expect(text).toContain('3 todos')
-    expect(text).toContain('Cairn tasks pushed from its todos stay in Cairn')
+    expect(text).toContain('Tasks handed off to another tracker stay there.')
     expect(text).toContain('This cannot be undone')
     expect(document.activeElement?.textContent).toBe('Cancel')
   })

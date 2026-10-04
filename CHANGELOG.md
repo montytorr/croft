@@ -8,8 +8,18 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+### Added
+
+- `croft handoff T-n [--to TARGET] [--tracker NAME] [--type T]` hands a todo off to a task tracker through an adapter and links the two. The tracker and target default to the subject's lab project; `--tracker`, then `CROFT_TRACKER`, then the only adapter on the machine otherwise. `--link REF [--url URL]` records a task made by hand, for any tracker name; `--undo` takes a hand-off back. Adapters ship for `cairn` (an external ref, falling back to a label on an older Cairn) and `github` (an issue, through `gh`); each is a delimited section of the CLI and nothing outside it names a product.
+- `croft sync` reads back every handed-off todo through its own tracker's adapter, and reports and skips those whose tracker has no adapter on the machine.
+- `croft help --all` lists the inherited task verbs. `croft help` keeps the lab verbs and the todo verbs a lab todo needs (`claim`, `note`, `checkpoint`, `done`).
+- The session briefing says `Croft holds lab work only`, and, where a lab project has a hand-off target, `Committed work leaves the lab: croft handoff T-n.`
+
 ### Changed
 
+- Croft is the lab and says so: the skill, `AGENTS.md`, README, docs and briefing no longer name another product or route work to one, and the skill's "Not for" line is "work that isn't a lab subject or its todo". The README's "With Cairn, or without it" is now "Working with a tracker".
+- `croft setup` and `scripts/install-hooks.mjs` always install Croft's own session hook and never look at another product's. Re-running setup repairs a machine where the earlier logic had skipped it. The hook's summariser guard reads `CROFT_SUMMARISER` and the shared `AGENT_MEMORY_SUMMARISER` only.
+- `croft add` points to `croft subject todo`: a todo has to belong to a subject. The MCP server drops `croft_add` for the same reason.
 - Subject pages have a larger editorial heading, a todo progress summary, icon tabs and paper panels for the write-up, outline, open work and properties. The layout adapts to phones and both themes.
 - The split write-up editor always edits raw Markdown on the left, with the rendered preview on the right. Text is saved verbatim, including tables, code and HTML; pasted and dropped images still upload to the subject. Saving waits for uploads to finish.
 - `croft sync` always uses the agent machine's Cairn CLI and credentials.
@@ -17,6 +27,10 @@ break an existing install is called out under **Breaking** with what to do about
 ### Removed
 
 - The server-wide Cairn connection, Settings panel, pairing and sync endpoints, stored credential and scheduled server sync. Agent-driven handoff and local status sync remain available.
+
+### Deprecated
+
+- `croft push T-n [--to KEY] [--link REF]` with no sha is the old spelling of `croft handoff`: it works in 0.7, prints a notice, and is removed in 0.8. `croft push T-n <sha>`, which records a git push, is unchanged. The server's `cairn_ref`, `cairn_status` and `cairn_key` fields and `POST /tasks/{ref}/cairn-link` stay for 0.7 as aliases of the generic hand-off, and the CLI still reads and writes them against a 0.6 server.
 
 ### Breaking
 

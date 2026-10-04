@@ -12,6 +12,7 @@ import {
 } from '@/schemas/task'
 import {
   cairnLinkSchema,
+  handoffSchema,
   createStageSchema,
   createSubjectNoteSchema,
   createSubjectSchema,
@@ -56,7 +57,7 @@ const errorResponse = {
             enum: [
               'unauthorized', 'forbidden', 'not_found', 'validation_failed',
               'conflict', 'already_claimed', 'resolution_required',
-              'conclusion_required', 'stage_in_use', 'project_in_use', 'cairn_not_configured',
+              'conclusion_required', 'stage_in_use', 'project_in_use', 'handed_off', 'subject_required',
               'secret_detected', 'already_published', 'subject_not_published', 'owner_required',
               'rate_limited', 'internal_error',
             ],
@@ -129,14 +130,25 @@ const labProjectSchema = {
     id: { type: 'string', format: 'uuid' },
     name: { type: 'string', example: 'Trig' },
     color: { type: 'string', example: '#6b7fa6' },
+    handoff_tracker: {
+      type: ['string', 'null'],
+      example: 'github',
+      description: 'The tracker `croft handoff` sends this project\'s todos to. Null with `handoff_target`.',
+    },
+    handoff_target: {
+      type: ['string', 'null'],
+      example: 'owner/repo',
+      description: 'Where in that tracker: a project key, an `owner/repo`.',
+    },
     cairn_key: {
       type: ['string', 'null'],
       example: 'TRIG',
-      description: 'The Cairn project `croft push T-n` files this project\'s todos under when no `--to` is given.',
+      deprecated: true,
+      description: 'Deprecated (0.7): `handoff_target` when `handoff_tracker` is `cairn`, else null. Removed in 0.8.',
     },
     position: { type: 'integer' },
   },
-  required: ['id', 'name', 'color', 'cairn_key', 'position'],
+  required: ['id', 'name', 'color', 'handoff_tracker', 'handoff_target', 'cairn_key', 'position'],
 }
 
 const labProjectListedSchema = {
@@ -238,6 +250,18 @@ const subjectNoteSchema = {
   },
 }
 
+const handoffSchemaObject = {
+  type: ['object', 'null'],
+  properties: {
+    tracker: { type: 'string', example: 'github' },
+    ref: { type: 'string', example: 'owner/repo#4' },
+    url: { type: ['string', 'null'], format: 'uri' },
+    status: { type: ['string', 'null'], description: "The tracker's status at the last sync." },
+    synced_at: { type: ['string', 'null'], format: 'date-time' },
+  },
+  required: ['tracker', 'ref', 'url', 'status', 'synced_at'],
+}
+
 const subjectTodoSchema = {
   type: 'object',
   properties: {
@@ -247,8 +271,9 @@ const subjectTodoSchema = {
     title: { type: 'string' },
     status: { type: 'string', enum: [...TASK_STATUSES] },
     claimed_by: { type: ['string', 'null'] },
-    cairn_ref: { type: ['string', 'null'], example: 'CAIRN-331' },
-    cairn_status: { type: ['string', 'null'] },
+    handoff: { ...handoffSchemaObject, description: 'Where the todo was handed off to, or null.' },
+    cairn_ref: { type: ['string', 'null'], example: 'CAIRN-331', deprecated: true, description: 'Deprecated (0.7): `handoff.ref` when the tracker is `cairn`. Removed in 0.8.' },
+    cairn_status: { type: ['string', 'null'], deprecated: true, description: 'Deprecated (0.7): `handoff.status` when the tracker is `cairn`. Removed in 0.8.' },
     updated_at: { type: 'string', format: 'date-time' },
   },
 }
@@ -506,7 +531,10 @@ export const openapiSpec = () => ({
         },
       },
       post: {
-        summary: 'Create a project',
+        summary: 'Create a project (refused)',
+        description:
+          "Croft's only task project is its todo list, which it creates itself: any other key is " +
+          'refused with 403 `forbidden`. Group subjects with lab projects instead.',
         requestBody: body({
           type: 'object',
           properties: {
@@ -516,7 +544,7 @@ export const openapiSpec = () => ({
           },
           required: ['key', 'title'],
         }),
-        responses: { '201': okResponse('Created.'), '409': errorResponse },
+        responses: { '201': okResponse('Created.'), '403': errorResponse, '409': errorResponse },
       },
     },
     '/projects/{id}': {
@@ -623,27 +651,22 @@ export const openapiSpec = () => ({
           { name: 'offset', in: 'query', schema: { type: 'integer', default: 0 } },
         ],
         description:
-          'Each row also carries `cairn_ref`, `cairn_status` (the Cairn task a todo was pushed to), ' +
-          '`subject_ref` (`S-12`, or null): the lab pairs todos off this list — and `subject` ' +
+          'Each row also carries `handoff` (`{tracker, ref, url, status, synced_at}`, or null: the task a todo was ' +
+          'handed off to in another tracker; the deprecated `cairn_ref` and `cairn_status` mirror it for tracker ' +
+          '`cairn`), `subject_ref` (`S-12`, or null): the lab pairs todos off this list — and `subject` ' +
           '(`{ref, number, title, project: {name, color} | null}`, or null).',
         responses: { '200': okResponse('Tasks.'), '404': errorResponse },
       },
       post: {
-        summary: 'Create a task',
+        summary: 'Create a task (refused: a todo belongs to a subject)',
         description:
-          'Assigned to the caller\'s user unless `assignee` names someone else. An agent\'s ' +
-          'caller is the human who owns its key. A bug or spike needs a `description` of 40 ' +
-          'characters or more unless `forceEmpty`. From an agent, a `description` that reads as a ' +
-          'wall of text — capitals for headings, a long unbroken paragraph, paths and calls outside ' +
-          'backticks — is refused with `validation_failed` and `problems`, one fix each. A 409 ' +
-          'means the project is archived — most likely the copy left behind by a move to another ' +
-          'Croft instance; restore it first, or point the CLI at the other instance.',
+          'Croft holds lab work, so a task without a subject is refused with 422 `subject_required`. ' +
+          'File a todo under its subject instead: `POST /subjects/{ref}/todos`.',
         requestBody: body(json(createTaskSchema)),
         responses: {
-          '201': okResponse('Created.', taskSummary),
           '400': errorResponse,
           '404': errorResponse,
-          '409': errorResponse,
+          '422': errorResponse,
         },
       },
     },
@@ -689,15 +712,21 @@ export const openapiSpec = () => ({
                   project: {
                     type: ['object', 'null'],
                     description:
-                      "The subject's lab project. `croft push T-n` with no `--to` files the todo under its `cairn_key`.",
-                    properties: { name: { type: 'string', example: 'Trig' }, cairn_key: { type: ['string', 'null'], example: 'TRIG' } },
+                      "The subject's lab project. `croft handoff T-n` with no `--to` sends the todo to its `handoff_target` in its `handoff_tracker`.",
+                    properties: {
+                      name: { type: 'string', example: 'Trig' },
+                      handoff_tracker: { type: ['string', 'null'], example: 'cairn' },
+                      handoff_target: { type: ['string', 'null'], example: 'TRIG' },
+                      cairn_key: { type: ['string', 'null'], example: 'TRIG', deprecated: true, description: 'Deprecated (0.7). Removed in 0.8.' },
+                    },
                   },
                 },
               },
               subject_id: { type: ['string', 'null'], format: 'uuid' },
-              cairn_ref: { type: ['string', 'null'], example: 'CAIRN-331', description: 'The Cairn task `croft push` handed it to. In the digest only when set.' },
-              cairn_status: { type: ['string', 'null'], description: "Cairn's status at the last sync." },
-              cairn_synced_at: { type: ['string', 'null'], format: 'date-time' },
+              handoff: { ...handoffSchemaObject, description: 'The task this todo was handed off to in another tracker, which owns its status. In the digest only when set.' },
+              cairn_ref: { type: ['string', 'null'], example: 'CAIRN-331', deprecated: true, description: 'Deprecated (0.7): `handoff.ref` when the tracker is `cairn`. Removed in 0.8.' },
+              cairn_status: { type: ['string', 'null'], deprecated: true, description: 'Deprecated (0.7): `handoff.status` when the tracker is `cairn`. Removed in 0.8.' },
+              cairn_synced_at: { type: ['string', 'null'], format: 'date-time', deprecated: true, description: 'Deprecated (0.7): `handoff.synced_at` when the tracker is `cairn`. Removed in 0.8.' },
             },
           }),
           '404': errorResponse,
@@ -715,7 +744,9 @@ export const openapiSpec = () => ({
           'readable-markdown check as on create. Every write here, including moving the task ' +
           'elsewhere, is refused with 409 if its current project is archived — most likely the ' +
           'copy left behind by a move to another Croft instance; restore the project first, or ' +
-          'point the CLI at the other instance.',
+          'point the CLI at the other instance. A todo handed off to another tracker keeps its title and body ' +
+          'editable, but a change of `status` is refused with 409 `handed_off` until it is taken back ' +
+          '(`DELETE /tasks/{ref}/handoff`) or the tracker ends it.',
         requestBody: body(json(updateTaskSchema)),
         responses: {
           '200': okResponse('Updated.', taskSummary),
@@ -748,7 +779,8 @@ export const openapiSpec = () => ({
         description:
           'A 409 means another agent holds it, or that the task\'s project is archived — most ' +
           'likely the copy left behind by a move to another Croft instance. Pick different work, ' +
-          'or restore the project / point the CLI at the other instance.',
+          'or restore the project / point the CLI at the other instance. A todo handed off to another tracker ' +
+          'is refused with 409 `handed_off`: its status is that tracker\'s.',
         responses: { '200': okResponse('Claimed.'), '409': errorResponse },
       },
     },
@@ -760,7 +792,9 @@ export const openapiSpec = () => ({
       parameters: [refParam],
       post: {
         summary: 'Record where work stopped',
-        description: 'Only the latest is kept — it is the payload another agent resumes from.',
+        description:
+          'Only the latest is kept — it is the payload another agent resumes from. On an unheld todo handed off ' +
+          'to another tracker it is refused with 409 `handed_off`, since it would claim the todo.',
         requestBody: body({
           type: 'object',
           properties: { summary: { type: 'string' }, payload: { type: 'object' } },
@@ -771,7 +805,10 @@ export const openapiSpec = () => ({
     },
     '/tasks/{ref}/release': {
       parameters: [refParam],
-      post: { summary: 'Drop a claim', responses: { '200': okResponse('Released.'), '409': errorResponse } },
+      post: {
+        summary: 'Drop a claim',
+        description: 'Releasing a `doing` todo handed off to another tracker is refused with 409 `handed_off`.',
+        responses: { '200': okResponse('Released.'), '409': errorResponse } },
     },
     '/tasks/{ref}/block': {
       parameters: [refParam],
@@ -1240,7 +1277,7 @@ export const openapiSpec = () => ({
         summary: 'Delete a subject for good',
         description:
           'Removes the subject with its todos (and their sub-todos), work log, human notes, files, tags and ' +
-          'members; Cairn tasks pushed from its todos stay in Cairn. The owner may; an administrator only for a ' +
+          'members; tasks handed off from its todos stay in their trackers. The owner may; an administrator only for a ' +
           'subject in the lab (`forbidden` otherwise, checked first). Requires `?confirm=<REF>`; without it the ' +
           'call fails with `validation_failed` and `requiresConfirmation`.',
         parameters: [{ name: 'confirm', in: 'query', schema: { type: 'string', example: 'S-12' } }],
@@ -1463,8 +1500,10 @@ export const openapiSpec = () => ({
       post: {
         summary: 'Add a lab project (administrators)',
         description:
-          'Names are unique in any case. `cairnKey` is the Cairn project `croft push T-n` files the ' +
-          'project\'s todos under when no `--to` is given (upper-cased; `""` or `null` for none).',
+          'Names are unique in any case. `handoffTracker` and `handoffTarget` say where `croft handoff` sends ' +
+          'the project\'s todos (a tracker like `cairn` or `github`, and a target in it: a project key, ' +
+          'an `owner/repo`): both or neither. Deprecated (0.7): `cairnKey` means tracker `cairn` and that ' +
+          'target. Removed in 0.8.',
         requestBody: body(json(createLabProjectSchema)),
         responses: { '201': okResponse('The lab project.', labProjectSchema), '400': errorResponse, '403': errorResponse, '409': errorResponse },
       },
@@ -1485,7 +1524,9 @@ export const openapiSpec = () => ({
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
       patch: {
         summary: 'Rename, recolour, re-key or move a lab project (administrators)',
-        description: '`cairnKey: null` (or `""`) clears the Cairn key; an omitted field is left as it is.',
+        description:
+          'Null `handoffTracker` and `handoffTarget` (or the deprecated `cairnKey: null`) clear the hand-off; ' +
+          'an omitted field is left as it is.',
         requestBody: body(json(updateLabProjectSchema)),
         responses: {
           '200': okResponse('The lab project.', labProjectSchema),
@@ -1501,16 +1542,38 @@ export const openapiSpec = () => ({
         responses: { '200': okResponse('Deleted.'), '403': errorResponse, '404': errorResponse, '409': errorResponse },
       },
     },
+    '/tasks/{ref}/handoff': {
+      parameters: [{ name: 'ref', in: 'path', required: true, schema: { type: 'string', example: 'T-41' } }],
+      post: {
+        summary: 'Record that this todo was handed off to another tracker',
+        description:
+          'Written by `croft handoff` once the task exists in the tracker, so the link never points at nothing. ' +
+          'Re-linking overwrites, and writes a `handoff` note on the subject: `T-41 handed off to <tracker> as ' +
+          '<ref>`. From then on the tracker owns the todo\'s status: changing it, claiming it or closing it ' +
+          'here is refused with 409 `handed_off`. Also how `croft sync` reports a status it read there: with a ' +
+          'done or cancelled `status` it records the once-only `<ref> done: <resolution>` subject note and ' +
+          'closes the todo (a resolution kind Croft lacks closes as `verified`): the one path that closes a ' +
+          'handed-off todo. A todo whose subject is not `lab` is refused with `subject_not_published` unless ' +
+          '`force: true`, because the tracker has no notion of who may see what.',
+        requestBody: body(json(handoffSchema)),
+        responses: { '200': okResponse('The link.'), '400': errorResponse, '404': errorResponse, '409': errorResponse },
+      },
+      delete: {
+        summary: 'Take a hand-off back',
+        description:
+          'Clears the link, writes a `handoff` note `T-41 taken back from <tracker> (<ref>)` on the subject, ' +
+          'and returns the todo. Nothing is done in the other tracker. 409 `conflict` when the todo is not handed off.',
+        responses: { '200': okResponse('The todo.'), '404': errorResponse, '409': errorResponse },
+      },
+    },
     '/tasks/{ref}/cairn-link': {
       parameters: [{ name: 'ref', in: 'path', required: true, schema: { type: 'string', example: 'T-41' } }],
       post: {
-        summary: 'Record that this task was filed in Cairn (`croft push`)',
+        deprecated: true,
+        summary: 'Deprecated (0.7): hand off to `cairn`. Removed in 0.8',
         description:
-          'Also how `croft sync` reports a status it read through a local cairn CLI. With a done or ' +
-          'cancelled `cairnStatus` it records the once-only ' +
-          '`CAIRN-331 done: <cairnResolution>` subject note, and the todo closed unless it already is. ' +
-          'A todo whose subject is not `lab` is refused with `subject_not_published` unless `force: true` ' +
-          '(`croft push --force`).',
+          'The old body shape of `POST /tasks/{ref}/handoff`, with tracker `cairn`: `cairnRef`, `cairnStatus`, ' +
+          '`cairnResolution`, `cairnResolutionKind`, `force`. Kept so 0.6 CLIs keep working.',
         requestBody: body(json(cairnLinkSchema)),
         responses: { '200': okResponse('The link.'), '400': errorResponse, '404': errorResponse, '409': errorResponse },
       },

@@ -22,7 +22,7 @@ export const isUuid = (value: string) => UUID.test(value)
  * Administrators, by role — a human session or an agent key its admin owns.
  * Stages and tags are shared configuration, not credentials, so an admin's
  * agent keeping them tidy is fine; the Cairn key is the exception (see
- * cairn-link.ts) and needs a signed-in human.
+ * handoff.ts) and needs a signed-in human.
  */
 export const isLabAdmin = (actor: Pick<Actor, 'role'>) => actor.role === 'admin'
 
@@ -258,12 +258,14 @@ export const deleteTag = async (id: string): Promise<Outcome<{ id: string; delet
 
 // ---------------------------------------------------------------------------
 // Lab projects: which effort a subject is part of (Trig, Croft, Dispofi…),
-// and the Cairn project its todos go to on `croft push`. Curated like tags.
+// and the tracker and target its todos go to on `croft handoff`. Curated like tags.
 // Not the task `projects` table: todos stay `T-n` whatever their subject's
-// lab project, because per-project refs would collide with Cairn's keys.
+// lab project, because per-project refs would collide with a tracker's keys.
 // ---------------------------------------------------------------------------
 
-const LAB_PROJECT_COLUMNS = 'id, name, color, cairn_key, position'
+// `cairn_key` is the deprecated (0.7) alias: the target, when the tracker is `cairn`. Removed in 0.8.
+const LAB_PROJECT_COLUMNS =
+  "id, name, color, handoff_tracker, handoff_target, case when handoff_tracker = 'cairn' then handoff_target end as cairn_key, position"
 
 /** A lab project with how many subjects (archived ones included) are in it. */
 export type LabProjectListed = LabProject & { subjects: number }
@@ -276,7 +278,8 @@ export type LabProjectListed = LabProject & { subjects: number }
 export const listLabProjects = async (viewerId: string | null, db: Db = pool()): Promise<LabProjectListed[]> =>
   rows<LabProjectListed>(
     await db.query(
-      `select lp.id, lp.name, lp.color, lp.cairn_key, lp.position,
+      `select lp.id, lp.name, lp.color, lp.handoff_tracker, lp.handoff_target,
+              case when lp.handoff_tracker = 'cairn' then lp.handoff_target end as cairn_key, lp.position,
               (select count(*) from subjects s
                 where s.project_id = lp.id
                   and ($1::uuid is null or croft_subject_visible(s.id, $1::uuid)))::int as subjects
@@ -312,16 +315,16 @@ const projectNameTaken = (name: string | undefined) =>
 export const createLabProject = async (input: {
   name: string
   color?: string
-  cairnKey?: string | null
+  handoff?: { tracker: string; target: string } | null
   position?: number
 }): Promise<Outcome<LabProject>> => {
   try {
     const result = await pool().query(
-      `insert into lab_projects (name, color, cairn_key, position)
-       values ($1, coalesce($2, '#8a8792'), $3,
-               coalesce($4, (select coalesce(max(position) + 1, 0) from lab_projects)))
+      `insert into lab_projects (name, color, handoff_tracker, handoff_target, position)
+       values ($1, coalesce($2, '#8a8792'), $3, $4,
+               coalesce($5, (select coalesce(max(position) + 1, 0) from lab_projects)))
        returning ${LAB_PROJECT_COLUMNS}`,
-      [input.name, input.color ?? null, input.cairnKey ?? null, input.position ?? null],
+      [input.name, input.color ?? null, input.handoff?.tracker ?? null, input.handoff?.target ?? null, input.position ?? null],
     )
     return { ok: true, value: rows<LabProject>(result)[0]! }
   } catch (error) {
@@ -330,27 +333,29 @@ export const createLabProject = async (input: {
   }
 }
 
-/** `cairnKey: null` clears the key; omitted leaves it. */
+/** `handoff: null` clears the hand-off; omitted leaves it. */
 export const updateLabProject = async (
   id: string,
-  patch: { name?: string; color?: string; cairnKey?: string | null; position?: number },
+  patch: { name?: string; color?: string; handoff?: { tracker: string; target: string } | null; position?: number },
 ): Promise<Outcome<LabProject>> => {
   if (!isUuid(id)) return { ok: false, response: fail('not_found', `No lab project ${id}.`) }
   try {
     const result = await pool().query(
       `update lab_projects set
-         name      = coalesce($2, name),
-         color     = coalesce($3, color),
-         cairn_key = case when $4::boolean then $5::text else cairn_key end,
-         position  = coalesce($6, position)
+         name            = coalesce($2, name),
+         color           = coalesce($3, color),
+         handoff_tracker = case when $4::boolean then $5::text else handoff_tracker end,
+         handoff_target  = case when $4::boolean then $6::text else handoff_target end,
+         position        = coalesce($7, position)
        where id = $1
        returning ${LAB_PROJECT_COLUMNS}`,
       [
         id,
         patch.name ?? null,
         patch.color ?? null,
-        patch.cairnKey !== undefined,
-        patch.cairnKey ?? null,
+        patch.handoff !== undefined,
+        patch.handoff?.tracker ?? null,
+        patch.handoff?.target ?? null,
         patch.position ?? null,
       ],
     )

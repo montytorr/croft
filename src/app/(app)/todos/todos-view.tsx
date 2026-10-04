@@ -12,7 +12,8 @@ import { TASK_STATUSES, isTerminal, type TaskPriority, type TaskStatus } from '@
 import { TODO_PROJECT_KEY, type LabProject, type LabTodo } from '@/lib/lab/types'
 import { QuickSelect, useQuickPatch } from '../projects/[key]/quick-edit'
 import { ResolutionDialog } from '../projects/[key]/resolution-dialog'
-import { CairnBadge, ProjectDot, SubjectChip } from './todo-bits'
+import { HandoffBadge } from '@/components/handoff-badge'
+import { ProjectDot, SubjectChip } from './todo-bits'
 import {
   groupTodos,
   isClosed,
@@ -44,8 +45,8 @@ const CHIP = cn(
 )
 
 /**
- * The status badge, changeable in place. A pushed todo is Cairn's to move, so
- * it shows its status and offers nothing; closing asks how it ended first,
+ * The status badge, changeable in place. A handed-off todo is moved in its
+ * tracker, so it shows its status and offers nothing; closing asks how it ended first,
  * because the API refuses a close without a resolution.
  */
 const StatusControl = ({ todo }: { todo: LabTodo }) => {
@@ -53,9 +54,9 @@ const StatusControl = ({ todo }: { todo: LabTodo }) => {
   const [closing, setClosing] = useState<TaskStatus | null>(null)
   const status = ((overlay?.status as string) ?? todo.status) as TaskStatus
 
-  if (todo.cairn_ref) {
+  if (todo.handoff) {
     return (
-      <span className="relative z-10 inline-flex shrink-0 opacity-70" title={`${STATUS_LABEL[status] ?? status} · pushed to Cairn, moved there`}>
+      <span className="relative z-10 inline-flex shrink-0 opacity-70" title={`${STATUS_LABEL[status] ?? status} · moves in ${todo.handoff.tracker}`}>
         <StatusIcon status={status} size={13} />
       </span>
     )
@@ -138,7 +139,7 @@ const Row = ({ todo, showSubject }: { todo: LabTodo; showSubject: boolean }) => 
         />
       ) : null}
 
-      <CairnBadge cairnRef={todo.cairn_ref} cairnStatus={todo.cairn_status} className="relative z-10 hidden md:inline-flex" />
+      <HandoffBadge handoff={todo.handoff} className="relative z-10 hidden md:inline-flex" />
 
       {todo.claimed_by ? (
         <span className="relative z-10 shrink-0" title={`Held by ${todo.claimed_by}`}>

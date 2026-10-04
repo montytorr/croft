@@ -2,7 +2,7 @@ import type { z } from 'zod'
 import { route } from '@/lib/api/handler'
 import { ok } from '@/lib/api/response'
 import { createLabProject, listLabProjects, refuseNonAdmin } from '@/lib/api/lab-admin'
-import { createLabProjectSchema } from '@/schemas/subject'
+import { createLabProjectSchema, handoffOfProjectBody } from '@/schemas/subject'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +15,8 @@ export const POST = route<Record<string, string>, z.infer<typeof createLabProjec
   handler: async ({ actor, body }) => {
     const refused = refuseNonAdmin(actor, 'the lab projects')
     if (refused) return refused
-    const created = await createLabProject(body)
+    const { name, color, position } = body
+    const created = await createLabProject({ name, color, position, handoff: handoffOfProjectBody(body) ?? null })
     return created.ok ? ok(created.value, { status: 201 }) : created.response
   },
 })

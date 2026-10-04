@@ -8,6 +8,7 @@ import {
   findTask,
   noSuchTaskMessage,
   RELEASED_CLAIM,
+  refOfRow,
   refuseArchived,
   renameFields,
   resolveParent,
@@ -16,6 +17,7 @@ import {
 } from '@/lib/api/tasks'
 import { formerKeysByProject, formerRefsOf, projectsForKeys, resolveProject } from '@/lib/api/project-keys'
 import { buildDigest } from '@/lib/api/digest'
+import { refuseHandedOff } from '@/lib/api/handoff-shape'
 import { mentionsOf } from '@/lib/api/mentions'
 import { viewerOf, withoutHiddenLinks } from '@/lib/api/visibility'
 import { peopleByIds, resolveAssignee, withAssignee } from '@/lib/api/people'
@@ -56,8 +58,13 @@ export const GET = route<{ ref: string }>({
       // Only on the tasks that have them: the digest is the cheapest view.
       const lab = {
         ...(subject ? { subject } : {}),
-        ...(task.cairn_ref
-          ? { cairn_ref: task.cairn_ref, cairn_status: task.cairn_status, cairn_synced_at: task.cairn_synced_at }
+        ...(task.handoff
+          ? {
+              handoff: task.handoff,
+              cairn_ref: task.cairn_ref,
+              cairn_status: task.cairn_status,
+              cairn_synced_at: task.cairn_synced_at,
+            }
           : {}),
       }
       return ok({ ...(await buildDigest(task, viewerOf(actor))), ...lab, ...told })
@@ -95,6 +102,12 @@ export const PATCH = route<{ ref: string }, z.infer<typeof updateTaskSchema>>({
     if (!task) return fail('not_found', `No task ${params.ref}.`)
     const archived = refuseArchived(task)
     if (archived) return archived
+
+    // A handed-off todo's status belongs to the other tracker. Title and body edits stay open.
+    if (body.status !== undefined && body.status !== task.status) {
+      const handedOff = refuseHandedOff(task, refOfRow(task) ?? params.ref)
+      if (handedOff) return handedOff
+    }
 
     const unreadable = refuseUnreadableBody(actor, body.description, `croft update ${params.ref} --body -`)
     if (unreadable) return unreadable

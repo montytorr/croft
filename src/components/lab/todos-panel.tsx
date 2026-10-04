@@ -6,10 +6,11 @@ import {
 } from '@dnd-kit/core'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
-import { ArrowUpRight, Columns3, List, Plus } from 'lucide-react'
+import { useCallback, useState } from 'react'
+import { Columns3, List, Plus, Undo2 } from 'lucide-react'
 import { ResolutionDialog } from '@/app/(app)/projects/[key]/resolution-dialog'
 import { Avatar, StatusIcon } from '@/components/icons'
+import { HandoffBadge } from '@/components/handoff-badge'
 import { RelativeTime } from '@/components/relative-time'
 import { Spinner } from '@/components/spinner'
 import { useMutate } from '@/lib/api/use-mutate'
@@ -17,36 +18,27 @@ import { TODO_PROJECT_KEY, type SubjectTodo } from '@/lib/lab/types'
 import { TASK_STATUSES, type ResolutionKind, type TaskStatus } from '@/schemas/task'
 import { cn } from '@/lib/utils'
 import {
-  STATUS_LABEL, boardLanes, counts, isPushed, laneOf, listGroups, needsResolution, type PageTodo,
+  STATUS_LABEL, boardLanes, counts, isHandedOff, laneOf, listGroups, needsResolution, type PageTodo,
 } from './todo-lanes'
+import { TakeBackDialog } from './take-back-dialog'
 
 export type TodoView = 'list' | 'board'
 
 const todoHref = (todo: PageTodo) => `/projects/${TODO_PROJECT_KEY}/tasks/${todo.number}`
 
-/**
- * Where a pushed todo's work is being done: `↗ CAIRN-331 · doing`, shown as
- * a reference. The status is as of the last sync, which is why it stays in the subtle ink rather than borrowing a
- * status colour it may no longer have.
- */
-const CairnBadge = ({ todo }: { todo: PageTodo }) => {
-  if (!todo.cairn_ref) return null
-  const body = (
-    <>
-      <ArrowUpRight size={10} aria-hidden />
-      {todo.cairn_ref}
-      {todo.cairn_status ? <span className="text-fg-subtle">· {todo.cairn_status}</span> : null}
-    </>
-  )
-  const className =
-    'border-border text-fg-muted relative z-10 inline-flex h-[1.125rem] shrink-0 items-center gap-1 rounded border px-1.5 font-mono text-[0.625rem]'
-  const title = `In Cairn as ${todo.cairn_ref}${todo.cairn_status ? `, ${todo.cairn_status} at the last sync` : ''}. It moves there, not here.`
-  return (
-    <span title={title} className={className}>
-      {body}
-    </span>
-  )
-}
+/** Unlinks a handed-off todo from its tracker so it is worked here again; offered where the viewer may. */
+const TakeBackButton = ({ todo, onTakeBack }: { todo: PageTodo; onTakeBack?: (todo: PageTodo) => void }) =>
+  todo.handoff && onTakeBack ? (
+    <button
+      type="button"
+      onClick={() => onTakeBack(todo)}
+      title={`Take ${todo.ref} back from ${todo.handoff.tracker}`}
+      className="text-fg-subtle hover:text-fg relative z-10 inline-flex h-[1.125rem] shrink-0 items-center gap-1 rounded px-1 text-[0.625rem] transition-colors"
+    >
+      <Undo2 size={10} aria-hidden />
+      Take back
+    </button>
+  ) : null
 
 const HeldBy = ({ agent }: { agent: string }) => (
   <span className="text-fg-subtle inline-flex min-w-0 items-center gap-1 text-[0.6875rem]" title={`Claimed by ${agent}`}>
@@ -55,12 +47,12 @@ const HeldBy = ({ agent }: { agent: string }) => (
   </span>
 )
 
-/** A todo's status, changed in place from its icon; a pushed todo's is Cairn's, so it is shown and not offered. */
+/** A todo's status, changed in place from its icon; a handed-off todo's moves in its tracker, so it is shown and not offered. */
 const StatusControl = ({ todo, onChange }: { todo: PageTodo; onChange: (status: TaskStatus) => void }) => {
   const status = laneOf(todo)
-  if (isPushed(todo)) {
+  if (todo.handoff) {
     return (
-      <span className="grid size-5 shrink-0 place-items-center opacity-60" title="Moves in Cairn">
+      <span className="grid size-5 shrink-0 place-items-center opacity-60" title={`Moves in ${todo.handoff.tracker}`}>
         <StatusIcon status={status} size={13} />
       </span>
     )
@@ -87,14 +79,23 @@ const StatusControl = ({ todo, onChange }: { todo: PageTodo; onChange: (status: 
 const closedTitle = (status: string) =>
   status === 'done' || status === 'cancelled' ? 'text-fg-subtle line-through decoration-fg-subtle/40' : 'text-fg'
 
-const TodoRow = ({ todo, onStatus }: { todo: PageTodo; onStatus: (todo: PageTodo, s: TaskStatus) => void }) => (
+const TodoRow = ({
+  todo,
+  onStatus,
+  onTakeBack,
+}: {
+  todo: PageTodo
+  onStatus: (todo: PageTodo, s: TaskStatus) => void
+  onTakeBack?: (todo: PageTodo) => void
+}) => (
   <li className="group/row row-hover relative flex h-[1.875rem] items-center gap-2 rounded-md px-2">
     <StatusControl todo={todo} onChange={(s) => onStatus(todo, s)} />
     <Link href={todoHref(todo)} className="min-w-0 flex-1 truncate text-[0.8125rem] after:absolute after:inset-0">
       <span className={closedTitle(todo.status)}>{todo.title}</span>
     </Link>
     {todo.claimed_by ? <span className="hidden max-w-[10rem] sm:flex"><HeldBy agent={todo.claimed_by} /></span> : null}
-    <CairnBadge todo={todo} />
+    <HandoffBadge handoff={todo.handoff} className="relative z-10" />
+    <TakeBackButton todo={todo} onTakeBack={onTakeBack} />
     {todo.assignee ? (
       <span title={todo.assignee.name} className="hidden shrink-0 sm:block">
         <Avatar name={todo.assignee.name} size={16} />
@@ -105,13 +106,13 @@ const TodoRow = ({ todo, onStatus }: { todo: PageTodo; onStatus: (todo: PageTodo
   </li>
 )
 
-const TodoCard = ({ todo, lifted }: { todo: PageTodo; lifted?: boolean }) => (
+const TodoCard = ({ todo, lifted, onTakeBack }: { todo: PageTodo; lifted?: boolean; onTakeBack?: (todo: PageTodo) => void }) => (
   <div
     className={cn(
       'bg-surface border-border group/card relative flex flex-col gap-1.5 rounded-md border px-2.5 py-2',
       'transition-[border-color,background-color] duration-[var(--dur-1)] hover:border-border-strong',
       lifted && 'border-accent/50 rotate-[1.25deg] shadow-lg',
-      isPushed(todo) && 'bg-bg-elevated/60 border-dashed',
+      isHandedOff(todo) && 'bg-bg-elevated/60 border-dashed',
     )}
   >
     <Link href={todoHref(todo)} className="text-[0.8125rem] leading-snug after:absolute after:inset-0" draggable={false}>
@@ -120,7 +121,8 @@ const TodoCard = ({ todo, lifted }: { todo: PageTodo; lifted?: boolean }) => (
     <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
       <span className="text-fg-subtle font-mono text-[0.625rem]">{todo.ref}</span>
       {todo.claimed_by ? <HeldBy agent={todo.claimed_by} /> : null}
-      <CairnBadge todo={todo} />
+      <HandoffBadge handoff={todo.handoff} className="relative z-10" />
+      <TakeBackButton todo={todo} onTakeBack={onTakeBack} />
       {todo.assignee ? (
         <span title={todo.assignee.name} className="ml-auto shrink-0">
           <Avatar name={todo.assignee.name} size={16} />
@@ -130,8 +132,8 @@ const TodoCard = ({ todo, lifted }: { todo: PageTodo; lifted?: boolean }) => (
   </div>
 )
 
-const DraggableCard = ({ todo }: { todo: PageTodo }) => {
-  const pushed = isPushed(todo)
+const DraggableCard = ({ todo, onTakeBack }: { todo: PageTodo; onTakeBack?: (todo: PageTodo) => void }) => {
+  const pushed = isHandedOff(todo)
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: todo.id, disabled: pushed })
   return (
     <div
@@ -139,14 +141,14 @@ const DraggableCard = ({ todo }: { todo: PageTodo }) => {
       {...(pushed ? {} : listeners)}
       {...(pushed ? {} : attributes)}
       className={cn('rounded-md', !pushed && 'cursor-grab', isDragging && 'opacity-40')}
-      title={pushed ? 'Pushed to Cairn: its status moves there.' : undefined}
+      title={todo.handoff ? `Handed off to ${todo.handoff.tracker}: its status moves there.` : undefined}
     >
-      <TodoCard todo={todo} />
+      <TodoCard todo={todo} onTakeBack={onTakeBack} />
     </div>
   )
 }
 
-const Lane = ({ status, todos }: { status: TaskStatus; todos: PageTodo[] }) => {
+const Lane = ({ status, todos, onTakeBack }: { status: TaskStatus; todos: PageTodo[]; onTakeBack?: (todo: PageTodo) => void }) => {
   const { setNodeRef, isOver } = useDroppable({ id: status })
   return (
     <section
@@ -171,7 +173,7 @@ const Lane = ({ status, todos }: { status: TaskStatus; todos: PageTodo[] }) => {
             {isOver ? 'Drop here' : 'Nothing here'}
           </p>
         ) : (
-          todos.map((todo) => <DraggableCard key={todo.id} todo={todo} />)
+          todos.map((todo) => <DraggableCard key={todo.id} todo={todo} onTakeBack={onTakeBack} />)
         )}
       </div>
     </section>
@@ -191,17 +193,20 @@ const laneUnderPointer: CollisionDetection = (args) => {
  *
  * Dragging a card (or picking from a row's status icon) patches the task;
  * closing one asks for its resolution first, as everywhere else. A todo that
- * was pushed to Cairn is worked there: it shows Cairn's status and link, and
- * cannot be dragged here.
+ * was handed off to another tracker is worked there: it shows that tracker's
+ * status and link, cannot be dragged here, and can be taken back.
  */
 export const TodosPanel = ({
   subjectRef,
   todos: initial,
   initialView = 'list',
+  canTakeBack = true,
 }: {
   subjectRef: string
   todos: PageTodo[]
   initialView?: TodoView
+  /** Whether the viewer may take a hand-off back; the server decides in the end and its refusal is shown. */
+  canTakeBack?: boolean
 }) => {
   const router = useRouter()
   const request = useMutate()
@@ -217,6 +222,7 @@ export const TodosPanel = ({
   const [adding, setAdding] = useState(false)
   const [dragging, setDragging] = useState<PageTodo | null>(null)
   const [closing, setClosing] = useState<{ todo: PageTodo; status: TaskStatus } | null>(null)
+  const [takingBack, setTakingBack] = useState<PageTodo | null>(null)
 
   const setView = (next: TodoView) => {
     setViewState(next)
@@ -274,8 +280,18 @@ export const TodosPanel = ({
     return true
   }
 
+  const cancelTakeBack = useCallback(() => setTakingBack(null), [])
+
+  const takeBack = async (todo: PageTodo) => {
+    const result = await request<PageTodo>(`/api/v1/tasks/${todo.ref}/handoff`, { method: 'DELETE' })
+    if (!result.ok) return false
+    setTodos((current) => current.map((t) => (t.id === todo.id ? { ...t, handoff: null } : t)))
+    router.refresh()
+    return true
+  }
+
   const changeStatus = (todo: PageTodo, status: TaskStatus) => {
-    if (isPushed(todo) || laneOf(todo) === status) return
+    if (isHandedOff(todo) || laneOf(todo) === status) return
     if (needsResolution(todo.status, status)) {
       setClosing({ todo, status })
       return
@@ -290,6 +306,7 @@ export const TodosPanel = ({
     changeStatus(todo, over.id as TaskStatus)
   }
 
+  const onTakeBack = canTakeBack ? setTakingBack : undefined
   const tally = counts(todos)
   const lanes = boardLanes(todos, showCancelled)
 
@@ -374,7 +391,7 @@ export const TodosPanel = ({
                 </h3>
                 <ul className="flex flex-col">
                   {group.todos.map((todo) => (
-                    <TodoRow key={todo.id} todo={todo} onStatus={changeStatus} />
+                    <TodoRow key={todo.id} todo={todo} onStatus={changeStatus} onTakeBack={onTakeBack} />
                   ))}
                 </ul>
               </section>
@@ -396,13 +413,26 @@ export const TodosPanel = ({
               style={{ gridTemplateColumns: `repeat(${lanes.length}, minmax(13.5rem, 1fr))` }}
             >
               {lanes.map((status) => (
-                <Lane key={status} status={status} todos={todos.filter((t) => laneOf(t) === status)} />
+                <Lane key={status} status={status} todos={todos.filter((t) => laneOf(t) === status)} onTakeBack={onTakeBack} />
               ))}
             </div>
           </div>
           <DragOverlay>{dragging ? <TodoCard todo={dragging} lifted /> : null}</DragOverlay>
         </DndContext>
       )}
+
+      {takingBack?.handoff ? (
+        <TakeBackDialog
+          todoRef={takingBack.ref}
+          handoff={takingBack.handoff}
+          onCancel={cancelTakeBack}
+          onConfirm={async () => {
+            const ok = await takeBack(takingBack)
+            if (ok) setTakingBack(null)
+            return ok
+          }}
+        />
+      ) : null}
 
       {closing ? (
         <ResolutionDialog

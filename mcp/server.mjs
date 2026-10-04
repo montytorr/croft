@@ -9,9 +9,11 @@
  * Croft is a lab board: SUBJECTS (S-12) move through stages and end with a
  * conclusion; their TODOS are tasks (T-41) worked with the task tools below.
  * Deliberately left out: subject edit/tag (do them in the web app or the
- * CLI), push/sync to Cairn (they spawn the `cairn` binary — run them from a
- * shell), stages/tags admin, and every memory verb (Croft has no memory —
- * Cairn does).
+ * CLI), handoff/sync (they spawn a tracker's own CLI — run them from a
+ * shell), stages/tags admin, and every memory verb (Croft has no memory).
+ * A todo handed off to a tracker is refused by the task tools below with
+ * `handed_off`; the CLI prints the server's message, which says what to do
+ * (work it in the tracker, or take it back), and it reaches the caller as text.
  *
  * Why bother, given the CLI exists: Codex's [mcp_servers.*] gives per-tool
  * timeouts and approval modes, Claude Code enforces the tool schemas so the
@@ -219,8 +221,8 @@ const TOOLS = [
   {
     name: 'croft_subject_todo',
     description:
-      'Add a todo (a T-n task) under a subject. For an agent it is claimed at once, like ' +
-      'croft_add; work it with the task tools and close it with croft_done.',
+      'Add a todo (a T-n task) under a subject. For an agent it is claimed at once; ' +
+      'work it with the task tools and close it with croft_done. Every todo belongs to a subject.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -252,42 +254,6 @@ const TOOLS = [
       'list', '--project', a.project,
       ...(a.status ? ['--status', a.status] : []),
       ...(a.type ? ['--type', a.type] : []),
-      ...(a.assignee ? ['--assignee', a.assignee] : []),
-    ],
-  },
-  {
-    name: 'croft_add',
-    description:
-      'File a todo with no subject. Prefer croft_subject_todo, which ties it to a subject. ' +
-      'Warns if similar work already exists — read that warning before filing a duplicate.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        title: { type: 'string' },
-        project: { type: 'string', description: 'Todos live in project T.' },
-        type: { type: 'string', enum: ['feature', 'bug', 'improvement', 'chore', 'spike', 'docs'] },
-        priority: { type: 'string', enum: ['urgent', 'high', 'medium', 'low'] },
-        body: {
-          type: 'string',
-          description:
-            'Markdown: "## " headings, "- " lists, paths and identifiers in backticks. ' +
-            'A wall of text is refused, with a list of what to fix.',
-        },
-        assignee: {
-          type: 'string',
-          description:
-            'The human who owns it: an email, a name or a user id. Omit it and the task is ' +
-            'assigned to the human behind this key. Owning is not claiming: the claim is ' +
-            'which agent is executing it now.',
-        },
-      },
-      required: ['title', 'project'],
-    },
-    run: (a) => [
-      'add', a.title, '--project', a.project,
-      ...(a.type ? ['--type', a.type] : []),
-      ...(a.priority ? ['--priority', a.priority] : []),
-      ...(a.body ? ['--body', a.body] : []),
       ...(a.assignee ? ['--assignee', a.assignee] : []),
     ],
   },

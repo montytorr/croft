@@ -20,6 +20,7 @@ import { removeAttachments } from '@/lib/attachments'
 import { canDeleteSubject } from '@/lib/lab/ui-subject-delete'
 import { createTaskSchema } from '@/schemas/task'
 import type { Actor } from './auth'
+import { withHandoff } from './handoff-shape'
 import {
   defaultStage,
   findLabProject,
@@ -122,7 +123,9 @@ const SUBJECT_SELECT = `
          ), '[]'::json) as tags,
          case when lp.id is null then null
               else json_build_object('id', lp.id, 'name', lp.name, 'color', lp.color,
-                                     'cairn_key', lp.cairn_key, 'position', lp.position)
+                                     'handoff_tracker', lp.handoff_tracker, 'handoff_target', lp.handoff_target,
+                                     'cairn_key', case when lp.handoff_tracker = 'cairn' then lp.handoff_target end,
+                                     'position', lp.position)
          end as project,
          case when u.id is null then null
               else json_build_object('id', u.id, 'name', coalesce(nullif(trim(p.display_name), ''), u.email))
@@ -707,8 +710,8 @@ export const refuseSubjectDelete = (subject: Subject, viewer: { userId: string; 
 
 /**
  * Deletes a subject for good: its todos (and their sub-todos), work log,
- * human notes, files, tags and members. A Cairn task pushed from one of its
- * todos is Cairn's, and stays.
+ * human notes, files, tags and members. A task one of its todos was handed
+ * off to belongs to that tracker, and stays.
  *
  * Every todo goes with it, never detached: a todo without a subject is
  * visible to everyone (076), so detaching would publish a private subject's
@@ -877,19 +880,23 @@ export const addSubjectNote = async (
 // Todos: ordinary tasks in the `T` project, pointed at their subject.
 // ---------------------------------------------------------------------------
 
-type TodoRow = Omit<SubjectTodo, 'ref'> & { key: string }
+type TodoRow = Omit<SubjectTodo, 'ref' | 'handoff' | 'cairn_ref' | 'cairn_status'> & { key: string }
 
 /** Open ones first, then the order the project's list uses. */
 export const listSubjectTodos = async (subjectId: string): Promise<SubjectTodo[]> => {
   const result = await pool().query(
-    `select t.id, t.number, p.key, t.title, t.status, t.claimed_by, t.cairn_ref, t.cairn_status, t.updated_at
+    `select t.id, t.number, p.key, t.title, t.status, t.claimed_by, t.handoff_tracker, t.handoff_ref, t.handoff_url,
+            t.handoff_status, t.handoff_synced_at, t.updated_at
        from tasks t
        join projects p on p.id = t.project_id
       where t.subject_id = $1
       order by (t.status in ('done', 'cancelled')), t.position, t.number`,
     [subjectId],
   )
-  return rows<TodoRow>(result).map(({ key, ...todo }) => ({ ...todo, ref: `${key}-${todo.number}` }))
+  return rows<TodoRow>(result).map(({ key, ...todo }) => ({
+    ...(withHandoff(todo) as unknown as Omit<SubjectTodo, 'ref'>),
+    ref: `${key}-${todo.number}`,
+  }))
 }
 
 type TodoProject = { id: string; key: string; status: string }
@@ -982,6 +989,7 @@ export const createSubjectTodo = async (
       title: task.title,
       status: task.status,
       claimed_by: task.claimed_by,
+      handoff: task.handoff,
       cairn_ref: task.cairn_ref,
       cairn_status: task.cairn_status,
       updated_at: task.updated_at,

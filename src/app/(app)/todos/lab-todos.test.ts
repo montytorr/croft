@@ -24,6 +24,7 @@ const todo = (over: Partial<LabTodo> = {}): LabTodo => {
     title: `todo ${n}`,
     status: 'todo',
     claimed_by: null,
+    handoff: null,
     cairn_ref: null,
     cairn_status: null,
     updated_at: `2026-09-${String(10 + n).padStart(2, '0')}T10:00:00Z`,

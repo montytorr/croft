@@ -19,8 +19,8 @@ export const TASK_FIELDS =
   'checkpoint_summary, checkpoint_payload, checkpoint_at, checkpoint_version, blocked_reason, blocked_at, ' +
   'resolution, resolution_kind, resolved_at, resolved_by, duplicate_of, parent_id, ' +
   'memory_session_id, observation_ids, created_at, updated_at, ' +
-  // A todo's subject, and the Cairn task `croft push` handed it to.
-  'subject_id, cairn_ref, cairn_status, cairn_synced_at, ' +
+  // A todo's subject, and the task it was handed off to in another tracker.
+  'subject_id, handoff_tracker, handoff_ref, handoff_url, handoff_status, handoff_synced_at, ' +
   'project:projects!project_id!inner(id, key, title, status)'
 
 /** Terse columns for list/search output. See the CLI's output discipline. */
@@ -28,15 +28,18 @@ export const TASK_LIST_FIELDS =
   'id, number, title, type, status, priority, labels, assignee_user_id, claimed_by, claimed_session, claimed_at, heartbeat_at, attempt, ownership_version, checkpoint_version, ' +
   // project_id as well as the embed: an activity row records the project by id,
   // and it is the only scope that survives the task being deleted.
-  'resolution, updated_at, project_id, project:projects!project_id!inner(key, status)'
+  'resolution, updated_at, project_id, ' +
+  // The hand-off decides whether a status change is allowed, so every route that finds a task sees it.
+  'handoff_tracker, handoff_ref, handoff_url, handoff_status, handoff_synced_at, ' +
+  'project:projects!project_id!inner(key, status)'
 
 /**
  * A project's task list also says, per row, which subject a todo is part of
- * and which Cairn task it was handed to: `croft sync` pairs todos off this
+ * and the tracker task it was handed off to: `croft sync` pairs todos off this
  * list. `subject` is folded into `subject_ref` by `withSubjectRefs`.
  */
 export const TASK_LIST_LAB_FIELDS =
-  `${TASK_LIST_FIELDS}, cairn_ref, cairn_status, subject:subjects!subject_id(number)`
+  `${TASK_LIST_FIELDS}, subject:subjects!subject_id(number)`
 
 /** `subject: {number}` (or null) becomes `subject_ref: 'S-12'` (or null). */
 export const withSubjectRefs = <T extends Record<string, unknown>>(rows: T[]) =>
@@ -312,7 +315,7 @@ type ClosableTask = {
 /**
  * Closes a task the way `PATCH /tasks/{ref}` does — a status, the answer and
  * who gave it, the claim released — and records the same events. For a close
- * that is a consequence rather than a request: a todo whose Cairn task ended.
+ * that is a consequence rather than a request: a todo whose hand-off ended.
  */
 export const closeTask = async (actor: Actor, task: ClosableTask, close: CloseInput) => {
   const patch: Record<string, unknown> = {
@@ -333,13 +336,19 @@ export type TaskSubject = {
   number: number
   title: string
   /**
-   * The subject's lab project, and the Cairn project its todos go to:
-   * `croft push T-n` with no `--to` files the todo under `cairn_key`.
+   * The subject's lab project, and where its todos go: `croft handoff T-n`
+   * with no `--to` uses `handoff_tracker` and `handoff_target`. `cairn_key`
+   * is the deprecated (0.7) alias. Removed in 0.8.
    */
-  project: { name: string; cairn_key: string | null } | null
+  project: {
+    name: string
+    handoff_tracker: string | null
+    handoff_target: string | null
+    cairn_key: string | null
+  } | null
   /**
-   * Who can see the subject, and so the todo (v0.4). `croft push` refuses a
-   * todo whose subject is not `lab` unless forced: Cairn has no notion of it.
+   * Who can see the subject, and so the todo (v0.4). `croft handoff` refuses a
+   * todo whose subject is not `lab` unless forced: a tracker has no notion of it.
    */
   visibility: SubjectVisibility
 }
@@ -351,21 +360,29 @@ export type TaskSubject = {
 export const subjectOfTask = async (subjectId: unknown, viewerId: string): Promise<TaskSubject | null> => {
   if (typeof subjectId !== 'string' || !subjectId) return null
   const result = await pool().query(
-    `select s.number, s.title, s.visibility, lp.name as project_name, lp.cairn_key
+    `select s.number, s.title, s.visibility, lp.name as project_name, lp.handoff_tracker, lp.handoff_target
        from subjects s
        left join lab_projects lp on lp.id = s.project_id
       where s.id = $1 and croft_subject_visible(s.id, $2::uuid)`,
     [subjectId, viewerId],
   )
   const row = result.rows[0] as
-    | { number: number; title: string; visibility: SubjectVisibility; project_name: string | null; cairn_key: string | null }
+    | { number: number; title: string; visibility: SubjectVisibility; project_name: string | null; handoff_tracker: string | null; handoff_target: string | null }
     | undefined
   if (!row) return null
   return {
     ref: subjectRef(row.number),
     number: row.number,
     title: row.title,
-    project: row.project_name === null ? null : { name: row.project_name, cairn_key: row.cairn_key },
+    project:
+      row.project_name === null
+        ? null
+        : {
+            name: row.project_name,
+            handoff_tracker: row.handoff_tracker,
+            handoff_target: row.handoff_target,
+            cairn_key: row.handoff_tracker === 'cairn' ? row.handoff_target : null,
+          },
     visibility: row.visibility,
   }
 }

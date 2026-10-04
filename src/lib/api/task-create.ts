@@ -23,8 +23,9 @@ export type CreatedTask = {
   created_at: string
   updated_at: string
   claimed_by: string | null
-  cairn_ref: string | null
-  cairn_status: string | null
+  handoff: null
+  cairn_ref: null
+  cairn_status: null
   assignee: { id: string; name: string; email: string; active: boolean }
   ref: string
 }
@@ -94,7 +95,7 @@ export const createTaskInProject = async (
     })
     .select(
       'id, number, title, type, status, priority, labels, assignee_user_id, subject_id, ' +
-        'claimed_by, cairn_ref, cairn_status, created_at, updated_at',
+        'claimed_by, created_at, updated_at',
     )
     .single()
 
@@ -112,6 +113,13 @@ export const createTaskInProject = async (
 
   return {
     ok: true,
-    task: { ...(data as Omit<CreatedTask, 'assignee' | 'ref'>), assignee: owner.person, ref: `${project.key}-${data.number}` },
+    task: {
+      ...(data as unknown as Omit<CreatedTask, 'assignee' | 'ref' | 'handoff' | 'cairn_ref' | 'cairn_status'>),
+      handoff: null,
+      cairn_ref: null,
+      cairn_status: null,
+      assignee: owner.person,
+      ref: `${project.key}-${data.number}`,
+    },
   }
 }

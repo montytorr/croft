@@ -8,87 +8,117 @@ import {
 } from '@dnd-kit/sortable'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { ArrowRight, GripVertical, Trash2 } from 'lucide-react'
+import { ArrowRight, Check, GripVertical, Trash2, X } from 'lucide-react'
 import { InlineInput } from '@/components/ui/control'
 import { ProjectLabel } from '@/components/lab/project-label'
 import { mutate } from '@/lib/api/mutate'
 import type { LabProject } from '@/lib/lab/types'
-import { normaliseCairnKey } from '@/lib/lab/ui-colours'
+import { parseHandoffDraft } from '@/lib/lab/ui-colours'
 import { cn } from '@/lib/utils'
 import { SettingsCard } from './settings-card'
-import { AddRow, EditableName, Swatch } from './lab-controls'
+import { AddRow, EditableName, HANDOFF_HINT, HandoffInputs, Swatch } from './lab-controls'
 
-type Patch = { name?: string; color?: string; cairnKey?: string | null }
+type Patch = {
+  name?: string
+  color?: string
+  handoffTracker?: string | null
+  handoffTarget?: string | null
+}
 
 /**
- * The Cairn project a lab project's todos are pushed to. Unlike a name it can
- * be emptied, which clears it: a project without a key keeps its todos in
- * Croft until someone says where they go.
+ * Where a lab project's todos are handed off: a tracker and a target in it.
+ * Unlike a name it can be emptied, which clears both: a project without one
+ * keeps its todos in Croft until someone says where they go.
  */
-const CairnKeyField = ({
-  value,
+const HandoffField = ({
+  tracker,
+  target,
   disabled,
   label,
   onCommit,
 }: {
-  value: string | null
+  tracker: string | null
+  target: string | null
   disabled?: boolean
   label: string
-  onCommit: (key: string | null) => Promise<boolean>
+  onCommit: (handoff: { handoffTracker: string | null; handoffTarget: string | null }) => Promise<boolean>
 }) => {
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(value ?? '')
+  const [trackerDraft, setTrackerDraft] = useState(tracker ?? '')
+  const [targetDraft, setTargetDraft] = useState(target ?? '')
+  const [error, setError] = useState<string | null>(null)
+  const set = tracker && target ? `${tracker} · ${target}` : null
 
   if (!editing || disabled) {
-    if (disabled && !value) return <span className="text-fg-subtle/70 shrink-0 text-[0.6875rem]">no Cairn key</span>
+    if (disabled && !set) return <span className="text-fg-subtle/70 shrink-0 text-[0.6875rem]">no hand-off</span>
     return (
       <button
         type="button"
         disabled={disabled}
         onClick={() => {
-          setDraft(value ?? '')
+          setTrackerDraft(tracker ?? '')
+          setTargetDraft(target ?? '')
+          setError(null)
           setEditing(true)
         }}
+        aria-label={label}
         title={
           disabled
-            ? `Todos go to Cairn project ${value}`
-            : value
-              ? `croft push sends this project's todos to ${value}. Click to change; empty it to clear.`
-              : 'Set the Cairn project that receives these todos on croft push'
+            ? `Todos are handed off to ${set}`
+            : set
+              ? `croft handoff sends this project's todos to ${set}. Click to change; empty both to clear.`
+              : HANDOFF_HINT
         }
         className={cn(
           'flex h-[1.5rem] shrink-0 items-center gap-1 rounded px-1.5 text-[0.6875rem] enabled:hover:bg-surface-hover disabled:cursor-default',
-          value ? 'text-fg-muted font-mono' : 'text-fg-subtle',
+          set ? 'text-fg-muted font-mono' : 'text-fg-subtle',
         )}
       >
         <ArrowRight size={11} aria-hidden className="text-fg-subtle" />
-        {value ?? 'Cairn key'}
+        {set ?? 'Hand-off'}
       </button>
     )
   }
 
   const commit = async () => {
-    const next = normaliseCairnKey(draft)
-    if (next === value) return setEditing(false)
-    if (await onCommit(next)) setEditing(false)
+    const next = parseHandoffDraft(trackerDraft, targetDraft)
+    if (!next.ok) return setError(next.error)
+    if (next.tracker === tracker && next.target === target) return setEditing(false)
+    setError(null)
+    if (await onCommit({ handoffTracker: next.tracker, handoffTarget: next.target })) setEditing(false)
   }
 
   return (
-    <InlineInput
-      autoFocus
-      value={draft}
+    <form
+      role="group"
       aria-label={label}
-      placeholder="none"
-      maxLength={10}
-      spellCheck={false}
-      onChange={(e) => setDraft(e.target.value.toUpperCase())}
-      onBlur={() => void commit()}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') void commit()
-        if (e.key === 'Escape') setEditing(false)
+      className="flex shrink-0 flex-wrap items-center justify-end gap-1.5"
+      onSubmit={(e) => {
+        e.preventDefault()
+        void commit()
       }}
-      className="h-[1.625rem] w-[6.5rem] shrink-0 font-mono text-[0.75rem] uppercase"
-    />
+      onKeyDown={(e) => e.key === 'Escape' && setEditing(false)}
+    >
+      <HandoffInputs
+        autoFocus
+        tracker={trackerDraft}
+        target={targetDraft}
+        onTracker={setTrackerDraft}
+        onTarget={setTargetDraft}
+      />
+      <button type="submit" aria-label="Save hand-off" className="text-fg-muted hover:text-fg grid size-6 place-items-center rounded">
+        <Check size={13} aria-hidden />
+      </button>
+      <button
+        type="button"
+        aria-label="Cancel"
+        onClick={() => setEditing(false)}
+        className="text-fg-subtle hover:text-fg grid size-6 place-items-center rounded"
+      >
+        <X size={13} aria-hidden />
+      </button>
+      <p className={cn('basis-full text-right text-[0.6875rem]', error ? 'text-danger' : 'text-fg-subtle')}>{error ?? HANDOFF_HINT}</p>
+    </form>
   )
 }
 
@@ -147,11 +177,12 @@ const ProjectRow = ({
             <ProjectLabel project={project} />
           )}
         </div>
-        <CairnKeyField
-          value={project.cairn_key}
+        <HandoffField
+          tracker={project.handoff_tracker}
+          target={project.handoff_target}
           disabled={!canEdit}
-          label={`Cairn key of ${project.name}`}
-          onCommit={(cairnKey) => onPatch(project.id, { cairnKey })}
+          label={`Hand-off of ${project.name}`}
+          onCommit={(handoff) => onPatch(project.id, handoff)}
         />
         {canEdit ? (
           <button
@@ -171,7 +202,7 @@ const ProjectRow = ({
 
 /**
  * The lab's projects: the short list a subject can belong to — Trig, Croft,
- * Dispofi — each with the Cairn project its todos are pushed to. Curated like
+ * Dispofi — each with where its todos are handed off to. Curated like
  * the tags, ordered like the stages. A project subjects still belong to
  * cannot be deleted; the row says so rather than the page.
  */
@@ -244,8 +275,8 @@ export const LabProjectsSection = ({ projects: initial, canEdit }: { projects: L
       flush
       description={
         canEdit
-          ? 'What a subject belongs to. The Cairn key is where croft push sends its todos when no --to is given. Drag to reorder.'
-          : 'What a subject belongs to, and the Cairn project its todos are pushed to. Only an administrator can change them.'
+          ? 'What a subject belongs to. The hand-off is where `croft handoff` sends its todos when no --to is given. Drag to reorder.'
+          : 'What a subject belongs to, and where its todos are handed off to. Only an administrator can change them.'
       }
       footer={message ? <p className="text-danger enter-rise text-[0.75rem]">{message}</p> : undefined}
     >
@@ -272,9 +303,12 @@ export const LabProjectsSection = ({ projects: initial, canEdit }: { projects: L
       {canEdit ? (
         <AddRow
           placeholder="New project…"
-          withCairnKey
-          onAdd={({ name, color, cairnKey }) =>
-            write('/api/v1/lab-projects', { method: 'POST', body: { name, color, ...(cairnKey ? { cairnKey } : {}) } })
+          withHandoff
+          onAdd={({ name, color, handoffTracker, handoffTarget }) =>
+            write('/api/v1/lab-projects', {
+              method: 'POST',
+              body: { name, color, ...(handoffTracker && handoffTarget ? { handoffTracker, handoffTarget } : {}) },
+            })
           }
         />
       ) : null}

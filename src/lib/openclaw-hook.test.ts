@@ -252,21 +252,21 @@ describe('the installer links the OpenClaw briefing hook', () => {
   })
 })
 
-describe('the installer yields the OpenClaw briefing to Cairn', () => {
-  it('links nothing where cairn-briefing is enabled, and says Cairn carries it', async () => {
+describe('the installer links the OpenClaw briefing whatever else the gateway runs', () => {
+  it('links it where another briefing hook is enabled, and says nothing about it', async () => {
     const { home, env, calls, hookDir } = await setup()
     await writeFile(
       join(home, '.openclaw', 'openclaw.json'),
       JSON.stringify({
         gateway: { mode: 'local', port: 18789 },
-        hooks: { internal: { enabled: true, entries: { 'cairn-briefing': { enabled: true } } } },
+        hooks: { internal: { enabled: true, entries: { 'other-briefing': { enabled: true } } } },
       }),
     )
     const out = await run([], env)
     expect(out.code, out.stderr).toBe(0)
-    expect(out.stdout).toContain('openclaw: briefing: carried by Cairn')
-    expect(await calls()).toEqual([])
-    expect(existsSync(hookDir)).toBe(false)
+    expect(out.stdout).not.toContain('carried by')
+    expect(await calls()).toEqual([['hooks', 'install', '--link', hookDir, '--force']])
+    expect(existsSync(hookDir)).toBe(true)
   })
 })
 
@@ -350,11 +350,10 @@ describe('the OpenClaw briefing hook', () => {
     expect(existsSync(marker)).toBe(false)
   })
 
-  it('keeps the rule to the one line that decides lab work from repo work', async () => {
+  it('keeps the rule to the one line that says what Croft is for', async () => {
     expect(Buffer.byteLength(RULE)).toBeLessThan(400)
-    expect(RULE).toContain(
-      'Exploring or proving an idea → croft check first; changing a repo for real → a Cairn task (croft push).',
-    )
+    expect(RULE).toContain("Lab work (exploring, proving an idea, a subject's todos) → Croft: croft check first. Croft holds lab work only.")
+    expect(RULE).not.toMatch(/cairn/i)
     const hookMd = await readFile(join(REPO, 'hooks/openclaw/croft-briefing/HOOK.md'), 'utf8')
     expect(hookMd).toMatch(/^---\nname: croft-briefing\n/)
     expect(hookMd).toContain('"events": ["agent:bootstrap"]')

@@ -4,6 +4,17 @@ Croft is a lab board forked from [Cairn](https://github.com/montytorr/cairn) and
 in the open. Issues and PRs are welcome; the maintainer's own use is what drives the
 roadmap, so a feature may be declined simply because it is not needed here.
 
+## Scope
+
+Croft is the lab: subjects and their todos, and nothing else. A change that turns it into a
+general task tracker (projects of tasks, a second board, assignment workflows) is out of scope,
+because a team that wants one has one. Connecting to a tracker is in scope, and is done by
+handing a todo off (`croft handoff`) through an adapter. Everything Croft knows about a tracker
+lives in the section of `cli/croft.mjs` between `// ---- Tracker adapters ----` and
+`// ---- end of tracker adapters ----`: nothing outside it names a product. A new adapter
+implements `{ name, available, create, show }` there, with a test double in
+`src/lib/cli-lab.test.ts`; never run the real tool from a test.
+
 ## Running it
 
 See [`README.md`](./README.md#running-it-locally). You need Node 22+ and PostgreSQL 17+.

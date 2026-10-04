@@ -4,13 +4,13 @@ Croft is the lab board: where ideas get explored and proved before they become r
 A **subject** (`S-12`) is one thing under test — a technology to evaluate, a POC, an idea
 to build first. It has a markdown write-up, an append-only log, tags, a human owner, a
 lab project, **todos** (`T-41`), a **stage**, and in the end a **conclusion**: the answer
-the next agent finds when it asks the same question.
+the next agent finds.
 
-> Exploring or proving an idea → `croft check` first. Changing a repo for real → a Cairn
-> task (`croft push`). The agent tooling itself (summariser, hooks, setup, sync) is never a
-> subject: it goes straight to Cairn.
+> Lab work (exploring, proving an idea, a subject's todos) → Croft: `croft check` first.
+> Croft holds lab work only; work that isn't a lab subject or its todo belongs in your task
+> tracker.
 
-Read this whole file. It is short on purpose.
+Read this whole file; it is short on purpose.
 
 ---
 
@@ -37,7 +37,7 @@ croft subject stage S-12 rejected --conclusion -                 # 5. conclude i
 1. **File it** with a body in markdown: the question, why it matters, what would settle
    it. It lands in the first planned stage unless `--stage`. `croft projects` lists the
    lab projects; `--project none` on `subject edit` takes it out of one.
-2. **Todos** are ordinary tasks in project `T`. From an agent runtime `subject todo` files
+2. **Todos** always belong to a subject (a todo with none is refused). From an agent runtime `subject todo` files
    and **claims** (`--no-start` only files).
 3. **Log** on the subject for what concerns the idea, on the todo for the work itself.
    People's notes (`croft subject notes S-n`) are theirs to read, not your log; attach files with `croft subject attach S-n <file>`.
@@ -48,10 +48,11 @@ croft subject stage S-12 rejected --conclusion -                 # 5. conclude i
 
 **Visibility.** A subject is `lab` (everyone) by default. `--visibility private|members`
 keeps it to its owner (and `--member`s) until `croft subject publish S-n --confirm S-n` — **one-way**.
-Never push such a subject's todo to Cairn (`push` refuses without `--force`).
+Never hand off such a subject's todo (`handoff` refuses without `--force`): a tracker has no
+notion of who may see what.
 
 **Delete** (`croft subject delete S-n --confirm S-n`) is for a subject that should never have
-been filed. One that was explored and dropped keeps its record: a dropped stage and a conclusion.
+been filed. One explored and dropped keeps its record: a dropped stage and a conclusion.
 
 Bodies, notes and conclusions are markdown — `##` headings, `-` lists, code and paths in
 backticks. A wall of text is refused, naming what to fix. So is anything that looks like a
@@ -86,41 +87,41 @@ croft done T-41 --resolution "recall 0.93 at 40ms p95" --kind answered
   todo up where you got to. Written but not landed → `--status in-review`.
 - **Close with how.** `done` and `cancel` refuse without `--resolution`. With no `--kind`
   it records `fixed`; `verified` is the honest one when it was already true and you checked,
-  `answered` when the todo was a question.
-- **Sweeping the board: one claimed todo per sweep.** Claim the triage todo; note, stage
-  and close the rest without claiming them.
-- A claim goes stale after 15 silent minutes and can be taken over; after two hours with
-  no beat, note, checkpoint or edit, the maintenance sweep releases it.
+  `answered` for a question.
+- **Sweeping the board: one claimed todo per sweep.** Note, stage and close the rest unclaimed.
+- A claim goes stale after 15 silent minutes and can be taken over; after two hours of
+  silence the maintenance sweep releases it.
 
-## 5. Pairing with Cairn
+## 5. Handing a todo off
 
-Croft is for proving; Cairn is for committed work on a repository. When a todo becomes
-real work on a repo tracked in Cairn, hand it over:
+Todos are worked here (`claim`, `note`, `done`). One that becomes committed work in your
+team's task tracker is handed off:
 
 ```bash
-croft push T-41 --to ACME     # files ACME-n in Cairn, labelled croft:T-41, and links them
-croft sync                    # pulls linked Cairn statuses back
+croft handoff T-41                  # to the tracker and target of the subject's lab project
+croft handoff T-41 --to <TARGET> [--tracker <NAME>]   # or say where; --to always wins
+croft handoff T-41 --link <REF> [--url URL]           # record a task you made by hand
+croft handoff T-41 --undo           # take it back; nothing is done in the tracker
+croft sync                          # pull handed-off statuses back
 ```
 
-Without `--to` it goes to the Cairn key of the subject's lab project, and refuses when
-there is none.
+It files the task with the tracker's own CLI and sign-in on this machine. With no tracker
+or target, it refuses and names the flag to pass.
 
-**From then on Cairn owns the status** — claim, note and close it there, not here. When
-the Cairn task closes, `sync` notes the subject once ("ACME-331 done: …"); then decide the
-subject's stage, often `rolled out` with a conclusion. `cairn` must be on PATH (or
-`CROFT_CAIRN_BIN`).
+**From then on the tracker owns the status**: work it there. Claiming, closing or moving it
+here is refused with `handed_off`; `--undo` is the way back. `sync` skips trackers with no
+adapter here, and notes the subject once when a task closes ("<ref> done: …"); then decide
+the subject's stage, often `rolled out` with a conclusion.
 
-`croft push T-41 <sha>` is the other push: it records a git push as
-evidence, like `croft commit` and `croft run`. None of them executes anything.
+`croft push T-41 <sha>` records a git push as evidence, like `croft commit` and `croft run`.
 
-**When not to file:** committed repo work (Cairn's); anything a subject already covers (add
-a todo or a note there); a question reading a file answers; a fact that expires; progress
-narration.
+**When not to file:** work that isn't lab work; anything a subject already covers; a question
+reading a file answers; a fact that expires; progress narration.
 
 ## 6. Refs and vocabulary
 
 - `S-12` — a subject, used only with `croft subject …`. `T-41` — a todo, used with the
-  task verbs. Single letters on purpose: they never collide with Cairn refs (`ACME-42`).
+  task verbs. Single letters on purpose: they never collide with a tracker's refs.
   Use them in prose; they stay resolvable in a transcript long after the fact.
 - **stage category** — `planned | active | completed | dropped` (the last two need a conclusion)
 - **todo status** — `backlog | todo | doing | in-review | done | cancelled`
@@ -130,14 +131,14 @@ narration.
 ## 7. The briefing
 
 `croft context --brief` prints the lab in five lines: subjects per stage, yours in flight,
-the one rule. A SessionStart hook runs it. Where Cairn's briefing is installed it carries
-Croft's block instead, so you read it once. `croft next` says what to pick up and why.
+the one rule (plus `croft handoff T-n` where a lab project has a target). A SessionStart
+hook runs it. `croft help --all` lists the inherited verbs, `croft next` among them.
 
 ## 8. Output and exit codes
 
 Lists are TSV: a `#count` line, a header, rows, with a `~tokens` column for what opening a
 row costs. `--json` to parse, `--pretty` for a person. Never pull bodies in bulk; the index
-is for choosing what to read.
+chooses what to read.
 
 - **1** — an error; the message says which.
 - **2** — an unknown flag, or one the command never read. Nothing was filtered; fix it.

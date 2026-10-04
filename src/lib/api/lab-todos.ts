@@ -1,5 +1,6 @@
 import { normalizeDatabaseValue, pool } from '@/lib/db/client'
 import { TODO_PROJECT_KEY, type LabTodo } from '@/lib/lab/types'
+import { withHandoff } from './handoff-shape'
 import { findLabProject, unknownLabProject } from './lab-admin'
 import { noSuchSubject, resolveSubject } from './subjects'
 import { subjectVisibleSql, taskVisibleSql } from './visibility'
@@ -98,7 +99,7 @@ export const resolveTodoFilters = async (
   return { ok: true, value }
 }
 
-type Row = Omit<LabTodo, 'ref' | 'assignee'> & {
+type Row = Omit<LabTodo, 'ref' | 'assignee' | 'handoff' | 'cairn_ref' | 'cairn_status'> & {
   key: string
   assignee_id: string | null
   assignee_name: string | null
@@ -137,8 +138,8 @@ export const listLabTodos = async (options: ListLabTodosOptions, viewerId: strin
   }
 
   const result = await pool().query(
-    `select t.id, t.number, p.key, t.title, t.status, t.priority, t.claimed_by, t.cairn_ref, t.cairn_status,
-            t.updated_at, u.id as assignee_id,
+    `select t.id, t.number, p.key, t.title, t.status, t.priority, t.claimed_by, t.handoff_tracker, t.handoff_ref,
+            t.handoff_url, t.handoff_status, t.handoff_synced_at, t.updated_at, u.id as assignee_id,
             coalesce(nullif(trim(up.display_name), ''), u.email) as assignee_name,
             ${SUBJECT_JSON} as subject
        from tasks t
@@ -153,7 +154,7 @@ export const listLabTodos = async (options: ListLabTodosOptions, viewerId: strin
     values,
   )
   return (normalizeDatabaseValue(result.rows) as Row[]).map(({ key, assignee_id, assignee_name, ...todo }) => ({
-    ...todo,
+    ...(withHandoff(todo) as unknown as Omit<LabTodo, 'ref' | 'assignee'>),
     ref: `${key}-${todo.number}`,
     assignee: assignee_id ? { id: assignee_id, name: assignee_name ?? '' } : null,
   }))

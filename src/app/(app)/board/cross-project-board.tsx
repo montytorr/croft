@@ -429,9 +429,9 @@ export const CrossProjectBoard = ({
     if (!over) return
 
     const task = tasks.find((t) => t.id === active.id)
-    // A pushed todo is Cairn's; its card does not pick up, and a keyboard
+    // A handed-off todo is another tracker's; its card does not pick up, and a keyboard
     // drag that got here anyway writes nothing.
-    if (!task || task.cairn_ref) return
+    if (!task || task.handoff) return
 
     const value = String(over.id).split(SEP)[1]
     if (!value || groupValue(task, filters.groupBy) === value) return

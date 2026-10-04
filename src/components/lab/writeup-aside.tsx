@@ -104,7 +104,7 @@ export const WriteUpAside = ({
                 >
                   <StatusIcon status={laneOf(todo)} size={12} />
                   <span className="text-fg min-w-0 flex-1 line-clamp-2 text-[0.75rem] leading-snug">{todo.title}</span>
-                  {todo.cairn_ref ? <span className="text-fg-subtle font-mono text-[0.625rem]">{todo.cairn_ref}</span> : null}
+                  {todo.handoff ? <span className="text-fg-subtle font-mono text-[0.625rem]">{todo.handoff.ref}</span> : null}
                 </Link>
               </li>
             ))}

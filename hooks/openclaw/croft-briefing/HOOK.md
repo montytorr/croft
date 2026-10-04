@@ -15,16 +15,11 @@ get it from their `SessionStart` hook.
 - Listens for `agent:bootstrap`.
 - Runs `croft context --brief --cwd <workspaceDir>` with `CROFT_AGENT=openclaw` (unless
   already set) and a 3 second deadline.
-- Adds one bootstrap file, `CROFT.md`: the rule (exploring or proving an idea → `croft check`
-  first; changing a repo for real → a Cairn task via `croft push`) followed by the brief
+- Adds one bootstrap file, `CROFT.md`: the rule (lab work: exploring, proving an idea, a
+  subject's todos → `croft check` first; Croft holds lab work only) followed by the brief
   (subjects per stage, and yours in flight — five lines at most).
 - Fails open. If the CLI is missing, slow or errors, the rule is injected alone; if
   anything else goes wrong, the session starts exactly as it would have without this hook.
-
-## When it is not installed
-
-If Cairn's `cairn-briefing` hook is linked on this gateway, Cairn's briefing carries Croft's
-block and `scripts/install-hooks.mjs` does not link this one ("briefing: carried by Cairn").
 
 ## Requirements
 

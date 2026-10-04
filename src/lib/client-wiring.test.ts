@@ -412,52 +412,65 @@ describe('the installer: one SessionStart hook, and nothing it used to write', (
     expect(second.stdout).toContain(`${join(home, '.codex/hooks.json')} — unchanged`)
   })
 
-  it('yields to Cairn: no Croft briefing where Cairn\'s SessionStart hook is installed', async () => {
-    const home = await temp('croft-wiring-cairn-')
+  it('installs its own briefing beside another SessionStart hook, whatever that hook is', async () => {
+    const home = await temp('croft-wiring-other-')
     await mkdir(join(home, '.claude'))
     await mkdir(join(home, '.codex'))
-    const cairn = { type: 'command', command: 'node /h/.cairn/hooks/cairn-context.mjs', 'cairn-memory': true, timeout: 10 }
+    const other = { type: 'command', command: 'node /h/.other/hooks/briefing.mjs', 'other-memory': true, timeout: 10 }
     await writeFile(
       join(home, '.claude/settings.json'),
-      JSON.stringify({
-        hooks: {
-          SessionStart: [
-            { matcher: 'startup|resume|clear|compact', hooks: [cairn] },
-            // A Croft entry from before Cairn was installed: taken out.
-            { matcher: 'startup', hooks: [OLD('croft-context.mjs')] },
-          ],
-        },
-      }),
+      JSON.stringify({ hooks: { SessionStart: [{ matcher: 'startup|resume|clear|compact', hooks: [other] }] } }),
     )
-    // Codex has no Cairn here, so Croft briefs it.
     await writeFile(join(home, '.codex/hooks.json'), JSON.stringify({ hooks: {} }))
 
     const env = { PATH: BASE_PATH, HOME: home, CROFT_OPENCLAW_BIN: 'openclaw-not-installed' }
     const out = await run('node', ['scripts/install-hooks.mjs'], env)
     expect(out.code, out.stderr).toBe(0)
-    expect(out.stdout).toContain('claude: briefing: carried by Cairn')
-    expect(out.stdout).not.toContain('codex: briefing: carried by Cairn')
+    expect(out.stdout).not.toContain('carried by')
+    expect(out.stdout).toContain('claude: SessionStart')
 
     const claude = JSON.parse(await readFile(join(home, '.claude/settings.json'), 'utf8'))
-    expect(claude.hooks.SessionStart).toEqual([{ matcher: 'startup|resume|clear|compact', hooks: [cairn] }])
+    expect(claude.hooks.SessionStart.flatMap((g: { hooks: unknown[] }) => g.hooks)).toEqual([
+      other,
+      expect.objectContaining({ 'croft-memory': true }),
+    ])
     const codex = JSON.parse(await readFile(join(home, '.codex/hooks.json'), 'utf8'))
     expect(codex.hooks.SessionStart[0].hooks).toEqual([expect.objectContaining({ 'croft-memory': true })])
 
-    // And a re-run still says so, without touching the file.
+    // And a re-run changes nothing.
     const again = await run('node', ['scripts/install-hooks.mjs'], env)
-    expect(again.stdout).toContain('claude: briefing: carried by Cairn')
     expect(again.stdout).toContain(`${join(home, '.claude/settings.json')} — unchanged`)
   })
 
-  it('installs its own tagged SessionStart entry where Cairn is absent', async () => {
-    const home = await temp('croft-wiring-nocairn-')
+  it('installs the hook on a machine where the old logic had skipped it', async () => {
+    const home = await temp('croft-wiring-skipped-')
+    await mkdir(join(home, '.claude'))
+    await mkdir(join(home, '.cairn/hooks'), { recursive: true })
+    const script = join(home, '.cairn/hooks/cairn-context.mjs')
+    await writeFile(script, 'const croftBlock = async (cwd) => runTool(croftCli(), ["context", "--brief"])\n')
+    const cairn = { type: 'command', command: `node ${script}`, 'cairn-memory': true, timeout: 10 }
+    await writeFile(
+      join(home, '.claude/settings.json'),
+      JSON.stringify({ hooks: { SessionStart: [{ matcher: 'startup|resume|clear|compact', hooks: [cairn] }] } }),
+    )
+    const out = await run('node', ['scripts/install-hooks.mjs'], { PATH: BASE_PATH, HOME: home, CROFT_OPENCLAW_BIN: 'openclaw-not-installed' })
+    expect(out.code, out.stderr).toBe(0)
+    expect(out.stdout).not.toMatch(/carried by|predates/)
+    const claude = JSON.parse(await readFile(join(home, '.claude/settings.json'), 'utf8'))
+    expect(claude.hooks.SessionStart.flatMap((g: { hooks: unknown[] }) => g.hooks)).toEqual([
+      cairn,
+      expect.objectContaining({ 'croft-memory': true }),
+    ])
+  })
+
+  it('installs its own tagged SessionStart entry on a clean file', async () => {
+    const home = await temp('croft-wiring-clean-')
     await mkdir(join(home, '.claude'))
     await writeFile(join(home, '.claude/settings.json'), JSON.stringify({ hooks: {} }))
     const out = await run('node', ['scripts/install-hooks.mjs'], {
       PATH: BASE_PATH, HOME: home, CROFT_OPENCLAW_BIN: 'openclaw-not-installed',
     })
     expect(out.code, out.stderr).toBe(0)
-    expect(out.stdout).not.toContain('carried by Cairn')
     expect(out.stdout).toContain('claude: SessionStart')
     const claude = JSON.parse(await readFile(join(home, '.claude/settings.json'), 'utf8'))
     expect(claude.hooks.SessionStart[0].hooks[0]).toMatchObject({ 'croft-memory': true })
@@ -483,36 +496,6 @@ describe('the installer: one SessionStart hook, and nothing it used to write', (
     expect(out.stderr).toContain('"hooks.Stop" is not a list')
     expect(await readFile(join(home, '.claude/settings.json'), 'utf8')).toBe(broken)
     expect(JSON.parse(await readFile(join(home, '.codex/hooks.json'), 'utf8'))).toEqual({ hooks: { Stop: 'not a list' } })
-  })
-
-  it('does not yield to a Cairn briefing that predates Croft\'s block, and does once Cairn carries it', async () => {
-    const home = await temp('croft-wiring-oldcairn-')
-    await mkdir(join(home, '.claude'))
-    await mkdir(join(home, '.cairn/hooks'), { recursive: true })
-    const script = join(home, '.cairn/hooks/cairn-context.mjs')
-    await writeFile(script, '// the Cairn briefing, before it knew about the lab\n')
-    const cairn = { type: 'command', command: `node ${script}`, 'cairn-memory': true, timeout: 10 }
-    await writeFile(
-      join(home, '.claude/settings.json'),
-      JSON.stringify({ hooks: { SessionStart: [{ matcher: 'startup|resume|clear|compact', hooks: [cairn] }] } }),
-    )
-    const env = { PATH: BASE_PATH, HOME: home, CROFT_OPENCLAW_BIN: 'openclaw-not-installed' }
-
-    const old = await run('node', ['scripts/install-hooks.mjs'], env)
-    expect(old.code, old.stderr).toBe(0)
-    expect(old.stdout).not.toContain('carried by Cairn')
-    expect(old.stdout).toContain("claude: Cairn's briefing here predates Croft's block")
-    let claude = JSON.parse(await readFile(join(home, '.claude/settings.json'), 'utf8'))
-    expect(claude.hooks.SessionStart.flatMap((g: { hooks: unknown[] }) => g.hooks)).toEqual([
-      cairn,
-      expect.objectContaining({ 'croft-memory': true }),
-    ])
-
-    await writeFile(script, 'const croftBlock = async (cwd) => runTool(croftCli(), ["context", "--brief"])\n')
-    const upgraded = await run('node', ['scripts/install-hooks.mjs'], env)
-    expect(upgraded.stdout).toContain('claude: briefing: carried by Cairn')
-    claude = JSON.parse(await readFile(join(home, '.claude/settings.json'), 'utf8'))
-    expect(claude.hooks.SessionStart).toEqual([{ matcher: 'startup|resume|clear|compact', hooks: [cairn] }])
   })
 })
 

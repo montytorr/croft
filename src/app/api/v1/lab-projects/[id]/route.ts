@@ -2,17 +2,18 @@ import type { z } from 'zod'
 import { route } from '@/lib/api/handler'
 import { ok } from '@/lib/api/response'
 import { deleteLabProject, refuseNonAdmin, updateLabProject } from '@/lib/api/lab-admin'
-import { updateLabProjectSchema } from '@/schemas/subject'
+import { handoffOfProjectBody, updateLabProjectSchema } from '@/schemas/subject'
 
 export const dynamic = 'force-dynamic'
 
-/** `cairnKey: null` (or `""`) clears the key; an omitted field is left as it is. */
+/** `handoffTracker` and `handoffTarget` null (or `cairnKey: null`, deprecated) clear the hand-off; an omitted field is left as it is. */
 export const PATCH = route<{ id: string }, z.infer<typeof updateLabProjectSchema>>({
   schema: updateLabProjectSchema,
   handler: async ({ actor, params, body }) => {
     const refused = refuseNonAdmin(actor, 'the lab projects')
     if (refused) return refused
-    const updated = await updateLabProject(params.id, body)
+    const { name, color, position } = body
+    const updated = await updateLabProject(params.id, { name, color, position, handoff: handoffOfProjectBody(body) })
     return updated.ok ? ok(updated.value) : updated.response
   },
 })

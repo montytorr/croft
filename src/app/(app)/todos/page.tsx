@@ -38,7 +38,7 @@ const TodosPage = async ({ searchParams }: { searchParams: Promise<Record<string
   ).toString()
   const open = todos.filter((t) => !isClosed(t.status))
   const held = open.filter((t) => t.claimed_by).length
-  const pushed = open.filter((t) => t.cairn_ref).length
+  const handedOff = open.filter((t) => t.handoff).length
 
   return (
     <div className="flex h-dvh flex-col">
@@ -51,7 +51,7 @@ const TodosPage = async ({ searchParams }: { searchParams: Promise<Record<string
         <span className="hidden items-center gap-2.5 sm:flex">
           <Stat label="open" value={open.length} />
           {held > 0 ? <Stat label="held by an agent" value={held} /> : null}
-          {pushed > 0 ? <Stat label="in Cairn" value={pushed} /> : null}
+          {handedOff > 0 ? <Stat label="handed off" value={handedOff} /> : null}
         </span>
       </header>
 

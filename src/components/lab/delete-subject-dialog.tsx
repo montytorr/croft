@@ -67,8 +67,8 @@ export const DeleteSubjectDialog = ({
         </h2>
         <div id="delete-body" className="text-fg-muted mt-2 flex flex-col gap-2 text-[0.8125rem] leading-relaxed">
           <p>
-            This removes the subject, its {plural(todos, 'todo')}, its log, human notes and files. Cairn tasks pushed from its
-            todos stay in Cairn.
+            This removes the subject, its {plural(todos, 'todo')}, its log, human notes and files. Tasks handed off to another
+            tracker stay there.
           </p>
           <p className="text-fg font-medium">This cannot be undone.</p>
         </div>

@@ -109,15 +109,14 @@ process.exit(64)
     expect(JSON.parse(await readFile(hooks, 'utf8')).pre_llm_call).toBeUndefined()
   })
 
-  it('yields to Cairn: takes its own entry out where Cairn briefs Hermes', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'croft-hermes-cairn-test-'))
+  it('installs its own entry beside another hook, and does not look at what that hook is', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'croft-hermes-other-test-'))
     temporaryDirectories.push(directory)
     const bin = join(directory, 'bin')
     const hooks = join(directory, 'hooks.json')
     await mkdir(bin)
-    const cairn = { command: 'env CAIRN_AGENT=hermes node /h/.cairn/hooks/cairn-context.mjs', timeout: 10 }
-    const croft = { command: 'env CROFT_AGENT=hermes node /h/.croft/hooks/croft-context.mjs', timeout: 10 }
-    await writeFile(hooks, JSON.stringify({ pre_llm_call: [cairn, croft] }))
+    const other = { command: 'env AGENT=hermes node /h/other/hooks/briefing.mjs', timeout: 10 }
+    await writeFile(hooks, JSON.stringify({ pre_llm_call: [other] }))
     await writeFile(join(bin, 'hermes'), `#!/usr/bin/env node
 const fs = require('node:fs')
 const args = process.argv.slice(2)
@@ -134,8 +133,11 @@ process.exit(64)
       CROFT_OPENCLAW_BIN: 'openclaw-not-installed',
     })
     expect(out.code, out.stderr).toBe(0)
-    expect(out.stdout).toContain('Hermes Agent by Nous Research: briefing: carried by Cairn')
-    expect(JSON.parse(await readFile(hooks, 'utf8')).pre_llm_call).toEqual([cairn])
+    expect(out.stdout).not.toContain('carried by')
+    expect(JSON.parse(await readFile(hooks, 'utf8')).pre_llm_call).toEqual([
+      other,
+      { command: expect.stringMatching(/^env CROFT_AGENT=hermes .*croft-context\.mjs$/), timeout: 10 },
+    ])
   })
 
   it('injects the Croft briefing only for Hermes first turns', async () => {

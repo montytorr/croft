@@ -42,7 +42,8 @@ export type ApiError =
   | 'conclusion_required'
   | 'stage_in_use'
   | 'project_in_use'
-  | 'cairn_not_configured'
+  | 'handed_off'
+  | 'subject_required'
   | 'secret_detected'
   | 'already_published'
   | 'subject_not_published'
@@ -64,10 +65,11 @@ const STATUS: Record<ApiError, number> = {
   conclusion_required: 400,
   stage_in_use: 409,
   project_in_use: 409,
-  cairn_not_configured: 409,
+  handed_off: 409,
+  subject_required: 422,
   secret_detected: 400,
   // v0.4 visibility: publishing is one-way; a non-lab todo needs --force to
-  // leave for Cairn; a non-lab subject must have an owner.
+  // be handed off; a non-lab subject must have an owner.
   already_published: 409,
   subject_not_published: 409,
   owner_required: 400,

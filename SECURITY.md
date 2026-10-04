@@ -104,7 +104,7 @@ its members list). The rule:
 - **Hidden is the same as missing.** A subject or todo you cannot see answers exactly as
   one that does not exist — the same `not_found`, the same message — on reads, on writes,
   and on every path that resolves a ref first (dependencies, duplicate-of, parent,
-  Cairn links, attachments by id). Search, activity, labels, the brief, lab-project counts
+  hand-off links, attachments by id). Search, activity, labels, the brief, lab-project counts
   and the live-update pulse count and rank only what the viewer can see; the pulse the
   event stream sends is a sha256 hash of that viewer's fingerprint, never the counts.
 - Writes on a non-lab subject and its todos are for those who can see it. Changing its
@@ -115,9 +115,9 @@ its members list). The rule:
   either can be published to the lab; a lab subject cannot be made private again (409
   `already_published`), because everyone may already have read it. Each change is written
   to the subject's log as a server-only `visibility` note.
-- Pushing a todo of a non-lab subject to Cairn is refused (409 `subject_not_published`)
-  unless forced (`croft push --force`): Cairn has its own audience, and Croft cannot take
-  back what it sent.
+- Handing off a todo of a non-lab subject is refused (409 `subject_not_published`) unless
+  forced (`croft handoff --force`): a tracker has no notion of who may see what, and Croft
+  cannot take back what it sent.
 - The rule lives in the database, in one place: `croft_subject_visible(subject, viewer)`,
   with `croft_task_visible` and `croft_visible_subjects` built on it (migration 076; 077
   removed the administrator branch). The
@@ -159,9 +159,11 @@ What this does **not** hide, by design:
 - Keep `DATABASE_URL`, `CROFT_ATTACHMENT_SIGNING_KEY` and `RESEND_API_KEY`
   server-side. A send-only (restricted) Resend key is enough: Croft only ever posts to `/emails`.
   `.env*` is gitignored except `.env.example`, and CI runs a secret scan on every push.
-- Cairn handoff and sync use the agent machine's Cairn CLI and credentials. Croft stores
-  no shared Cairn key and makes no server-side requests to Cairn. The agent reports linked
-  task statuses through the same Croft visibility checks as other todo writes.
+- Hand-off and sync use the agent machine's own tracker CLI and credentials (the adapters in
+  `cli/croft.mjs`). Croft stores no tracker key and makes no server-side requests to any
+  tracker. The agent reports a handed-off todo's status through the same Croft visibility
+  checks as other todo writes. A todo handed off to a tracker cannot be claimed or closed
+  in Croft (409 `handed_off`) until it is taken back.
 - The session briefing (`croft context --brief`) sends no working directory: the server
   never used it. `croft context` sends the working directory and the git remote, and every
   request carries the hostname, so a shared instance learns how every member's machine is

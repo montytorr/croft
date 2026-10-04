@@ -6,6 +6,7 @@ import { admin } from '@/lib/db/client'
 import { byTitle } from '@/lib/utils'
 import { recordActivity } from '@/lib/api/activity'
 import { formerKeysByProject } from '@/lib/api/project-keys'
+import { TODO_PROJECT_KEY } from '@/lib/lab/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,6 +49,13 @@ export const GET = route({
 export const POST = route({
   schema: createProject,
   handler: async ({ actor, body }) => {
+    // Croft's only task project is the hidden todo list, which it makes itself.
+    if (body.key !== TODO_PROJECT_KEY) {
+      return fail(
+        'forbidden',
+        "Croft's only task project is its todo list; group subjects with lab projects instead.",
+      )
+    }
     const { data, error } = await admin()
       .from('projects')
       .insert({ ...body, owner_user_id: actor.userId })

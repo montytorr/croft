@@ -23,19 +23,30 @@ working group, and every idea on it a strip of ground someone is trying.
 Humans and agents can do everything. People use the web app (list or board); agents use the
 `croft` CLI and skill.
 
-## With Cairn, or without it
+## Working with a tracker
 
-Croft works on its own. When the same machine also runs Cairn, the two pair:
+Croft holds lab work and nothing else: subjects and their todos, worked in Croft (`claim`,
+`note`, `done`). It is not a general task tracker, and it does not need one. Where a team also
+keeps its committed work in a task tracker (e.g. Cairn or GitHub), a todo that becomes real work
+leaves the lab:
 
-- **One session opener.** Croft does not install its own briefing hook when Cairn's is present.
-  Cairn's briefing carries Croft's block instead, because two briefings competing for the top of
-  a session is how both get skimmed.
-- **One rule for which tool gets the work.** Exploring, evaluating or proving an idea goes in
-  Croft. Changing a repository for real goes in Cairn.
-- **Todos move across.** `croft push T-41 --to KEY` creates the Cairn task, labelled
-  `croft:T-41`. From then on Cairn owns its status and Croft mirrors it read-only. When the Cairn
-  task closes, running `croft sync` through the agent machine's Cairn CLI writes its resolution
-  into the subject's log. Croft stores no shared Cairn credential.
+- **`croft handoff T-41`** files it in the tracker through an adapter and links the two. The
+  tracker and target default to the subject's lab project (set in Settings: a tracker name and a
+  target in it, such as a project key or `owner/repo`); `--tracker` and `--to` say it by hand, and
+  `--link REF` records a task you made yourself, for any tracker. The adapter uses that tool's own
+  CLI and sign-in on the agent machine. Croft stores no credential for it and never calls it from
+  the server.
+- **From then on the tracker owns the status.** Croft shows it read-only and refuses to claim or
+  close the todo (`handed_off`). `croft handoff T-41 --undo` takes it back.
+- **`croft sync`** reads each handed-off todo's status back through its adapter and, when the task
+  closes, writes the outcome into the subject's log once. Todos of a tracker with no adapter on
+  that machine are reported and skipped.
+- A todo of a private or members subject is not handed off without `--force`: a tracker has no
+  notion of who may see what.
+
+Tracker adapters (`cairn`, and `github` via `gh`) live in one delimited section of `cli/croft.mjs`;
+supporting another tracker means adding one there.
+`croft push T-41` without a sha is the deprecated (0.7) spelling of `handoff`, removed in 0.8.
 
 ## Running it locally
 
@@ -74,8 +85,7 @@ CROFT_SETUP_SOURCE="$PWD" node cli/croft.mjs setup --url https://croft.example.c
 
 `croft setup` pairs one key per runtime in the browser (Claude Code, Codex, OpenClaw),
 installs the CLI to `~/.local/bin/croft`, copies the skill into `~/.claude/skills/croft` and
-`~/.codex/skills/croft`, and adds the session briefing hook, unless Cairn's briefing already
-carries it. It is safe to re-run; `--dry-run` prints the plan.
+`~/.codex/skills/croft`, and adds the session briefing hook. It is safe to re-run; `--dry-run` prints the plan.
 
 ### What `croft setup` does
 
@@ -89,7 +99,7 @@ an OpenClaw gateway) or named with `--runtimes a,b`. Hermes Agent is never detec
 | release | the release matching the CLI's version (or `CROFT_SETUP_SOURCE`) | `~/.croft/releases/<version>` | — | `rm -r` it |
 | cli | `croft` | `~/.local/bin/croft` | — | `rm ~/.local/bin/croft` |
 | skill | the Croft skill, per runtime set up | `~/.claude/skills/croft`, `~/.codex/skills/croft` | `--no-skill` | `rm -r` the folder |
-| hooks | the session briefing hook, per runtime set up (none where Cairn's briefing already carries Croft's) | `~/.claude/settings.json`, `~/.codex/hooks.json`, OpenClaw's hook link; `~/.croft/hooks` | `--no-hooks` | delete the entries naming `~/.croft/hooks` |
+| hooks | the session briefing hook, per runtime set up | `~/.claude/settings.json`, `~/.codex/hooks.json`, OpenClaw's hook link; `~/.croft/hooks` | `--no-hooks` | delete the entries naming `~/.croft/hooks` |
 | jobs | `agent-files`, which keeps the CLI, hook and skill equal to the installed release's tag every 15 minutes on macOS, hourly on Linux, for the runtimes set up; `reconcile` with `--maintenance` | a LaunchAgent on macOS, a crontab on Linux | `--no-jobs` | `node ~/.croft/releases/<version>/scripts/install-cron.mjs --remove --only agent-files` |
 
 What it never does: wire a runtime it did not set up (Hermes included), follow a branch, or
@@ -101,11 +111,11 @@ ends with the next step and the undo commands above.
 croft check "<question>"                        # what the lab already found
 croft subject add|list|show|edit|stage|note|tag|todo …
 croft claim|note|checkpoint|done T-41 …         # todos are tasks
-croft push T-41 --to KEY  /  croft sync         # hand over to Cairn, pull status back
+croft handoff T-41  /  croft sync               # hand over to a task tracker, pull status back
 croft context --brief                           # the lab in five lines
 ```
 
-`croft --help` lists every verb; [`AGENTS.md`](./AGENTS.md) is how agents are expected to
+`croft --help` lists the lab verbs, `croft help --all` the inherited task verbs; [`AGENTS.md`](./AGENTS.md) is how agents are expected to
 use them, and [`docs/openclaw.md`](./docs/openclaw.md) covers OpenClaw.
 
 ## Licence

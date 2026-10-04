@@ -164,9 +164,28 @@ export const updateTagSchema = z
 
 const labProjectName = z.string().trim().min(1).max(40)
 
-/** Cairn's project key shape (`CAIRN`, `TRIG`): two to ten characters, a letter first. */
+/** A tracker's name as data: `cairn`, `github`. Lower-cased; an empty string reads as none. */
+export const HANDOFF_TRACKER = /^[a-z][a-z0-9-]{1,31}$/
+const handoffTrackerName = z
+  .string()
+  .trim()
+  .transform((v) => v.toLowerCase())
+  .pipe(z.string().regex(/^(?:[a-z][a-z0-9-]{1,31})?$/, 'expected a tracker name like cairn or github (2-32 characters, a letter first)'))
+  .transform((v) => v || null)
+
+/** A place in the tracker: a project key, an `owner/repo`. An empty string reads as none. */
+export const HANDOFF_TARGET = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$/
+const handoffTargetName = z
+  .string()
+  .trim()
+  .pipe(z.string().regex(/^(?:[A-Za-z0-9][A-Za-z0-9._/-]{0,99})?$/, 'expected a target like CAIRN or owner/repo (1-100 characters)'))
+  .transform((v) => v || null)
+
+/**
+ * Deprecated (0.7): `cairnKey` means tracker `cairn` and that target. Upper-cased.
+ * Removed in 0.8.
+ */
 export const CAIRN_KEY = /^[A-Z][A-Z0-9]{1,9}$/
-/** Upper-cased. An empty string reads as no key, so a cleared form field clears it. */
 const cairnKey = z
   .string()
   .trim()
@@ -178,28 +197,91 @@ const cairnKey = z
   )
   .transform((v) => v || null)
 
-export const createLabProjectSchema = z.object({
-  name: labProjectName,
-  color: colour.optional(),
-  /** Where `croft push T-n` files this project's todos when no `--to` is given. */
-  cairnKey: cairnKey.nullable().optional(),
-  position: z.number().int().min(0).max(10_000).optional(),
-})
+type HandoffFields = { handoffTracker?: string | null; handoffTarget?: string | null; cairnKey?: string | null }
+
+/** Tracker and target travel together, and `cairnKey` is the same thing said the old way. */
+const handoffPair = (value: HandoffFields, ctx: z.RefinementCtx) => {
+  if (value.cairnKey !== undefined && (value.handoffTracker !== undefined || value.handoffTarget !== undefined)) {
+    ctx.addIssue({ code: 'custom', message: 'Send handoffTracker and handoffTarget, or the deprecated cairnKey, not both.' })
+    return
+  }
+  const touched = value.handoffTracker !== undefined || value.handoffTarget !== undefined
+  if (touched && (value.handoffTracker == null) !== (value.handoffTarget == null)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: [value.handoffTracker == null ? 'handoffTracker' : 'handoffTarget'],
+      message: 'A hand-off needs both a tracker and a target, or neither (null clears it).',
+    })
+  }
+}
+
+export const createLabProjectSchema = z
+  .object({
+    name: labProjectName,
+    color: colour.optional(),
+    /** Where `croft handoff` sends this project's todos: the tracker, and a target in it. */
+    handoffTracker: handoffTrackerName.nullable().optional(),
+    handoffTarget: handoffTargetName.nullable().optional(),
+    /** Deprecated (0.7): tracker `cairn` and this key. Removed in 0.8. */
+    cairnKey: cairnKey.nullable().optional(),
+    position: z.number().int().min(0).max(10_000).optional(),
+  })
+  .superRefine(handoffPair)
 
 export const updateLabProjectSchema = z
   .object({
     name: labProjectName,
     color: colour,
-    /** `null` clears it. */
+    /** Both `null` clears the hand-off. */
+    handoffTracker: handoffTrackerName.nullable(),
+    handoffTarget: handoffTargetName.nullable(),
+    /** Deprecated (0.7): `null` clears both. Removed in 0.8. */
     cairnKey: cairnKey.nullable(),
     position: z.number().int().min(0).max(10_000),
   })
   .partial()
   .refine((value) => Object.keys(value).length > 0, 'Send at least one field to change.')
+  .superRefine(handoffPair)
 
-/** Cairn's own ref shape: a key of two to ten characters. */
+/**
+ * What a lab project body says about the hand-off: `undefined` leaves it,
+ * `null` clears it, a pair sets it. `cairnKey` is read as tracker `cairn`.
+ */
+export const handoffOfProjectBody = (
+  body: HandoffFields,
+): undefined | null | { tracker: string; target: string } => {
+  if (body.cairnKey !== undefined) return body.cairnKey === null ? null : { tracker: 'cairn', target: body.cairnKey }
+  if (body.handoffTracker === undefined && body.handoffTarget === undefined) return undefined
+  if (!body.handoffTracker || !body.handoffTarget) return null
+  return { tracker: body.handoffTracker, target: body.handoffTarget }
+}
+
+/** Not whitespace or a control character anywhere: a ref is one token. */
+const NO_SPACE_OR_CONTROL = /^[^\s\u0000-\u001f\u007f]+$/
+
+export const handoffSchema = z.object({
+  tracker: handoffTrackerName.refine((v) => v !== null, 'A tracker name is required.'),
+  /** The task's ref in that tracker: 1-200 characters, no whitespace or control characters. */
+  ref: z.string().trim().min(1).max(200).regex(NO_SPACE_OR_CONTROL, 'A ref has no whitespace or control characters.'),
+  /** Where to open it. http(s) only. */
+  url: z.string().trim().max(2000).regex(/^https?:\/\//i, 'expected an http(s) URL').nullable().optional(),
+  status: z.string().trim().min(1).max(40).optional(),
+  /** With a done or cancelled status: the tracker's resolution, for the subject's log and the todo's close. */
+  resolution: z.string().trim().max(20_000).optional(),
+  /** The tracker's resolution kind. One Croft does not have closes the todo as `verified`. */
+  resolutionKind: z.string().trim().min(1).max(40).optional(),
+  /**
+   * Hand off a todo whose subject is private or members-only anyway. Without it
+   * that is refused with `subject_not_published`: the tracker has no notion of
+   * who may see what.
+   */
+  force: z.boolean().optional(),
+})
+
+/** Cairn's own ref shape: a key of two to ten characters. Deprecated (0.7). */
 export const CAIRN_REF = /^[A-Z][A-Z0-9]{1,9}-\d{1,6}$/
 
+/** Deprecated (0.7): `POST /tasks/{ref}/cairn-link`, the old body. Removed in 0.8. */
 export const cairnLinkSchema = z.object({
   cairnRef: z
     .string()
@@ -207,14 +289,7 @@ export const cairnLinkSchema = z.object({
     .transform((v) => v.toUpperCase())
     .pipe(z.string().regex(CAIRN_REF, 'expected a Cairn task ref like CAIRN-331')),
   cairnStatus: z.string().trim().min(1).max(40).optional(),
-  /** With a done or cancelled status: Cairn's resolution, for the subject's log and the todo's close. */
   cairnResolution: z.string().trim().max(20_000).optional(),
-  /** Cairn's resolution kind. One Croft does not have closes the todo as `verified`. */
   cairnResolutionKind: z.string().trim().min(1).max(40).optional(),
-  /**
-   * Link a todo whose subject is private or members-only anyway (`croft push
-   * --force`). Without it that is refused with `subject_not_published`: Cairn
-   * has no notion of who may see what.
-   */
   force: z.boolean().optional(),
 })
