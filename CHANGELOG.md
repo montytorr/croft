@@ -8,6 +8,8 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-10-04
+
 ### Added
 
 - `croft handoff T-n [--to TARGET] [--tracker NAME] [--type T]` hands a todo off to a task tracker through an adapter and links the two. The tracker and target default to the subject's lab project; `--tracker`, then `CROFT_TRACKER`, then the only adapter on the machine otherwise. `--link REF [--url URL]` records a task made by hand, for any tracker name; `--undo` takes a hand-off back. Adapters ship for `cairn` (an external ref, falling back to a label on an older Cairn) and `github` (an issue, through `gh`); each is a delimited section of the CLI and nothing outside it names a product.
@@ -265,7 +267,8 @@ Forked from Cairn v0.12.1 (1ef3556).
 
 - A field notebook: paper and peat grounds, a heather accent, Schibsted Grotesk and Newsreader, and runrig strips for a mark.
 
-[Unreleased]: https://github.com/montytorr/croft/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/montytorr/croft/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/montytorr/croft/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/montytorr/croft/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/montytorr/croft/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/montytorr/croft/compare/v0.5.0...v0.5.1
