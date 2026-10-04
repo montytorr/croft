@@ -156,7 +156,6 @@ describe('documented invocations stay silent', () => {
     ['add', 'A title', '--parent', 'T-1', '--assignee', 'bob@acme.io'],
     ['update', 'CAI-1', '--assignee', 'me'],
     ['list', '--assignee', 'me'],
-    ['check', 'x', '--assignee', 'julien@acme.io'],
     ['subject', 'add', 'A subject', '--visibility', 'members', '--member', 'mael', '--member', 'sam,me'],
     ['subject', 'share', 'S-1', '+mael', '-sam', '--visibility', 'members'],
     ['subject', 'publish', 'S-1'],

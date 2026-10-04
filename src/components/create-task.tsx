@@ -72,6 +72,8 @@ export const CreateTask = ({
             : Promise.resolve(null),
         ])
         const listed = list.ok ? await list.json().catch(() => null) : null
+        // A failed read is not an empty lab: say so rather than "No subjects yet".
+        if (!list.ok) setError(`Could not load the subjects (${list.status}). Close and try again.`)
         setSubjects(((listed?.data ?? []) as SubjectChoice[]).map(({ number, ref, title: name }) => ({ number, ref, title: name })))
         const parentJson = parent?.ok ? await parent.json().catch(() => null) : null
         const parentSubject = parentJson?.data?.subject?.number

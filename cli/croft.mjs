@@ -2441,7 +2441,7 @@ const HELP = `croft — the lab board: subjects to explore and prove, their todo
   ALWAYS START HERE
     croft check "<subject>"        what the lab already tried, found or concluded
                                    searches subjects, todos and work-log notes;
-                                   --kinds subject,task,note; --assignee me|<who>
+                                   --kinds subject,task,note
     Lab work (exploring, proving an idea, a subject's todos) → Croft.
     Croft holds lab work only; committed work leaves it: croft handoff T-n.
 
@@ -2946,11 +2946,7 @@ const commands = {
   async check() {
     const q = need(positional[0], 'usage: croft check "<subject>"')
     const params = new URLSearchParams({ q })
-    if (flags.type) params.set('type', flags.type)
     if (flags.kinds) params.set('kinds', flags.kinds)
-    // Whose tasks. Like --type, a statement about tasks, so the answer is
-    // tasks only.
-    if (flags.assignee) params.set('assignee', flags.assignee)
     const data = await request('GET', `/api/v1/search?${params}`)
     emit(data, {
       rows: (d) =>

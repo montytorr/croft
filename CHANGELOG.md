@@ -8,6 +8,8 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+> **Upgrade every CLI with `croft setup`.** A 0.6 CLI no longer sees hand-offs (`croft sync` finds nothing, `croft push` is gone), and 0.6 and 0.7 CLIs get 404 from the removed routes.
+
 ### Breaking
 
 - CLIs before 0.8 calling removed routes get 404 — re-run `croft setup`.

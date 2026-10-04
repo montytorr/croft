@@ -131,3 +131,13 @@ describe('terminal transitions release the claim', () => {
     }
   })
 })
+
+describe('updateTaskSchema after 0.8', () => {
+  it('refuses the removed project fields instead of silently ignoring them', () => {
+    const moved = updateTaskSchema.safeParse({ project: 'OTHER' })
+    expect(moved.success).toBe(false)
+    expect(JSON.stringify(moved.error?.issues)).toContain('croft setup')
+    expect(updateTaskSchema.safeParse({ alsoProjects: ['OTHER'] }).success).toBe(false)
+    expect(updateTaskSchema.safeParse({ title: 'Still fine' }).success).toBe(true)
+  })
+})

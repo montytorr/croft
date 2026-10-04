@@ -300,11 +300,12 @@ describe('the assignee (CROFT-310)', () => {
     expect(stdout.trim().split('\n')).toEqual(['#1', 'name\temail', 'Alice\talice@acme.io'])
   })
 
-  it('check sends the filter', async () => {
+  it('check says it takes no --assignee rather than answering unfiltered', async () => {
     const seen: Seen[] = []
     const base = await serve(() => ({ count: 0, results: [] }), seen)
-    await run(['check', 'relay', '--assignee', 'julien@acme.io'], base)
-    expect(new URL(seen[0]!.path, base).searchParams.get('assignee')).toBe('julien@acme.io')
+    const { stderr } = await run(['check', 'relay', '--assignee', 'julien@acme.io'], base)
+    expect(stderr).toContain('does not take')
+    expect(new URL(seen[0]!.path, base).searchParams.get('assignee')).toBeNull()
   })
 
 })

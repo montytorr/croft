@@ -135,6 +135,9 @@ export const createTaskSchema = taskFields
   })
 
 /** Partial update. No defaults, so absent fields stay absent. */
+/** A field a removed feature used to take: absent is fine, present is refused with `message`. */
+const removedField = (message: string) => z.unknown().optional().refine((value) => value === undefined, { message })
+
 export const updateTaskSchema = taskFields.partial().extend({
   resolution: z.string().max(100_000).optional(),
   resolutionKind: resolutionKind.optional(),
@@ -150,6 +153,12 @@ export const updateTaskSchema = taskFields.partial().extend({
   assignee: assigneeField.optional(),
   /** `null` clears it — the one field on `taskFields` that can be unset rather than just left alone. */
   dueDate: z.string().date().nullable().optional(),
+  /**
+   * Removed in 0.8, refused rather than ignored: a 0.7 CLI's `update --project`
+   * would otherwise answer 200 and change nothing.
+   */
+  project: removedField('Moving a todo between projects was removed in 0.8: Croft has one todo list. Update the CLI (croft setup).'),
+  alsoProjects: removedField('Linking a todo to other projects was removed in 0.8. Update the CLI (croft setup).'),
 })
 
 export const createNoteSchema = z.object({
