@@ -8,6 +8,8 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-10-04
+
 > **Upgrade every CLI with `croft setup`.** A 0.6 CLI no longer sees hand-offs (`croft sync` finds nothing, `croft push` is gone), and 0.6 and 0.7 CLIs get 404 from the removed routes.
 
 ### Breaking
@@ -290,7 +292,8 @@ Forked from Cairn v0.12.1 (1ef3556).
 
 - A field notebook: paper and peat grounds, a heather accent, Schibsted Grotesk and Newsreader, and runrig strips for a mark.
 
-[Unreleased]: https://github.com/montytorr/croft/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/montytorr/croft/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/montytorr/croft/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/montytorr/croft/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/montytorr/croft/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/montytorr/croft/compare/v0.5.1...v0.6.0
