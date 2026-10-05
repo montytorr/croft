@@ -2,7 +2,8 @@ name: notify
 
 # Announces pushes (every branch), published releases, new issues and new PRs
 # in #croft. Deploys announce themselves from deploy.yml. The webhook is the
-# CROFT_DISCORD_WEBHOOK repository secret: never in the repo, and never given to
+# CROFT_DISCORD_WEBHOOK (#croft) and CROFT_DISCORD_WEBHOOK_TEAM (the team's Discord)
+# repository secrets, each posted to when set: never in the repo, and never given to
 # a fork's workflow runs (a fork's pushes do not trigger this in this repo).
 on:
   push:
@@ -25,9 +26,10 @@ jobs:
       - name: announce
         env:
           DISCORD_WEBHOOK: ${{ secrets.CROFT_DISCORD_WEBHOOK }}
+          DISCORD_WEBHOOK_TEAM: ${{ secrets.CROFT_DISCORD_WEBHOOK_TEAM }}
         run: |
           set -uo pipefail
-          if [ -z "${DISCORD_WEBHOOK:-}" ]; then echo "::warning::CROFT_DISCORD_WEBHOOK is not set"; exit 0; fi
+          if [ -z "${DISCORD_WEBHOOK:-}${DISCORD_WEBHOOK_TEAM:-}" ]; then echo "::warning::no Discord webhook is set"; exit 0; fi
           ev="$GITHUB_EVENT_PATH"
           repo_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
           if [ "$GITHUB_EVENT_NAME" = issues ]; then
@@ -50,6 +52,10 @@ jobs:
             fi
           fi
           # allowed_mentions: none, so no commit message or release name can ping anyone.
-          jq -n --arg c "${message:0:1900}" '{content: $c, allowed_mentions: {parse: []}}' \
-            | curl -fsS -m 10 -H 'Content-Type: application/json' -d @- "$DISCORD_WEBHOOK" >/dev/null \
-            || echo "::warning::Discord notification failed"
+          # Every configured channel: #croft, and the team's Discord.
+          payload=$(jq -n --arg c "${message:0:1900}" '{content: $c, allowed_mentions: {parse: []}}')
+          for hook in "${DISCORD_WEBHOOK:-}" "${DISCORD_WEBHOOK_TEAM:-}"; do
+            [ -n "$hook" ] || continue
+            printf '%s' "$payload" | curl -fsS -m 10 -H 'Content-Type: application/json' -d @- "$hook" >/dev/null \
+              || echo "::warning::Discord notification failed"
+          done
