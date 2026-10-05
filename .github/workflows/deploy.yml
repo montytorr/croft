@@ -76,16 +76,21 @@ jobs:
         # Pushes and releases are announced by notify.yml; this says a deploy began.
         env:
           DISCORD_WEBHOOK: ${{ secrets.CROFT_DISCORD_WEBHOOK }}
+          DISCORD_WEBHOOK_TEAM: ${{ secrets.CROFT_DISCORD_WEBHOOK_TEAM }}
         run: |
           set -uo pipefail
           short="${DEPLOY_SHA::7}"
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           message="🚀 **Croft deploy started** \`${short}\` · <${run_url}>"
-          if [ -z "${DISCORD_WEBHOOK:-}" ]; then echo "::warning::CROFT_DISCORD_WEBHOOK is not set"; exit 0; fi
+          if [ -z "${DISCORD_WEBHOOK:-}${DISCORD_WEBHOOK_TEAM:-}" ]; then echo "::warning::no Discord webhook is set"; exit 0; fi
           # allowed_mentions: none, so a commit subject can never ping the channel.
-          jq -n --arg c "$message" '{content: $c, allowed_mentions: {parse: []}}' \
-            | curl -fsS -m 10 -H 'Content-Type: application/json' -d @- "$DISCORD_WEBHOOK" >/dev/null \
-            || echo "::warning::Discord start notification failed"
+          # Every configured channel: #croft, and the team's Discord.
+          payload=$(jq -n --arg c "$message" '{content: $c, allowed_mentions: {parse: []}}')
+          for hook in "${DISCORD_WEBHOOK:-}" "${DISCORD_WEBHOOK_TEAM:-}"; do
+            [ -n "$hook" ] || continue
+            printf '%s' "$payload" | curl -fsS -m 10 -H 'Content-Type: application/json' -d @- "$hook" >/dev/null \
+              || echo "::warning::Discord start notification failed"
+          done
 
       - name: link runtime configuration
         # Secrets live outside the workspace, owned by the runner user, and
@@ -272,6 +277,7 @@ jobs:
           DEPLOY_STATUS: ${{ job.status }}
           CROFT_DOMAIN: ${{ vars.CROFT_DOMAIN }}
           DISCORD_WEBHOOK: ${{ secrets.CROFT_DISCORD_WEBHOOK }}
+          DISCORD_WEBHOOK_TEAM: ${{ secrets.CROFT_DISCORD_WEBHOOK_TEAM }}
         run: |
           set -u
           short="${DEPLOY_SHA::7}"
@@ -281,7 +287,11 @@ jobs:
             cancelled) message="⚠️ **Croft deploy cancelled** \`${short}\` · <${run_url}>" ;;
             *) message="❌ **Croft deploy failed** \`${short}\` · rollback attempted · <${run_url}>" ;;
           esac
-          if [ -z "${DISCORD_WEBHOOK:-}" ]; then echo "::warning::CROFT_DISCORD_WEBHOOK is not set"; exit 0; fi
-          jq -n --arg c "$message" '{content: $c, allowed_mentions: {parse: []}}' \
-            | curl -fsS -m 10 -H 'Content-Type: application/json' -d @- "$DISCORD_WEBHOOK" >/dev/null \
-            || echo "::warning::Discord result notification failed"
+          if [ -z "${DISCORD_WEBHOOK:-}${DISCORD_WEBHOOK_TEAM:-}" ]; then echo "::warning::no Discord webhook is set"; exit 0; fi
+          # Every configured channel: #croft, and the team's Discord.
+          payload=$(jq -n --arg c "$message" '{content: $c, allowed_mentions: {parse: []}}')
+          for hook in "${DISCORD_WEBHOOK:-}" "${DISCORD_WEBHOOK_TEAM:-}"; do
+            [ -n "$hook" ] || continue
+            printf '%s' "$payload" | curl -fsS -m 10 -H 'Content-Type: application/json' -d @- "$hook" >/dev/null \
+              || echo "::warning::Discord result notification failed"
+          done
