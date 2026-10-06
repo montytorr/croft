@@ -59,7 +59,7 @@ export const SubjectCard = ({
     </Link>
 
     {subject.conclusion ? (
-      <p className="writeup-sm text-fg-muted mt-1.5 line-clamp-2 !text-[0.8125rem] !leading-snug italic">
+      <p className="writeup-sm text-fg-muted mt-1.5 line-clamp-2 !text-[0.8125rem] !leading-snug">
         {subject.conclusion}
       </p>
     ) : null}

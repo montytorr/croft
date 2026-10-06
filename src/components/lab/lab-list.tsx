@@ -33,7 +33,7 @@ const Row = ({ subject }: { subject: SubjectSummary }) => (
           <span className="text-fg truncate text-[0.875rem] font-medium">{subject.title}</span>
         </span>
         {subject.conclusion ? (
-          <span className="writeup-sm text-fg-muted block truncate !text-[0.8125rem] italic">{subject.conclusion}</span>
+          <span className="writeup-sm text-fg-muted block truncate !text-[0.8125rem]">{subject.conclusion}</span>
         ) : null}
       </span>
       {subject.project ? (
@@ -89,7 +89,7 @@ export const LabList = ({ subjects, stages }: { subjects: SubjectSummary[]; stag
             </span>
           </h2>
           {here.length === 0 ? (
-            <p className="text-fg-subtle/80 px-4 py-2.5 text-[0.75rem] italic md:px-6">Nothing at this stage.</p>
+            <p className="text-fg-subtle px-4 py-2.5 text-[0.75rem] md:px-6">Nothing at this stage.</p>
           ) : (
             <ul className="divide-border/70 stagger divide-y">
               {here.map((subject) => (

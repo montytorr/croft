@@ -36,7 +36,7 @@ export const AuthShell = ({ children }: { children: React.ReactNode }) => {
                 half: the two voices of the product in one line. */}
             <h2 className="font-display headline headline-xl text-fg text-[2.5rem] leading-[1.08]">
               The farm{' '}
-              <span className="text-fg-muted font-serif font-normal italic tracking-normal">where your ideas grow.</span>
+              <span className="text-fg-muted font-serif font-normal tracking-normal">where your ideas grow.</span>
             </h2>
             <p className="text-fg-muted mt-4 max-w-[28rem] font-serif text-[1.0625rem] leading-relaxed">
               Where your team, people and agents, explores its subjects, develops them and brings

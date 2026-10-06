@@ -638,8 +638,10 @@
 }
 
 @layer base {
+  /* No italic in code: JetBrains Mono loads upright only, so the browser
+     would fake the slant. The colour already sets comments apart. */
   .hljs-comment,
-  .hljs-quote { color: var(--code-comment); font-style: italic; }
+  .hljs-quote { color: var(--code-comment); }
 
   .hljs-keyword,
   .hljs-selector-tag,
@@ -674,7 +676,6 @@
   .hljs-property,
   .hljs-params { color: var(--code-variable); }
 
-  .hljs-emphasis { font-style: italic; }
   .hljs-strong { font-weight: 600; }
   .hljs-deletion { color: var(--danger); }
 }
@@ -903,6 +904,9 @@
 /* Under the subject page's sticky tab bar, a heading reached from the outline
    lands just below it rather than behind it. */
 .writeup :is(h1, h2, h3) { scroll-margin-top: 3.5rem; }
+/* Italic is kept for prose only: here, and markdown emphasis. Both faces load
+   a drawn italic (fonts.ts), and the interface itself never sets one
+   (italic-usage.test.ts). */
 .writeup blockquote { font-style: italic; }
 .writeup h1,
 .writeup h2,
@@ -961,7 +965,6 @@
 .prose-editor .ProseMirror ul[data-type='taskList'] input { accent-color: var(--accent); }
 .prose-editor .ProseMirror blockquote {
   color: var(--fg-muted);
-  font-style: italic;
   padding-left: 0.9em;
   box-shadow: inset 2px 0 0 var(--border-strong);
 }
