@@ -60,7 +60,7 @@ const ColumnHeading = ({ groupBy, col }: { groupBy: GroupBy; col: ColumnDef }) =
           <Avatar name={col.value} size={14} />
         ))}
       {groupBy === 'assignee' && <Avatar name={col.label} size={14} />}
-      <span className="truncate text-xs font-medium">{col.label}</span>
+      <span className="truncate text-aux font-medium">{col.label}</span>
     </span>
   )
 }
@@ -98,7 +98,7 @@ const CardList = ({
 )
 
 const ColumnHeader = ({ groupBy, col, count }: { groupBy: GroupBy; col: ColumnDef; count: number }) => (
-  <div className="flex h-[1.875rem] items-center gap-2 px-2.5">
+  <div className="flex h-10 items-center gap-2 px-2.5">
     <ColumnHeading groupBy={groupBy} col={col} />
     <ColumnCount count={count} />
   </div>
@@ -143,7 +143,7 @@ const LaneName = ({ lane }: { lane: BoardLane }) =>
   lane.ref ? (
     <>
       <ProjectDot color={lane.color} />
-      <span className="text-fg-subtle font-mono text-[0.6875rem]">{lane.ref}</span>
+      <span className="text-fg-subtle font-mono text-aux">{lane.ref}</span>
       <span className="text-fg max-w-[40ch] truncate">{lane.label}</span>
     </>
   ) : (
@@ -179,14 +179,14 @@ const Lane = ({
           type="button"
           onClick={() => setCollapsed((c) => !c)}
           aria-expanded={!collapsed}
-          className="text-fg-muted hover:text-fg flex min-w-0 items-center gap-1.5 rounded px-1 py-0.5 text-[0.75rem] font-medium transition-colors duration-[var(--dur-1)]"
+          className="text-fg-muted hover:text-fg flex min-w-0 items-center gap-1.5 rounded px-1 py-0.5 text-aux font-medium transition-colors duration-[var(--dur-1)]"
         >
           <ChevronRight
             size={13}
             className={cn('shrink-0 transition-transform duration-[var(--dur-2)] ease-[var(--ease-out)]', !collapsed && 'rotate-90')}
           />
           <LaneName lane={lane} />
-          <span className="text-fg-subtle tabular rounded-full bg-[color-mix(in_oklab,var(--fg)_6%,transparent)] px-1.5 text-[0.6875rem] leading-[1.125rem]">
+          <span className="text-fg-subtle tabular rounded-full bg-[color-mix(in_oklab,var(--fg)_6%,transparent)] px-1.5 text-aux leading-[1.125rem]">
             {tasks.length}
           </span>
         </button>
@@ -488,7 +488,7 @@ export const CrossProjectBoard = ({
                       { labProjects: [], subjects: [], lane: lab.lane },
                     )
                   }
-                  className="text-accent text-[0.75rem] hover:underline"
+                  className="text-accent text-aux hover:underline"
                 >
                   Clear filters
                 </button>

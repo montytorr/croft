@@ -1,4 +1,4 @@
-import { Lock, Users } from 'lucide-react'
+import { Globe, Lock, Users } from 'lucide-react'
 import type { SubjectVisibility } from '@/lib/lab/types'
 import { cn } from '@/lib/utils'
 
@@ -60,26 +60,31 @@ export const VisibilityBadge = ({
   visibility,
   members = 0,
   className,
+  always,
 }: {
   visibility: SubjectVisibility | undefined
   members?: number
   className?: string
+  /** Say "Lab" too. A header leaves the default unmarked; the subject's own state strip does not. */
+  always?: boolean
 }) => {
-  if (!visibility || visibility === 'lab') return null
-  const Icon = visibility === 'members' ? Users : Lock
+  if (!visibility || (visibility === 'lab' && !always)) return null
+  const Icon = visibility === 'members' ? Users : visibility === 'lab' ? Globe : Lock
   return (
     <span
       className={cn(
-        'border-border text-fg-muted inline-flex h-[1.25rem] shrink-0 items-center gap-1 rounded-[5px] border px-1.5 text-[0.6875rem] leading-none font-medium',
+        'border-border text-fg-muted inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[5px] border px-2 text-aux leading-none font-medium',
         className,
       )}
       title={visibilityTitle(visibility, members)}
     >
-      <Icon size={10} aria-hidden strokeWidth={2.25} />
+      <Icon size={12} aria-hidden strokeWidth={2.25} />
       {visibility === 'members' ? (
         <>
           Members<span className="text-fg-subtle tabular-nums"> · {members}</span>
         </>
+      ) : visibility === 'lab' ? (
+        'Lab'
       ) : (
         'Private'
       )}

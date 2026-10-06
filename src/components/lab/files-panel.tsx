@@ -49,16 +49,16 @@ const Tile = ({ file, onOpen, onDelete }: { file: Attachment; onOpen: () => void
         ) : (
           <span className="text-fg-subtle flex flex-col items-center gap-1.5">
             <Icon size={22} strokeWidth={1.5} aria-hidden />
-            <span className="font-mono text-[0.625rem] tracking-wide">{file.kind === 'html' ? 'HTML' : extension(file.filename)}</span>
+            <span className="font-mono text-aux tracking-wide">{file.kind === 'html' ? 'HTML' : extension(file.filename)}</span>
           </span>
         )}
       </button>
       <div className="flex min-w-0 items-start gap-1 px-2.5 py-1.5">
         <div className="min-w-0 flex-1">
-          <p className="text-fg truncate text-[0.75rem]" title={file.filename}>
+          <p className="text-fg truncate text-aux" title={file.filename}>
             {file.filename}
           </p>
-          <p className="text-fg-subtle flex min-w-0 gap-1 truncate text-[0.65625rem]">
+          <p className="text-fg-subtle flex min-w-0 gap-1 truncate text-aux">
             <span className="tabular shrink-0">{formatBytes(file.size_bytes)}</span>
             <span aria-hidden>·</span>
             <RelativeTime iso={file.created_at} className="shrink-0" />
@@ -67,7 +67,7 @@ const Tile = ({ file, onOpen, onDelete }: { file: Attachment; onOpen: () => void
           </p>
         </div>
       </div>
-      <span className="absolute top-1.5 right-1.5 flex gap-1 opacity-0 transition-opacity group-hover/tile:opacity-100 group-focus-within/tile:opacity-100">
+      <span className="absolute top-1.5 right-1.5 flex gap-1 opacity-0 pointer-coarse:opacity-100 transition-opacity group-hover/tile:opacity-100 group-focus-within/tile:opacity-100">
         <a
           href={file.download_url}
           download={file.filename}
@@ -125,13 +125,13 @@ const Viewer = ({ files, index, onIndex, onClose }: { files: Attachment[]; index
         className="flex h-11 shrink-0 items-center gap-2 bg-[#161316]/80 px-3 text-[#f1ebe7] backdrop-blur-sm"
         onClick={(e) => e.stopPropagation()}
       >
-        <span className="min-w-0 flex-1 truncate text-[0.8125rem]">{file.filename}</span>
+        <span className="min-w-0 flex-1 truncate text-ui">{file.filename}</span>
         {file.kind === 'html' ? (
-          <span className="rounded border border-white/20 px-1.5 text-[0.625rem] tracking-wide text-white/70 uppercase" title="Scripts, forms and navigation are blocked">
+          <span className="rounded border border-white/20 px-1.5 text-micro tracking-wide text-white/70 uppercase" title="Scripts, forms and navigation are blocked">
             Sandboxed
           </span>
         ) : null}
-        {many ? <span className="text-[0.6875rem] text-white/60 tabular-nums">{index + 1} / {files.length}</span> : null}
+        {many ? <span className="text-aux text-white/60 tabular-nums">{index + 1} / {files.length}</span> : null}
         <a href={file.download_url} download={file.filename} aria-label="Download" className="grid size-8 place-items-center rounded-md text-white/80 hover:bg-white/10 hover:text-white">
           <Download size={15} aria-hidden />
         </a>
@@ -278,18 +278,18 @@ export const FilesPanel = ({ subjectRef, files: initial }: { subjectRef: string;
         <Button size="sm" variant="secondary" onClick={() => input.current?.click()} className="px-3">
           <Upload size={13} aria-hidden /> Upload
         </Button>
-        <p className="text-fg-subtle text-[0.75rem]">
+        <p className="text-fg-subtle text-aux">
           or drop files here. Images, PDFs, video, HTML and documents; an image pasted into the write-up lands here too.
         </p>
         {uploading > 0 ? (
-          <span className="text-fg-muted ml-auto flex items-center gap-1.5 text-[0.75rem]">
+          <span className="text-fg-muted ml-auto flex items-center gap-1.5 text-aux">
             <Spinner size={12} /> Uploading {uploading}…
           </span>
         ) : null}
       </div>
 
       {errors.length ? (
-        <ul className="enter-rise text-danger bg-danger-subtle flex flex-col gap-0.5 rounded-md px-2.5 py-1.5 text-[0.75rem]" role="alert">
+        <ul className="enter-rise text-danger bg-danger-subtle flex flex-col gap-0.5 rounded-md px-2.5 py-1.5 text-aux" role="alert">
           {errors.map((error) => (
             <li key={error}>{error}</li>
           ))}
@@ -300,7 +300,7 @@ export const FilesPanel = ({ subjectRef, files: initial }: { subjectRef: string;
         <button
           type="button"
           onClick={() => input.current?.click()}
-          className="border-border text-fg-subtle hover:text-fg-muted hover:border-border-strong flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-12 text-[0.8125rem] transition-colors"
+          className="border-border text-fg-subtle hover:text-fg-muted hover:border-border-strong flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-12 text-ui transition-colors"
         >
           <Paperclip size={18} strokeWidth={1.5} aria-hidden />
           No files yet. Drop screenshots, exports or a prototype here.
@@ -314,7 +314,7 @@ export const FilesPanel = ({ subjectRef, files: initial }: { subjectRef: string;
       )}
 
       {dragging ? (
-        <p className="text-accent pointer-events-none absolute inset-x-0 bottom-3 text-center text-[0.8125rem] font-medium">
+        <p className="text-accent pointer-events-none absolute inset-x-0 bottom-3 text-center text-ui font-medium">
           Drop to add to this subject
         </p>
       ) : null}

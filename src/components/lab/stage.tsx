@@ -55,6 +55,31 @@ export const StageGlyph = ({
   )
 }
 
+/**
+ * Where a subject is, said in full: the glyph, the stage's name and what kind
+ * of stage it is. The one place the stage is set at reading size on a
+ * subject's own page, so it can be read without finding the sidebar.
+ */
+export const StagePill = ({
+  stage,
+  className,
+}: {
+  stage: Pick<Stage, 'color' | 'category' | 'name'>
+  className?: string
+}) => (
+  <span
+    className={cn(
+      'border-border-strong bg-surface text-fg inline-flex h-8 min-w-0 max-w-full items-center gap-2 rounded-full border px-3 text-ui font-medium',
+      className,
+    )}
+    title={`Stage: ${stage.name} (${CATEGORY_LABEL[stage.category].toLowerCase()})`}
+  >
+    <StageGlyph stage={stage} size={15} />
+    <span className="truncate">{stage.name}</span>
+    <span className="text-fg-muted text-aux font-normal">{CATEGORY_LABEL[stage.category]}</span>
+  </span>
+)
+
 /** Glyph and name, for rows, chips and headings. */
 export const StageBadge = ({
   stage,

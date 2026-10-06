@@ -50,7 +50,7 @@ const HandoffField = ({
   const set = tracker && target ? `${tracker} · ${target}` : null
 
   if (!editing || disabled) {
-    if (disabled && !set) return <span className="text-fg-subtle/70 shrink-0 text-[0.6875rem]">no hand-off</span>
+    if (disabled && !set) return <span className="text-fg-subtle shrink-0 text-aux">no hand-off</span>
     return (
       <button
         type="button"
@@ -70,7 +70,7 @@ const HandoffField = ({
               : HANDOFF_HINT
         }
         className={cn(
-          'flex h-[1.5rem] shrink-0 items-center gap-1 rounded px-1.5 text-[0.6875rem] enabled:hover:bg-surface-hover disabled:cursor-default',
+          'flex h-[1.5rem] shrink-0 items-center gap-1 rounded px-1.5 text-aux enabled:hover:bg-surface-hover disabled:cursor-default',
           set ? 'text-fg-muted font-mono' : 'text-fg-subtle',
         )}
       >
@@ -117,7 +117,7 @@ const HandoffField = ({
       >
         <X size={13} aria-hidden />
       </button>
-      <p className={cn('basis-full text-right text-[0.6875rem]', error ? 'text-danger' : 'text-fg-subtle')}>{error ?? HANDOFF_HINT}</p>
+      <p className={cn('basis-full text-right text-aux', error ? 'text-danger' : 'text-fg-subtle')}>{error ?? HANDOFF_HINT}</p>
     </form>
   )
 }
@@ -195,7 +195,7 @@ const ProjectRow = ({
           </button>
         ) : null}
       </div>
-      {error ? <p className="text-danger enter-rise px-4 pb-2 text-[0.75rem] md:pl-[4.25rem]">{error}</p> : null}
+      {error ? <p className="text-danger enter-rise px-4 pb-2 text-aux md:pl-[4.25rem]">{error}</p> : null}
     </li>
   )
 }
@@ -275,13 +275,13 @@ export const LabProjectsSection = ({ projects: initial, canEdit }: { projects: L
       flush
       description={
         canEdit
-          ? 'What a subject belongs to. The hand-off is where `croft handoff` sends its todos when no --to is given. Drag to reorder.'
-          : 'What a subject belongs to, and where its todos are handed off to. Only an administrator can change them.'
+          ? 'What a subject belongs to, and where its todos are sent. Drag to reorder.'
+          : 'What a subject belongs to, and where its todos are sent. Only an administrator can change them.'
       }
-      footer={message ? <p className="text-danger enter-rise text-[0.75rem]">{message}</p> : undefined}
+      footer={message ? <p className="text-danger enter-rise text-aux">{message}</p> : undefined}
     >
       {projects.length === 0 ? (
-        <p className="text-fg-subtle px-4 py-4 text-[0.75rem]">No projects yet.</p>
+        <p className="text-fg-subtle px-4 py-4 text-aux">No projects yet.</p>
       ) : (
         <DndContext id="lab-projects" sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <SortableContext items={projects.map((p) => p.id)} strategy={verticalListSortingStrategy}>

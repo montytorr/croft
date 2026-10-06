@@ -24,7 +24,7 @@ export const ProjectLabel = ({
   return (
     <span
       className={cn(
-        'text-fg-muted inline-flex h-[1.25rem] max-w-full shrink-0 items-center gap-1.5 rounded-[5px] border px-1.5 text-[0.6875rem] leading-none font-medium',
+        'text-fg-muted inline-flex h-6 max-w-full shrink-0 items-center gap-1.5 rounded-[5px] border px-1.5 text-aux leading-none font-medium',
         active && 'text-fg',
         className,
       )}

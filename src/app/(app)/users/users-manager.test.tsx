@@ -268,7 +268,7 @@ describe('UsersManager password reset and email (v0.5)', () => {
     await render(false)
     const card = cardOf('other@example.test')
     expect(buttonNamed(card, 'Send a reset link').disabled).toBe(true)
-    expect(card.textContent).toContain('Email is not set up on this Croft: set RESEND_API_KEY and CROFT_MAIL_FROM.')
+    expect(card.textContent).toContain('Email is not set up here, so reset links cannot be sent.')
   })
 
   it('explains a refusal from the server next to the button', async () => {
@@ -276,7 +276,7 @@ describe('UsersManager password reset and email (v0.5)', () => {
     await render(true)
     const card = cardOf('other@example.test')
     await click(buttonNamed(card, 'Send a reset link'))
-    expect(card.querySelector('[role="alert"]')?.textContent).toContain('Email is not set up on this Croft')
+    expect(card.querySelector('[role="alert"]')?.textContent).toContain('Email is not set up here')
 
     mutateMock.mockResolvedValue({ ok: false, error: 'The email could not be sent.', code: 'mail_send_failed' })
     await click(buttonNamed(card, 'Send a reset link'))

@@ -59,13 +59,13 @@ export const DeleteSubjectDialog = ({
           void confirm()
         }}
       >
-        <p className="text-fg-subtle flex items-center gap-1.5 text-[0.6875rem]">
+        <p className="text-fg-subtle flex items-center gap-1.5 text-aux">
           <Trash2 size={11} aria-hidden /> Delete {subjectRef}
         </p>
         <h2 id="delete-title" className="font-display headline text-fg mt-2 text-[1.125rem] leading-snug">
           Delete “{subjectTitle}”?
         </h2>
-        <div id="delete-body" className="text-fg-muted mt-2 flex flex-col gap-2 text-[0.8125rem] leading-relaxed">
+        <div id="delete-body" className="text-fg-muted mt-2 flex flex-col gap-2 text-ui leading-relaxed">
           <p>
             This removes the subject, its {plural(todos, 'todo')}, its log, human notes and files. Tasks handed off to another
             tracker stay there.
@@ -73,7 +73,7 @@ export const DeleteSubjectDialog = ({
           <p className="text-fg font-medium">This cannot be undone.</p>
         </div>
 
-        <label className="text-fg-muted mt-4 flex flex-col gap-1.5 text-[0.75rem]">
+        <label className="text-fg-muted mt-4 flex flex-col gap-1.5 text-aux">
           <span>
             Type <span className="text-fg font-mono">{subjectRef}</span> to confirm
           </span>
@@ -83,7 +83,7 @@ export const DeleteSubjectDialog = ({
             autoComplete="off"
             spellCheck={false}
             placeholder={subjectRef}
-            className="border-border bg-surface-raised/40 text-fg placeholder:text-fg-subtle focus-visible:ring-ring/40 h-[2rem] rounded-md border px-2 font-mono text-[0.8125rem] outline-none focus-visible:ring-2"
+            className="border-border bg-surface-raised/40 text-fg placeholder:text-fg-subtle focus-visible:ring-ring/40 h-[2rem] rounded-md border px-2 font-mono text-ui outline-none focus-visible:ring-2"
           />
         </label>
 

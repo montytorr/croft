@@ -52,7 +52,7 @@ const Lane = ({ stage, subjects }: { stage: Stage; subjects: SubjectSummary[] })
     />
     <header className="flex h-11 shrink-0 items-center gap-2 px-3.5 pt-1">
       <StageGlyph stage={stage} size={14} />
-      <span className="text-fg truncate text-[0.8125rem] font-medium">{stage.name}</span>
+      <span className="text-fg truncate text-ui font-medium">{stage.name}</span>
       <ColumnCount count={subjects.length} />
     </header>
     <DropList dropId={stage.id} count={subjects.length} className="min-h-0 flex-1 gap-2 overscroll-contain px-2 pb-3">

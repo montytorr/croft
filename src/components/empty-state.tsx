@@ -37,7 +37,7 @@ export const EmptyState = ({
     )}
   >
     {compact ? null : (
-      <svg viewBox="3 4 26 24" className="h-8 w-auto" aria-hidden>
+      <svg viewBox="3 4 26 24" className="h-10 w-auto" aria-hidden>
         {RIG_PATHS.map((d, i) => (
           <path
             key={d}
@@ -52,8 +52,8 @@ export const EmptyState = ({
         ))}
       </svg>
     )}
-    <Title className={cn('text-fg-muted font-medium', compact ? 'text-[0.75rem]' : 'text-[0.8125rem]')}>{title}</Title>
-    {hint ? <p className="text-fg-subtle max-w-sm text-[0.75rem] leading-relaxed">{hint}</p> : null}
+    <Title className={cn('text-fg-muted font-medium', compact ? 'text-aux' : 'text-ui')}>{title}</Title>
+    {hint ? <p className="text-fg-subtle max-w-sm text-aux leading-relaxed">{hint}</p> : null}
     {action ? <div className="mt-1 flex items-center gap-2">{action}</div> : null}
   </div>
 )

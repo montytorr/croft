@@ -38,7 +38,7 @@ const Loading = () => (
           <div key={i} className="flex flex-col gap-1.5">
             <span className="skeleton h-1.5 w-14 rounded-full" />
             {Array.from({ length: rows }, (_, r) => (
-              <span key={r} className="flex h-[1.75rem] items-center gap-2">
+              <span key={r} className="flex h-9 items-center gap-2">
                 <span className="skeleton size-3 rounded-full" />
                 <span className="skeleton h-2 rounded-full" style={{ width: `${[60, 44, 52][r]}%` }} />
               </span>

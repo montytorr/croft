@@ -125,7 +125,7 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
           <button
             type="button"
             onClick={() => setExpanded(anyCollapsed ? new Set(allLong) : new Set())}
-            className="text-fg-subtle hover:text-fg hover:bg-surface-hover -mr-1.5 ml-auto rounded px-1.5 py-px text-[0.6875rem] font-normal tracking-normal normal-case transition-colors duration-[var(--dur-1)]"
+            className="text-fg-subtle hover:text-fg hover:bg-surface-hover -mr-1.5 ml-auto rounded px-1.5 py-px text-aux font-normal tracking-normal normal-case transition-colors duration-[var(--dur-1)]"
           >
             {anyCollapsed ? 'Expand all' : 'Collapse all'}
           </button>
@@ -145,7 +145,7 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit()
           }}
           placeholder="What did you try, find, or decide? Dead ends count."
-          className="text-fg placeholder:text-fg-subtle block max-h-[40vh] min-h-[3.625rem] w-full resize-y bg-transparent px-3 py-2.5 text-[0.8125rem] leading-relaxed outline-none"
+          className="text-fg placeholder:text-fg-subtle block max-h-[40vh] min-h-[3.625rem] w-full resize-y bg-transparent px-3 py-2.5 text-ui leading-relaxed outline-none"
         />
 
         <div className="border-border/70 flex items-center gap-2 border-t px-2 py-1.5">
@@ -159,7 +159,7 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
               value={kind}
               onChange={(e) => setKind(e.target.value as NoteKind)}
               aria-label="Note kind"
-              className="hover:bg-surface-raised focus-visible:border-accent cursor-pointer appearance-none rounded-md border border-transparent bg-transparent py-1 pr-5 pl-4 text-[0.75rem] outline-none transition-colors"
+              className="hover:bg-surface-raised focus-visible:border-accent cursor-pointer appearance-none rounded-md border border-transparent bg-transparent py-1 pr-5 pl-4 text-aux outline-none transition-colors"
               style={{ color: toneOf(kind) }}
             >
               {NOTE_KINDS.map((k) => (
@@ -179,7 +179,7 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
             </svg>
           </div>
 
-          <span className="text-fg-subtle ml-auto hidden text-[0.6875rem] sm:block">
+          <span className="text-fg-subtle ml-auto hidden text-aux sm:block">
             <kbd className="kbd inline-flex">⌘</kbd>
             <kbd className="kbd ml-0.5 inline-flex">↵</kbd>
           </span>
@@ -219,16 +219,16 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
                 />
 
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline gap-2 text-[0.6875rem]">
+                  <div className="flex items-baseline gap-2 text-aux">
                     <span className="font-medium" style={{ color: toneOf(note.kind) }}>
                       {note.kind}
                     </span>
                     <span
-                      className={note.actor_type === 'agent' ? 'text-fg-muted font-mono text-[0.65625rem]' : 'text-fg-subtle'}
+                      className={note.actor_type === 'agent' ? 'text-fg-muted font-mono text-aux' : 'text-fg-subtle'}
                     >
                       {note.actor_id}
                     </span>
-                    <span className="text-fg-subtle/80 tabular ml-auto shrink-0" title={`Entry ${ordinal}`}>
+                    <span className="text-fg-subtle tabular ml-auto shrink-0" title={`Entry ${ordinal}`}>
                       #{ordinal}
                     </span>
                     <RelativeTime iso={note.created_at} className="text-fg-subtle tabular shrink-0" />
@@ -236,7 +236,7 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
 
                   <div
                     className={cn(
-                      'mt-0.5 text-[0.8125rem]',
+                      'mt-0.5 text-ui',
                       !isOpen && long && 'line-clamp-3',
                     )}
                   >
@@ -247,14 +247,14 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
                     <button
                       type="button"
                       onClick={() => toggleExpanded(note.id)}
-                      className="text-fg-subtle hover:text-fg mt-0.5 text-[0.6875rem] transition-colors duration-[var(--dur-1)]"
+                      className="text-fg-subtle hover:text-fg mt-0.5 text-aux transition-colors duration-[var(--dur-1)]"
                     >
                       {isOpen ? 'Show less' : 'Show more'}
                     </button>
                   )}
 
                   {note.facts && note.facts.length > 0 && (
-                    <ul className="text-fg-muted mt-1.5 flex flex-col gap-0.5 text-[0.75rem]">
+                    <ul className="text-fg-muted mt-1.5 flex flex-col gap-0.5 text-aux">
                       {note.facts.map((f) => (
                         <li key={f} className="flex gap-1.5">
                           <span className="text-fg-subtle select-none">·</span>

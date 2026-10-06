@@ -11,9 +11,9 @@ import { LockMark } from './visibility'
 
 const Counts = ({ todos }: { todos: SubjectSummary['todos'] }) =>
   todos.open + todos.done === 0 ? (
-    <span className="text-fg-subtle/70 text-[0.6875rem]">no todos</span>
+    <span className="text-fg-subtle text-aux">no todos</span>
   ) : (
-    <span className="text-fg-subtle text-[0.6875rem] tabular-nums" title={`${todos.open} open, ${todos.done} done`}>
+    <span className="text-fg-subtle text-aux tabular-nums" title={`${todos.open} open, ${todos.done} done`}>
       <span className="text-fg-muted font-medium">{todos.open}</span> open
       <span className="mx-1 opacity-50">·</span>
       {todos.done} done
@@ -24,44 +24,47 @@ const Row = ({ subject }: { subject: SubjectSummary }) => (
   <li>
     <Link
       href={`/subjects/${subject.number}`}
-      className="row-hover group flex min-h-[3rem] flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 md:flex-nowrap md:px-6"
+      className="row-hover group flex flex-col gap-1.5 px-4 py-3 lg:min-h-[3.5rem] lg:flex-row lg:items-center lg:gap-x-3 lg:px-6 lg:py-2"
     >
-      <span className="text-fg-subtle w-[3rem] shrink-0 font-mono text-[0.6875rem] tabular-nums">{subject.ref}</span>
+      <span className="text-fg-subtle hidden w-[3rem] shrink-0 font-mono text-aux tabular-nums lg:block">{subject.ref}</span>
       <span className="min-w-0 flex-1">
-        <span className="flex min-w-0 items-center gap-1.5">
+        <span className="flex min-w-0 items-start gap-1.5 lg:items-center">
           <LockMark visibility={subject.visibility} members={subject.members.length} />
-          <span className="text-fg truncate text-[0.875rem] font-medium">{subject.title}</span>
+          <span className="text-fg line-clamp-2 text-ui font-medium text-pretty lg:line-clamp-1">{subject.title}</span>
         </span>
         {subject.conclusion ? (
-          <span className="writeup-sm text-fg-muted block truncate !text-[0.8125rem]">{subject.conclusion}</span>
+          <span className="writeup-sm text-fg-muted mt-0.5 line-clamp-2 block lg:line-clamp-1 !text-ui">{subject.conclusion}</span>
         ) : null}
       </span>
-      {subject.project ? (
-        <span className="hidden max-w-[9rem] shrink-0 items-center sm:flex" title={`Project: ${subject.project.name}`}>
-          <ProjectLabel project={subject.project} />
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-1 lg:contents">
+        <span className="text-fg-subtle font-mono text-aux tabular-nums lg:hidden">{subject.ref}</span>
+        {subject.project ? (
+          <span className="flex max-w-[9rem] shrink-0 items-center" title={`Project: ${subject.project.name}`}>
+            <ProjectLabel project={subject.project} />
+          </span>
+        ) : null}
+        {subject.tags.length > 0 ? (
+          <span className="hidden max-w-[16rem] shrink items-center gap-1 overflow-hidden xl:flex">
+            {subject.tags.slice(0, 3).map((tag) => (
+              <TagChip key={tag.id} tag={tag} />
+            ))}
+          </span>
+        ) : null}
+        <span className="shrink-0 lg:w-[7.5rem] lg:text-right">
+          <Counts todos={subject.todos} />
         </span>
-      ) : null}
-      {subject.tags.length > 0 ? (
-        <span className="hidden max-w-[16rem] shrink items-center gap-1 overflow-hidden lg:flex">
-          {subject.tags.slice(0, 3).map((tag) => (
-            <TagChip key={tag.id} tag={tag} />
-          ))}
+        <span className="flex shrink-0 items-center gap-1.5 lg:w-[7.5rem]" title={subject.owner ? `Owner: ${subject.owner.name}` : 'No owner'}>
+          {subject.owner ? (
+            <>
+              <Avatar name={subject.owner.name} size={20} />
+              <span className="text-fg-muted truncate text-aux">{subject.owner.name}</span>
+            </>
+          ) : (
+            <span className="text-fg-subtle text-aux">unowned</span>
+          )}
         </span>
-      ) : null}
-      <span className="w-[6.5rem] shrink-0 text-right">
-        <Counts todos={subject.todos} />
+        <RelativeTime iso={subject.updated_at} className="text-fg-subtle shrink-0 text-aux lg:w-[5rem] lg:text-right" />
       </span>
-      <span className="flex w-[7.5rem] shrink-0 items-center gap-1.5" title={subject.owner ? `Owner: ${subject.owner.name}` : 'No owner'}>
-        {subject.owner ? (
-          <>
-            <Avatar name={subject.owner.name} size={18} />
-            <span className="text-fg-muted truncate text-[0.75rem]">{subject.owner.name}</span>
-          </>
-        ) : (
-          <span className="text-fg-subtle/70 text-[0.75rem]">unowned</span>
-        )}
-      </span>
-      <RelativeTime iso={subject.updated_at} className="text-fg-subtle hidden w-[4.5rem] shrink-0 text-right text-[0.6875rem] sm:block" />
     </Link>
   </li>
 )
@@ -82,14 +85,14 @@ export const LabList = ({ subjects, stages }: { subjects: SubjectSummary[]; stag
             style={{ boxShadow: `inset 3px 0 0 ${stageTone(stage)}` }}
           >
             <StageGlyph stage={stage} size={14} />
-            <span className="text-fg text-[0.8125rem] font-medium">{stage.name}</span>
-            <span className="text-fg-subtle text-[0.6875rem] tabular-nums">{here.length}</span>
-            <span className="text-fg-subtle ml-auto text-[0.65625rem] tracking-[0.06em] uppercase">
+            <span className="text-fg text-ui font-medium">{stage.name}</span>
+            <span className="text-fg-subtle text-aux tabular-nums">{here.length}</span>
+            <span className="text-fg-subtle ml-auto text-micro tracking-[0.06em] uppercase">
               {CATEGORY_LABEL[stage.category]}
             </span>
           </h2>
           {here.length === 0 ? (
-            <p className="text-fg-subtle px-4 py-2.5 text-[0.75rem] md:px-6">Nothing at this stage.</p>
+            <p className="text-fg-subtle px-4 py-2.5 text-aux md:px-6">Nothing at this stage.</p>
           ) : (
             <ul className="divide-border/70 stagger divide-y">
               {here.map((subject) => (

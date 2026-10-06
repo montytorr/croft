@@ -15,7 +15,7 @@ import { VISIBILITY_HINT, VISIBILITY_LABEL } from './visibility'
 const LABEL = 'pane-label'
 
 const RowLabel = ({ children }: { children: React.ReactNode }) => (
-  <span className="text-fg-subtle w-[4rem] shrink-0 text-[0.75rem]">{children}</span>
+  <span className="text-fg-subtle w-[4rem] shrink-0 text-aux">{children}</span>
 )
 
 const ICON: Record<SubjectVisibility, typeof Lock> = { private: Lock, members: Users, lab: Globe }
@@ -80,7 +80,7 @@ const VisibilitySwitch = ({
             title={VISIBILITY_HINT[option]}
             onClick={() => onChange(option)}
             className={cn(
-              'flex h-[1.5rem] min-w-0 items-center justify-center gap-1 rounded-[5px] px-1.5 text-[0.75rem] font-medium',
+              'flex h-[1.5rem] min-w-0 items-center justify-center gap-1 rounded-[5px] px-1.5 text-aux font-medium',
               'transition-[background-color,color,box-shadow] duration-[var(--dur-1)]',
               'focus-visible:ring-ring/40 focus-visible:outline-none focus-visible:ring-2',
               'disabled:cursor-not-allowed disabled:opacity-60',
@@ -156,7 +156,7 @@ export const SubjectAccess = ({ subject }: { subject: Subject; isAdmin?: boolean
         Access
       </h2>
 
-      <div className="-mx-2 flex min-h-[1.75rem] items-center gap-2 px-2">
+      <div className="-mx-2 flex min-h-9 items-center gap-2 px-2">
         <RowLabel>Visibility</RowLabel>
         {manage && visibility !== 'lab' ? (
           // The lab is not an option here: publishing is its own confirmed step below.
@@ -164,13 +164,13 @@ export const SubjectAccess = ({ subject }: { subject: Subject; isAdmin?: boolean
         ) : (
           <span className="flex min-w-0 flex-1 items-center gap-1.5" title={VISIBILITY_HINT[visibility]}>
             <Icon size={13} aria-hidden className="text-fg-muted shrink-0" />
-            <span className="text-fg truncate text-[0.8125rem]">{VISIBILITY_LABEL[visibility]}</span>
+            <span className="text-fg truncate text-ui">{VISIBILITY_LABEL[visibility]}</span>
           </span>
         )}
       </div>
 
       {visibility === 'private' ? (
-        <p className="text-fg-subtle py-1 text-[0.75rem] leading-relaxed">
+        <p className="text-fg-subtle py-1 text-aux leading-relaxed">
           {ownerIsMe ? 'Only you see it' : `Only ${subject.owner?.name ?? 'its owner'} sees it`}, its todos and its log.
           {manage ? ' Switch to Members to share it with a few people.' : ''}
         </p>
@@ -181,13 +181,13 @@ export const SubjectAccess = ({ subject }: { subject: Subject; isAdmin?: boolean
           <RowLabel>Members</RowLabel>
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             {members.length === 0 ? (
-              <span className="text-fg-subtle text-[0.75rem]">Nobody yet besides the owner</span>
+              <span className="text-fg-subtle text-aux">Nobody yet besides the owner</span>
             ) : (
               <ul className="flex flex-col gap-0.5" aria-label="Members">
                 {members.map((m) => (
                   <li key={m.id} className="group/member flex min-h-[1.5rem] items-center gap-1.5">
                     <Avatar name={m.name} size={16} />
-                    <span className="text-fg min-w-0 flex-1 truncate text-[0.8125rem]">
+                    <span className="text-fg min-w-0 flex-1 truncate text-ui">
                       {m.name}
                       {m.id === currentUserId ? <span className="text-fg-subtle"> (you)</span> : null}
                     </span>
@@ -198,7 +198,7 @@ export const SubjectAccess = ({ subject }: { subject: Subject; isAdmin?: boolean
                         onClick={() => remove(m.id)}
                         aria-label={`Remove ${m.name}`}
                         title={`Remove ${m.name}`}
-                        className="text-fg-subtle hover:text-fg rounded p-0.5 opacity-0 transition-opacity group-hover/member:opacity-100 focus-visible:opacity-100"
+                        className="text-fg-subtle hover:text-fg rounded p-0.5 opacity-0 pointer-coarse:opacity-100 transition-opacity group-hover/member:opacity-100 focus-visible:opacity-100"
                       >
                         <X size={11} aria-hidden />
                       </button>
@@ -215,7 +215,7 @@ export const SubjectAccess = ({ subject }: { subject: Subject; isAdmin?: boolean
                   setAdding((v) => !v)
                   setQuery('')
                 }}
-                className="text-fg-subtle hover:text-fg hover:border-border-strong border-border flex h-[1.25rem] items-center gap-1 self-start rounded-full border border-dashed px-2 text-[0.6875rem] transition-colors"
+                className="text-fg-subtle hover:text-fg hover:border-border-strong border-border flex h-[1.25rem] items-center gap-1 self-start rounded-full border border-dashed px-2 text-aux transition-colors"
               >
                 <UserPlus size={10} aria-hidden />
                 {adding ? 'Done' : 'Add people'}
@@ -239,7 +239,7 @@ export const SubjectAccess = ({ subject }: { subject: Subject; isAdmin?: boolean
             }}
             placeholder="Find a person…"
             aria-label="Find a person"
-            className="text-fg placeholder:text-fg-subtle h-[1.875rem] w-full rounded-md bg-transparent px-2 text-[0.8125rem] outline-none"
+            className="text-fg placeholder:text-fg-subtle h-10 w-full rounded-md bg-transparent px-2 text-ui outline-none"
           />
           <ul className="border-border flex max-h-[14rem] flex-col overflow-y-auto border-t pt-1" role="group" aria-label="People">
             {candidates.map((p) => {
@@ -252,7 +252,7 @@ export const SubjectAccess = ({ subject }: { subject: Subject; isAdmin?: boolean
                     aria-checked={on}
                     disabled={busy}
                     onClick={() => (on ? remove(p.id) : add(p.id))}
-                    className="hover:bg-surface-hover flex h-[1.875rem] w-full items-center gap-2 rounded-md px-2 text-left text-[0.8125rem] transition-colors"
+                    className="hover:bg-surface-hover flex h-10 w-full items-center gap-2 rounded-md px-2 text-left text-ui transition-colors"
                   >
                     <span
                       className={cn(
@@ -272,7 +272,7 @@ export const SubjectAccess = ({ subject }: { subject: Subject; isAdmin?: boolean
               )
             })}
             {candidates.length === 0 ? (
-              <li className="text-fg-subtle px-2 py-1.5 text-[0.75rem]">
+              <li className="text-fg-subtle px-2 py-1.5 text-aux">
                 {q ? 'Nobody by that name.' : 'Nobody else to add.'}
               </li>
             ) : null}
@@ -285,7 +285,7 @@ export const SubjectAccess = ({ subject }: { subject: Subject; isAdmin?: boolean
           <Button size="sm" variant="secondary" disabled={busy} onClick={() => setPublishing(true)} className="self-start px-3">
             <Globe size={13} aria-hidden /> Publish to the lab
           </Button>
-          <p className="text-fg-subtle text-[0.6875rem] leading-relaxed">One-way: a published subject cannot be made private again.</p>
+          <p className="text-fg-subtle text-aux leading-relaxed">One-way: a published subject cannot be made private again.</p>
         </div>
       ) : null}
 

@@ -52,13 +52,13 @@ export const TakeBackDialog = ({
           void confirm()
         }}
       >
-        <p className="text-fg-subtle flex items-center gap-1.5 text-[0.6875rem]">
+        <p className="text-fg-subtle flex items-center gap-1.5 text-aux">
           <Undo2 size={11} aria-hidden /> Take back {todoRef}
         </p>
         <h2 id="take-back-title" className="font-display headline text-fg mt-2 text-[1.125rem] leading-snug">
           Take {todoRef} back from {handoff.tracker}?
         </h2>
-        <p id="take-back-body" className="text-fg-muted mt-2 text-[0.8125rem] leading-relaxed">
+        <p id="take-back-body" className="text-fg-muted mt-2 text-ui leading-relaxed">
           {todoRef} stops following <span className="text-fg font-mono">{handoff.ref}</span> and is worked here again.
           Nothing changes in {handoff.tracker}: that task stays where it is.
         </p>

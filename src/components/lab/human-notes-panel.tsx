@@ -60,7 +60,7 @@ const Composer = ({
         className={cn(FIELD, 'max-h-[50vh] min-h-[4.5rem]')}
       />
       <div className="border-border/70 flex items-center gap-2 border-t px-2 py-1">
-        <span className="text-fg-subtle text-[0.6875rem]">Markdown · ⌘↵</span>
+        <span className="text-fg-subtle text-aux">Markdown · ⌘↵</span>
         <span className="ml-auto" />
         {onCancel ? (
           <Button size="sm" variant="ghost" onClick={onCancel} className="px-2.5 font-normal">
@@ -144,14 +144,14 @@ export const HumanNotesPanel = ({
           submitLabel="Add note"
           onSubmit={add}
         />
-        <p className="text-fg-subtle px-0.5 text-[0.6875rem] leading-relaxed">
+        <p className="text-fg-subtle px-0.5 text-aux leading-relaxed">
           Notes are yours: edit or delete them any time. What was found or tried belongs in the log; the account of the
           subject, in the write-up.
         </p>
       </div>
 
       {notes.length === 0 ? (
-        <p className="text-fg-subtle border-border rounded-lg border border-dashed px-4 py-8 text-center text-[0.8125rem]">
+        <p className="text-fg-subtle border-border rounded-lg border border-dashed px-4 py-8 text-center text-ui">
           No notes yet.
         </p>
       ) : (
@@ -161,19 +161,19 @@ export const HumanNotesPanel = ({
             const edited = note.updated_at && note.updated_at !== note.created_at
             return (
               <li key={note.id} className="bg-surface border-border group/note relative rounded-lg border">
-                <header className="flex h-8 items-center gap-2 px-3 pt-1">
+                <header className="flex h-10 items-center gap-2 px-3 pt-1">
                   <Avatar name={note.author.name} size={16} />
-                  <span className="text-fg truncate text-[0.75rem] font-medium">
+                  <span className="text-fg truncate text-aux font-medium">
                     {note.author.name}
                     {mine ? <span className="text-fg-subtle font-normal"> (you)</span> : null}
                   </span>
-                  <RelativeTime iso={note.created_at} className="text-fg-subtle shrink-0 text-[0.6875rem]" />
+                  <RelativeTime iso={note.created_at} className="text-fg-subtle shrink-0 text-aux" />
                   {edited ? (
-                    <span className="text-fg-subtle hidden text-[0.6875rem] sm:inline">
+                    <span className="text-fg-subtle hidden text-aux sm:inline">
                       · edited <RelativeTime iso={note.updated_at} />
                     </span>
                   ) : null}
-                  <span className="ml-auto flex items-center gap-0.5 opacity-0 transition-opacity group-hover/note:opacity-100 group-focus-within/note:opacity-100">
+                  <span className="ml-auto flex items-center gap-0.5 opacity-0 pointer-coarse:opacity-100 transition-opacity group-hover/note:opacity-100 group-focus-within/note:opacity-100">
                     {mine && editing !== note.id ? (
                       <button
                         type="button"

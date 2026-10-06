@@ -3,9 +3,9 @@ const Loading = () => (
   <div className="flex h-dvh flex-col">
     <div className="page-header border-border h-[2.75rem] shrink-0 border-b" />
     <div className="border-border/70 flex h-[2.625rem] shrink-0 items-center gap-2 border-b px-3 sm:px-4">
-      <span className="skeleton h-8 flex-1 rounded-md" />
-      <span className="skeleton hidden h-7 w-24 rounded-md sm:block" />
-      <span className="skeleton hidden h-7 w-24 rounded-md sm:block" />
+      <span className="skeleton h-10 flex-1 rounded-md" />
+      <span className="skeleton hidden h-9 w-24 rounded-md sm:block" />
+      <span className="skeleton hidden h-9 w-24 rounded-md sm:block" />
     </div>
     <div className="flex-1 overflow-hidden">
       {Array.from({ length: 8 }).map((_, i) => (

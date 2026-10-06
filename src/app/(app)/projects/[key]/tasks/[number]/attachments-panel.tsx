@@ -86,9 +86,9 @@ const Viewer = ({
         onClick={(e) => e.stopPropagation()}
       >
         <span className="text-fg-subtle"><KindIcon kind={file.kind} /></span>
-        <span className="text-fg min-w-0 flex-1 truncate text-[0.78125rem]">{file.filename}</span>
+        <span className="text-fg min-w-0 flex-1 truncate text-ui">{file.filename}</span>
         {file.kind === 'html' ? (
-          <span className="text-fg-subtle hidden text-[0.6875rem] sm:inline" title="Framed with no scripts and no access to Croft">
+          <span className="text-fg-subtle hidden text-aux sm:inline" title="Framed with no scripts and no access to Croft">
             sandboxed · scripts off
           </span>
         ) : null}
@@ -185,7 +185,7 @@ const Tile = ({
         </span>
       )}
       {file.kind !== 'image' ? (
-        <span className="bg-surface/90 text-fg-muted border-border absolute top-1.5 left-1.5 inline-flex h-[1.125rem] items-center gap-1 rounded border px-1 text-[0.625rem] font-medium tracking-[0.06em] uppercase">
+        <span className="bg-surface/90 text-fg-muted border-border absolute top-1.5 left-1.5 inline-flex h-[1.125rem] items-center gap-1 rounded border px-1 text-micro font-medium tracking-[0.06em] uppercase">
           <KindIcon kind={file.kind} size={9} />
           {file.kind}
         </span>
@@ -193,8 +193,8 @@ const Tile = ({
     </button>
     <span className="border-border flex min-w-0 items-center gap-1 border-t py-1 pr-1 pl-2">
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className="text-fg min-w-0 truncate text-[0.71875rem]" title={file.filename}>{file.filename}</span>
-        <span className="text-fg-subtle tabular truncate text-[0.6875rem]">
+        <span className="text-fg min-w-0 truncate text-aux" title={file.filename}>{file.filename}</span>
+        <span className="text-fg-subtle tabular truncate text-aux">
           {formatBytes(file.size_bytes)} · {file.uploaded_by}
         </span>
       </span>
@@ -321,7 +321,7 @@ export const AttachmentsPanel = ({
           type="button"
           onClick={() => input.current?.click()}
           disabled={pending > 0}
-          className="text-fg-subtle hover:text-fg ml-auto inline-flex items-center gap-1.5 text-[0.71875rem] transition-colors duration-[var(--dur-1)] disabled:opacity-50"
+          className="text-fg-subtle hover:text-fg ml-auto inline-flex items-center gap-1.5 text-aux transition-colors duration-[var(--dur-1)] disabled:opacity-50"
         >
           <Paperclip size={12} aria-hidden />
           {pending > 0 ? `Uploading${pending > 1 ? ` ${pending}` : ''}…` : dragging ? 'Drop to attach' : 'Attach'}
@@ -329,11 +329,11 @@ export const AttachmentsPanel = ({
       </div>
 
       {error && (
-        <p className="enter-rise text-danger bg-danger-subtle mb-2 rounded-md px-2 py-1.5 text-[0.6875rem]">{error}</p>
+        <p className="enter-rise text-danger bg-danger-subtle mb-2 rounded-md px-2 py-1.5 text-aux">{error}</p>
       )}
 
       {attachments.length === 0 ? (
-        <p className="text-fg-subtle pb-1 text-[0.71875rem]">
+        <p className="text-fg-subtle pb-1 text-aux">
           Drop a screenshot, a PDF or an HTML report here. HTML is shown sandboxed, with scripts off.
         </p>
       ) : null}
@@ -362,12 +362,12 @@ export const AttachmentsPanel = ({
               <button
                 type="button"
                 onClick={() => void download(a)}
-                className="hover:text-accent min-w-0 flex-1 truncate text-left text-[0.75rem] transition-colors duration-[var(--dur-1)]"
+                className="hover:text-accent min-w-0 flex-1 truncate text-left text-aux transition-colors duration-[var(--dur-1)]"
                 title={`Download ${a.filename}`}
               >
                 {a.filename}
               </button>
-              <span className="text-fg-subtle tabular hidden shrink-0 text-[0.6875rem] sm:inline">
+              <span className="text-fg-subtle tabular hidden shrink-0 text-aux sm:inline">
                 {formatBytes(a.size_bytes)} · {a.uploaded_by}
               </span>
               <button

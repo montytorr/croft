@@ -30,7 +30,7 @@ const KindBadge = ({ kind }: { kind: string }) => {
   const { label, color } = metaOf(kind)
   return (
     <span
-      className="inline-flex h-[1rem] shrink-0 items-center rounded-full border px-1.5 text-[0.625rem] font-medium tracking-[0.04em] uppercase"
+      className="inline-flex h-5 shrink-0 items-center rounded-full border px-1.5 text-micro font-medium tracking-[0.04em] uppercase"
       style={{
         color,
         backgroundColor: `color-mix(in oklab, ${color} 10%, transparent)`,
@@ -70,7 +70,7 @@ const Row = ({ row, terms }: { row: SearchAllRow; terms: string[] }) => {
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-fg-subtle shrink-0 font-mono text-[0.6875rem]">{row.ref}</span>
+          <span className="text-fg-subtle shrink-0 font-mono text-aux">{row.ref}</span>
           {row.project_key && (
             <span className="flex shrink-0 items-center gap-1">
               <ProjectIcon size={11} projectKey={row.project_key} />
@@ -78,40 +78,29 @@ const Row = ({ row, terms }: { row: SearchAllRow; terms: string[] }) => {
           )}
           <KindBadge kind={row.kind} />
           {row.answered && (
-            <span className="text-status-done text-[0.6875rem]">
+            <span className="text-status-done text-aux">
               {(row.kind as string) === 'subject' ? 'concluded' : 'answered'}
             </span>
           )}
           {row.status === 'superseded' && (
-            <span className="text-danger text-[0.6875rem]">superseded</span>
+            <span className="text-danger text-aux">superseded</span>
           )}
         </div>
 
-        <p className="text-fg mt-1 text-[0.8125rem] leading-snug">
+        <p className="text-fg mt-1 text-ui leading-snug">
           <Highlight text={row.title} terms={terms} />
         </p>
 
         {row.subtitle && (
-          <p className="text-fg-subtle mt-0.5 truncate text-[0.6875rem]">
+          <p className="text-fg-muted mt-0.5 line-clamp-2 text-aux">
             <Highlight text={row.subtitle} terms={terms} />
           </p>
         )}
       </div>
-
-      {/* What opening it costs, in the same units `croft check` prints. A
-          bare "~19" read as a minus sign and a mystery number. */}
-      {row.body_bytes > 0 && (
-        <span
-          className="text-fg-subtle shrink-0 self-center text-[0.6875rem] tabular-nums"
-          title="Roughly how many tokens it takes to read this in full"
-        >
-          ~{Math.ceil(row.body_bytes / 4)} tok
-        </span>
-      )}
     </div>
   )
 
-  const className = 'border-border/70 block border-b px-4 py-2.5 last:border-0'
+  const className = 'border-border/70 block border-b px-4 py-3 last:border-0'
 
   return href ? (
     <Link href={href} className={cn(className, 'row-hover')}>

@@ -58,13 +58,13 @@ export const ConclusionDialog = ({
         className="bg-surface border-border enter-sheet raised-lg relative w-full max-w-lg rounded-xl border p-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="text-fg-subtle flex items-center gap-1.5 text-[0.6875rem]">
+        <p className="text-fg-subtle flex items-center gap-1.5 text-aux">
           Moving to <StageBadge stage={stage} className="text-fg-muted font-medium" />
         </p>
         <h2 id="conclusion-title" className="font-display headline text-fg mt-2 text-[1.125rem] leading-snug">
           {dropped ? 'Why is' : 'What did'} “{subjectTitle}” {dropped ? 'being dropped?' : 'conclude?'}
         </h2>
-        <p className="text-fg-muted mt-1.5 text-[0.75rem] leading-relaxed">
+        <p className="text-fg-muted mt-1.5 text-aux leading-relaxed">
           {dropped
             ? 'Say why, so the next person with the same idea starts from here rather than from scratch.'
             : 'What was learned, and what it means for the group. It is the first thing anyone reads on this subject.'}
@@ -87,7 +87,7 @@ export const ConclusionDialog = ({
         />
 
         <div className="mt-4 flex items-center gap-2">
-          <span className="text-fg-subtle hidden text-[0.6875rem] sm:block">⌘↵ to save</span>
+          <span className="text-fg-subtle hidden text-aux sm:block">⌘↵ to save</span>
           <div className="ml-auto flex gap-2">
             <Button size="sm" variant="ghost" onClick={onCancel} className="px-3">
               Cancel

@@ -136,29 +136,29 @@ const Editor = ({
           <X size={16} aria-hidden />
         </button>
         <div className="min-w-0 flex-1">
-          <p className="text-fg-subtle text-[0.6875rem]">
+          <p className="text-fg-subtle text-aux">
             Write-up · <span className="font-mono">{subjectRef}</span>
           </p>
-          <p className="text-fg truncate text-[0.875rem] font-medium">{title}</p>
+          <p className="text-fg truncate text-ui font-medium">{title}</p>
         </div>
         <button
           type="button"
           onClick={() => setPane((p) => (p === 'edit' ? 'preview' : 'edit'))}
-          className="text-fg-muted hover:text-fg flex items-center gap-1.5 text-[0.75rem] lg:hidden"
+          className="text-fg-muted hover:text-fg flex items-center gap-1.5 text-aux lg:hidden"
         >
           {pane === 'edit' ? <Eye size={14} aria-hidden /> : <PenLine size={14} aria-hidden />}
           {pane === 'edit' ? 'Preview' : 'Edit'}
         </button>
         {uploads > 0 ? (
-          <span className="text-fg-muted flex items-center gap-1.5 text-[0.6875rem]" role="status">
+          <span className="text-fg-muted flex items-center gap-1.5 text-aux" role="status">
             <Spinner size={11} /> Uploading {uploads === 1 ? 'an image' : `${uploads} images`}…
           </span>
         ) : (
-          <span className="text-fg-subtle hidden items-center gap-1 text-[0.6875rem] xl:flex" title="Paste or drop an image into the text">
+          <span className="text-fg-subtle hidden items-center gap-1 text-aux xl:flex" title="Paste or drop an image into the text">
             <ImagePlus size={12} aria-hidden /> paste an image
           </span>
         )}
-        <span className="text-fg-subtle hidden text-[0.6875rem] md:block">⌘↵ save</span>
+        <span className="text-fg-subtle hidden text-aux md:block">⌘↵ save</span>
         <Button variant="ghost" size="sm" onClick={cancel} disabled={state === 'saving'} className="hidden px-3 font-normal sm:inline-flex">
           Cancel
         </Button>
@@ -168,7 +168,7 @@ const Editor = ({
       </header>
 
       {error ? (
-        <p className="text-danger bg-danger-subtle border-border border-b px-6 py-2 text-[0.75rem]" role="alert">
+        <p className="text-danger bg-danger-subtle border-border border-b px-6 py-2 text-aux" role="alert">
           {error} {state === 'error' ? 'Nothing was saved; your text is still here.' : 'The rest of your text is untouched.'}
         </p>
       ) : null}
@@ -201,7 +201,7 @@ const Editor = ({
                 }}
                 spellCheck={false}
                 placeholder={PLACEHOLDER}
-                className="text-fg placeholder:text-fg-subtle block min-h-[70vh] w-full resize-none bg-transparent font-mono text-[0.8125rem] leading-[1.85] outline-none [field-sizing:content]"
+                className="text-fg placeholder:text-fg-subtle block min-h-[70vh] w-full resize-none bg-transparent font-mono text-ui leading-[1.85] outline-none [field-sizing:content]"
             />
           </div>
         </section>
@@ -273,11 +273,11 @@ export const WriteUp = ({
     <section aria-labelledby="writeup-heading" className="subject-paper overflow-hidden">
       <div className="border-border flex min-h-16 items-center gap-3 border-b px-5 py-3 md:px-7">
         <BookOpen size={16} aria-hidden className="text-accent shrink-0" />
-        <h2 id="writeup-heading" className="text-fg text-[0.8125rem] font-medium">
+        <h2 id="writeup-heading" className="text-fg text-ui font-medium">
           Write-up
         </h2>
-        {length ? <span className="text-fg-subtle hidden text-[0.6875rem] tabular-nums sm:inline">{length}</span> : null}
-        {savedAt ? <span className="enter-rise text-status-done text-[0.6875rem]">saved</span> : null}
+        {length ? <span className="text-fg-subtle hidden text-aux tabular-nums sm:inline">{length}</span> : null}
+        {savedAt ? <span className="enter-rise text-status-done text-aux">saved</span> : null}
         <Button
           variant={text.trim() ? 'secondary' : 'primary'}
           size="sm"
@@ -306,8 +306,8 @@ export const WriteUp = ({
           >
             <span className="bg-accent-subtle text-accent grid size-12 place-items-center rounded-2xl"><PenLine size={22} aria-hidden /></span>
             <span className="text-fg font-serif text-[1.375rem]">Every idea starts with a question.</span>
-            <span className="text-fg-muted max-w-[32ch] text-[0.8125rem] leading-relaxed">What is it, why does it matter, and what would settle it?</span>
-            <span className="text-accent mt-1 text-[0.75rem] font-medium group-hover:underline">Start your write-up →</span>
+            <span className="text-fg-muted max-w-[32ch] text-ui leading-relaxed">What is it, why does it matter, and what would settle it?</span>
+            <span className="text-accent mt-1 text-aux font-medium group-hover:underline">Start your write-up →</span>
           </button>
         )}
       </div>

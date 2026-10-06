@@ -170,7 +170,7 @@ export const CreateTask = ({
 
   // The select inside each chip is invisible, so the chip shows its focus.
   const chip =
-    'relative flex h-[1.625rem] items-center gap-1.5 rounded-md border border-border bg-surface px-2 text-[0.75rem] ' +
+    'relative flex h-9 items-center gap-1.5 rounded-md border border-border bg-surface px-2 text-aux ' +
     'text-fg-muted transition-[color,background-color,border-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease-out)] ' +
     'hover:border-border-strong hover:bg-surface-hover hover:text-fg ' +
     'focus-within:border-accent focus-within:text-fg focus-within:ring-2 focus-within:ring-ring/50'
@@ -191,7 +191,7 @@ export const CreateTask = ({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="border-border flex items-center gap-2 border-b px-4 py-2.5">
-          <span className="text-fg-subtle text-[0.6875rem]">
+          <span className="text-fg-subtle text-aux">
             {filingSubTask ? `New sub-task of ${parentRef}` : 'New todo'}
           </span>
         </div>
@@ -208,7 +208,7 @@ export const CreateTask = ({
           }}
           placeholder="Todo title"
           aria-label="Title"
-          className="placeholder:text-fg-subtle text-fg w-full bg-transparent px-4 pt-3 pb-1 text-[1rem] outline-none"
+          className="placeholder:text-fg-subtle text-fg w-full bg-transparent px-4 pt-3 pb-1 text-ui outline-none"
         />
 
         <textarea
@@ -216,17 +216,17 @@ export const CreateTask = ({
           onChange={(e) => setBody(e.target.value)}
           placeholder="Description — markdown, optional"
           rows={3}
-          className="placeholder:text-fg-subtle w-full resize-none bg-transparent px-4 pb-3 text-[0.8125rem] leading-relaxed outline-none"
+          className="placeholder:text-fg-subtle w-full resize-none bg-transparent px-4 pb-3 text-ui leading-relaxed outline-none"
         />
 
         {visibleSimilar.length > 0 && (
           <div className="border-border bg-surface-raised/50 enter-rise mx-4 mb-3 rounded-md border px-2.5 py-2">
-            <p className="text-fg-subtle mb-1.5 text-[0.6875rem]">Similar work already exists</p>
+            <p className="text-fg-subtle mb-1.5 text-aux">Similar work already exists</p>
             <ul className="flex flex-col gap-1">
               {visibleSimilar.map((s) => (
-                <li key={s.ref} className="flex items-center gap-2 text-[0.75rem]">
+                <li key={s.ref} className="flex items-center gap-2 text-aux">
                   <StatusIcon status={s.status as TaskStatus} size={12} />
-                  <code className="text-fg-subtle text-[0.6875rem]">{s.ref}</code>
+                  <code className="text-fg-subtle text-aux">{s.ref}</code>
                   <span className="text-fg-muted min-w-0 truncate">{s.title}</span>
                 </li>
               ))}
@@ -237,7 +237,7 @@ export const CreateTask = ({
         <div className="border-border bg-surface-raised/40 flex flex-wrap items-center gap-1.5 border-t px-4 py-2.5">
           {filingSubTask ? null : (
             <label className={cn(chip, 'max-w-full min-w-0')}>
-              <span className="text-fg-subtle font-mono text-[0.6875rem]">{chosen?.ref ?? 'S-?'}</span>
+              <span className="text-fg-subtle font-mono text-aux">{chosen?.ref ?? 'S-?'}</span>
               <span className="max-w-[16rem] min-w-0 truncate">
                 {chosen?.title ?? (subjects === null ? 'Loading subjects…' : noSubjects ? 'No subjects yet' : 'Pick a subject')}
               </span>
@@ -328,7 +328,7 @@ export const CreateTask = ({
             size="sm"
             onClick={() => void submit()}
             disabled={!ready || pending}
-            className="ml-auto h-[1.625rem] px-3 text-[0.75rem]"
+            className="ml-auto h-9 px-3 text-aux"
           >
             {pending ? (
               <span className="inline-flex items-center gap-1.5">
@@ -342,7 +342,7 @@ export const CreateTask = ({
         </div>
 
         {error && (
-          <p className="text-danger bg-danger-subtle/60 border-border enter-rise border-t px-4 py-2 text-[0.75rem]" role="alert">
+          <p className="text-danger bg-danger-subtle/60 border-border enter-rise border-t px-4 py-2 text-aux" role="alert">
             {error}
           </p>
         )}

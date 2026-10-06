@@ -23,18 +23,18 @@ import { useStageMove } from './use-stage-move'
 export const LABEL = 'pane-label'
 
 const ROW =
-  'row-hover group/edit relative -mx-2 flex min-h-[1.75rem] items-center gap-2 rounded-md px-2 ' +
+  'row-hover group/edit relative -mx-2 flex min-h-9 items-center gap-2 rounded-md px-2 ' +
   'has-[:focus-visible]:bg-surface-hover has-[:focus-visible]:shadow-[inset_2px_0_0_var(--accent)]'
 
 const RowLabel = ({ children }: { children: React.ReactNode }) => (
-  <span className="text-fg-subtle w-[3.5rem] shrink-0 text-[0.75rem]">{children}</span>
+  <span className="text-fg-subtle w-[3.5rem] shrink-0 text-aux">{children}</span>
 )
 
 const Affordance = () => (
   <ChevronsUpDown
     size={11}
     aria-hidden
-    className="text-fg-subtle ml-auto shrink-0 opacity-0 transition-opacity group-hover/edit:opacity-100 group-has-[:focus-visible]/edit:opacity-100"
+    className="text-fg-subtle ml-auto shrink-0 opacity-0 pointer-coarse:opacity-100 transition-opacity group-hover/edit:opacity-100 group-has-[:focus-visible]/edit:opacity-100"
   />
 )
 
@@ -141,7 +141,7 @@ export const SubjectProperties = ({
           <RowLabel>Stage</RowLabel>
           <span className="flex min-w-0 flex-1 items-center gap-1.5">
             <StageGlyph stage={subject.stage} size={14} />
-            <span className="text-fg truncate text-[0.8125rem]">{subject.stage.name}</span>
+            <span className="text-fg truncate text-ui">{subject.stage.name}</span>
           </span>
           <Affordance />
           <select
@@ -168,7 +168,7 @@ export const SubjectProperties = ({
               {subject.project ? (
                 <ProjectLabel project={subject.project} />
               ) : (
-                <span className="text-fg-subtle text-[0.8125rem]">None</span>
+                <span className="text-fg-subtle text-ui">None</span>
               )}
             </span>
             <Affordance />
@@ -198,13 +198,13 @@ export const SubjectProperties = ({
             {subject.owner ? (
               <>
                 <Avatar name={subject.owner.name} size={18} />
-                <span className="text-fg truncate text-[0.8125rem]">
+                <span className="text-fg truncate text-ui">
                   {subject.owner.name}
                   {subject.owner.id === currentUserId ? <span className="text-fg-subtle"> (you)</span> : null}
                 </span>
               </>
             ) : (
-              <span className="text-fg-subtle text-[0.8125rem]">Nobody</span>
+              <span className="text-fg-subtle text-ui">Nobody</span>
             )}
           </span>
           <Affordance />
@@ -241,13 +241,13 @@ export const SubjectProperties = ({
                   setPickingTags((v) => !v)
                   setTagQuery('')
                 }}
-                className="text-fg-subtle hover:text-fg hover:border-border-strong border-border flex h-[1.25rem] items-center gap-1 rounded-full border border-dashed px-2 text-[0.6875rem] transition-colors"
+                className="text-fg-subtle hover:text-fg hover:border-border-strong border-border flex h-[1.25rem] items-center gap-1 rounded-full border border-dashed px-2 text-aux transition-colors"
               >
                 <Tags size={10} aria-hidden />
                 {pickingTags ? 'Done' : subject.tags.length ? 'Edit' : 'Add tags'}
               </button>
             ) : subject.tags.length === 0 ? (
-              <span className="text-fg-subtle text-[0.75rem]">No tags defined yet</span>
+              <span className="text-fg-subtle text-aux">No tags defined yet</span>
             ) : null}
           </div>
         </div>
@@ -261,7 +261,7 @@ export const SubjectProperties = ({
               maxLength={40}
               placeholder={canCreateTags ? 'Find or create a tag…' : 'Find a tag…'}
               aria-label={canCreateTags ? 'Find or create a tag' : 'Find a tag'}
-              className="text-fg placeholder:text-fg-subtle h-[1.875rem] w-full rounded-md bg-transparent px-2 text-[0.8125rem] outline-none"
+              className="text-fg placeholder:text-fg-subtle h-10 w-full rounded-md bg-transparent px-2 text-ui outline-none"
             />
             <ul className="border-border flex flex-col border-t pt-1" role="group" aria-label="Tags">
               {shownTags.map((tag) => {
@@ -274,7 +274,7 @@ export const SubjectProperties = ({
                       aria-checked={on}
                       disabled={busy}
                       onClick={() => toggleTag(tag.name)}
-                      className="hover:bg-surface-hover flex h-[1.875rem] w-full items-center gap-2 rounded-md px-2 text-left text-[0.8125rem] transition-colors"
+                      className="hover:bg-surface-hover flex h-10 w-full items-center gap-2 rounded-md px-2 text-left text-ui transition-colors"
                     >
                       <span
                         className={cn(
@@ -296,7 +296,7 @@ export const SubjectProperties = ({
                     type="button"
                     disabled={busy}
                     onClick={() => void createTag(creatable)}
-                    className="hover:bg-surface-hover text-fg-muted hover:text-fg flex h-[1.875rem] w-full items-center gap-2 rounded-md px-2 text-left text-[0.8125rem] transition-colors"
+                    className="hover:bg-surface-hover text-fg-muted hover:text-fg flex h-10 w-full items-center gap-2 rounded-md px-2 text-left text-ui transition-colors"
                   >
                     <Plus size={13} aria-hidden className="shrink-0" />
                     <span className="truncate">
@@ -306,7 +306,7 @@ export const SubjectProperties = ({
                 </li>
               ) : null}
               {shownTags.length === 0 && !creatable ? (
-                <li className="text-fg-subtle px-2 py-1.5 text-[0.75rem]">
+                <li className="text-fg-subtle px-2 py-1.5 text-aux">
                   {tagQuery.trim()
                     ? 'No tag by that name. An administrator keeps the list.'
                     : canCreateTags
@@ -321,7 +321,7 @@ export const SubjectProperties = ({
 
       <SubjectAccess subject={subject} />
 
-      <section className="text-fg-subtle flex flex-col gap-1 text-[0.75rem]">
+      <section className="text-fg-subtle flex flex-col gap-1 text-aux">
         <p>
           Opened <RelativeTime iso={subject.created_at} /> by <span className="text-fg-muted">{subject.actor_id}</span>
         </p>
@@ -333,7 +333,7 @@ export const SubjectProperties = ({
       <section>
         {archived ? (
           <div className="flex flex-col gap-2">
-            <p className="text-fg-muted text-[0.75rem]">This subject is archived. It is out of the lab, not deleted.</p>
+            <p className="text-fg-muted text-aux">This subject is archived. It is out of the lab, not deleted.</p>
             <Button size="sm" variant="secondary" disabled={busy} onClick={() => void patch({ archived: false })} className="self-start px-3">
               <ArchiveRestore size={13} aria-hidden /> Restore to the lab
             </Button>

@@ -76,7 +76,7 @@ const StageRow = ({
             value={stage.category}
             onChange={(e) => void onPatch(stage.id, { category: e.target.value as StageCategory })}
             aria-label={`Category of ${stage.name}`}
-            className="border-border bg-surface text-fg-muted hover:border-border-strong h-[1.625rem] shrink-0 rounded-md border px-2 text-[0.75rem]"
+            className="border-border bg-surface text-fg-muted hover:border-border-strong h-9 shrink-0 rounded-md border px-2 text-aux"
           >
             {STAGE_CATEGORIES.map((c) => (
               <option key={c} value={c}>
@@ -85,7 +85,7 @@ const StageRow = ({
             ))}
           </select>
         ) : (
-          <span className="text-fg-subtle shrink-0 text-[0.75rem]">{CATEGORY_LABEL[stage.category]}</span>
+          <span className="text-fg-subtle shrink-0 text-aux">{CATEGORY_LABEL[stage.category]}</span>
         )}
         {canEdit ? (
           <button
@@ -98,7 +98,7 @@ const StageRow = ({
           </button>
         ) : null}
       </div>
-      {error ? <p className="text-danger enter-rise px-4 pb-2 text-[0.75rem] md:pl-[4.25rem]">{error}</p> : null}
+      {error ? <p className="text-danger enter-rise px-4 pb-2 text-aux md:pl-[4.25rem]">{error}</p> : null}
     </li>
   )
 }
@@ -198,13 +198,13 @@ export const LabSection = ({
         flush
         description={
           canEdit
-            ? 'The pipeline every subject moves along, top to bottom. Drag to reorder. A completed or dropped stage asks for a conclusion on the way in.'
-            : 'The pipeline every subject moves along. Only an administrator can change it.'
+            ? 'Subjects move down these stages. Drag to reorder.'
+            : 'Subjects move down these stages. Only an administrator can change them.'
         }
-        footer={message ? <p className="text-danger enter-rise text-[0.75rem]">{message}</p> : undefined}
+        footer={message ? <p className="text-danger enter-rise text-aux">{message}</p> : undefined}
       >
         {stages.length === 0 ? (
-          <p className="text-fg-subtle px-4 py-4 text-[0.75rem]">No stages yet.</p>
+          <p className="text-fg-subtle px-4 py-4 text-aux">No stages yet.</p>
         ) : (
           <DndContext id="lab-stages" sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
             <SortableContext items={stages.map((s) => s.id)} strategy={verticalListSortingStrategy}>
@@ -239,12 +239,12 @@ export const LabSection = ({
         flush
         description={
           canEdit
-            ? 'The curated tags a subject can carry. Keeping the list short is what keeps it useful.'
-            : 'The curated tags a subject can carry. Only an administrator can change them.'
+            ? 'The tags a subject can carry. A short list stays useful.'
+            : 'The tags a subject can carry. Only an administrator can change them.'
         }
       >
         {tags.length === 0 ? (
-          <p className="text-fg-subtle px-4 py-4 text-[0.75rem]">No tags yet.</p>
+          <p className="text-fg-subtle px-4 py-4 text-aux">No tags yet.</p>
         ) : (
           <ul className="divide-border divide-y">
             {tags.map((tag) => (
@@ -275,7 +275,7 @@ export const LabSection = ({
                   ) : null}
                 </div>
                 {rowError?.id === tag.id ? (
-                  <p className="text-danger enter-rise px-4 pb-2 text-[0.75rem]">{rowError.message}</p>
+                  <p className="text-danger enter-rise px-4 pb-2 text-aux">{rowError.message}</p>
                 ) : null}
               </li>
             ))}

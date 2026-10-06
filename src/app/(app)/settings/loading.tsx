@@ -12,7 +12,7 @@ const Loading = () => (
           </div>
           <div className="flex flex-col gap-2 px-4 py-4 md:px-5">
             {Array.from({ length: rows }, (_, i) => (
-              <span key={i} className="skeleton block h-8 w-full rounded-md opacity-60" />
+              <span key={i} className="skeleton block h-10 w-full rounded-md opacity-60" />
             ))}
           </div>
         </div>

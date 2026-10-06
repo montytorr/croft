@@ -52,9 +52,8 @@ export const PasswordSection = () => {
         title="Password"
         footer={
           <>
-            <p className="text-fg-subtle min-w-0 flex-1 basis-60 text-[0.6875rem] leading-relaxed">
-              Forgot it? Use “Forgot your password?” on the sign-in page, or ask an administrator to
-              send you a reset link. Either way the link goes to your email, never to them.
+            <p className="text-fg-subtle min-w-0 flex-1 basis-60 text-aux leading-relaxed">
+              Forgot it? Ask an administrator to email you a reset link.
             </p>
             <Button type="submit" variant="primary" disabled={!canSubmit} className="w-auto px-4">
               {state === 'saving' ? 'Changing…' : 'Change password'}
@@ -86,16 +85,16 @@ export const PasswordSection = () => {
         {tooShort || mismatch || error || state === 'done' ? (
           <div className="mt-3 flex flex-col gap-2">
             {tooShort && (
-              <p className="text-fg-subtle text-[0.6875rem]">At least 12 characters.</p>
+              <p className="text-fg-subtle text-aux">At least 12 characters.</p>
             )}
-            {mismatch && <p className="text-danger text-[0.6875rem]">These do not match.</p>}
+            {mismatch && <p className="text-danger text-aux">These do not match.</p>}
             {error && (
-              <p className="text-danger bg-danger-subtle enter-rise rounded-md px-2.5 py-1.5 text-[0.6875rem]">
+              <p className="text-danger bg-danger-subtle enter-rise rounded-md px-2.5 py-1.5 text-aux">
                 {error}
               </p>
             )}
             {state === 'done' && (
-              <p className="text-status-done enter-rise text-[0.6875rem]">
+              <p className="text-status-done enter-rise text-aux">
                 Changed. Keep it in a password manager.
               </p>
             )}

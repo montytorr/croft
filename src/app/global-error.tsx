@@ -21,12 +21,12 @@ const GlobalError = ({ error }: { error: Error & { digest?: string } }) => (
       }}
     >
       <div>
-        <h1 style={{ fontSize: 15, fontWeight: 500, margin: 0 }}>Croft failed to start.</h1>
-        <p style={{ fontSize: 13, color: '#5c5358', marginTop: 8 }}>
+        <h1 style={{ fontSize: 17, fontWeight: 500, margin: 0 }}>Croft failed to start.</h1>
+        <p style={{ fontSize: 15, color: '#5c5358', marginTop: 8 }}>
           Reload the page. If it persists, the server logs will have the detail.
         </p>
         {error.digest && (
-          <code style={{ fontSize: 11, color: '#5c5358' }}>digest {error.digest}</code>
+          <code style={{ fontSize: 13, color: '#5c5358' }}>digest {error.digest}</code>
         )}
       </div>
     </body>

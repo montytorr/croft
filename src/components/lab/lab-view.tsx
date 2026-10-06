@@ -57,7 +57,7 @@ const Segmented = <T extends string>({
         onClick={() => onPick(v)}
         title={text}
         className={cn(
-          'flex h-[1.625rem] items-center gap-1.5 rounded-md px-2 text-[0.75rem] transition-[background-color,color,box-shadow] duration-[var(--dur-2)] ease-[var(--ease-out)]',
+          'flex h-9 items-center gap-1.5 rounded-md px-2 text-aux transition-[background-color,color,box-shadow] duration-[var(--dur-2)] ease-[var(--ease-out)]',
           value === v ? 'bg-surface text-fg ring-border shadow-[var(--shadow-sm)] ring-1' : 'text-fg-muted hover:text-fg',
         )}
       >
@@ -142,7 +142,7 @@ export const LabView = ({
       <header className="page-header border-border flex h-[3.25rem] shrink-0 items-center gap-3 border-b px-3 md:px-6 pr-live-status">
         <MobileNavButton />
         <h1 className="font-display headline text-fg text-[1.125rem]">Lab</h1>
-        <p className="text-fg-subtle hidden items-center gap-3 text-[0.75rem] sm:flex">
+        <p className="text-fg-subtle hidden items-center gap-3 text-aux xl:flex">
           <span><span className="text-fg tabular-nums font-medium">{active}</span> being worked</span>
           <span><span className="text-fg tabular-nums font-medium">{planned}</span> planned</span>
           <span><span className="text-fg tabular-nums font-medium">{concluded}</span> concluded</span>
@@ -157,10 +157,10 @@ export const LabView = ({
               { value: 'board', label: 'Board', icon: Columns3 },
             ]}
           />
-          <Button variant="primary" size="sm" onClick={newSubject} className="h-[1.875rem] px-3" title="New subject — c">
+          <Button variant="primary" size="sm" onClick={newSubject} className="h-10 px-3" title="New subject — c">
             <Plus size={14} aria-hidden />
             <span className="hidden sm:inline">New subject</span>
-            <span className="hidden font-mono text-[0.6875rem] opacity-70 sm:inline">c</span>
+            <span className="hidden font-mono text-aux opacity-80 xl:inline">c</span>
           </Button>
         </div>
       </header>
@@ -180,7 +180,7 @@ export const LabView = ({
             }}
             placeholder="Filter subjects…"
             aria-label="Filter subjects"
-            className="border-border bg-surface text-fg placeholder:text-fg-subtle hover:border-border-strong focus:border-accent h-[1.875rem] w-full rounded-md border pr-7 pl-8 text-[0.8125rem] outline-none transition-[border-color,box-shadow] focus:shadow-[0_0_0_1px_var(--accent)]"
+            className="border-border bg-surface text-fg placeholder:text-fg-subtle hover:border-border-strong focus:border-accent h-10 w-full rounded-md border pr-7 pl-8 text-ui outline-none transition-[border-color,box-shadow] focus:shadow-[0_0_0_1px_var(--accent)]"
           />
           {running ? (
             <span className="text-fg-subtle absolute right-2.5"><Spinner size={11} /></span>
@@ -209,7 +209,7 @@ export const LabView = ({
           onClick={() => push({ restricted: !filters.restricted })}
           title="Subjects not yet published to the lab: your private ones and those shared with you"
           className={cn(
-            'flex h-[1.875rem] shrink-0 items-center gap-1.5 rounded-lg px-2 text-[0.75rem] transition-[background-color,color,box-shadow] duration-[var(--dur-2)] ease-[var(--ease-out)]',
+            'flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-2 text-aux transition-[background-color,color,box-shadow] duration-[var(--dur-2)] ease-[var(--ease-out)]',
             filters.restricted
               ? 'bg-surface text-fg ring-border shadow-[var(--shadow-sm)] ring-1'
               : 'text-fg-muted hover:text-fg bg-surface-raised',
@@ -220,8 +220,26 @@ export const LabView = ({
           <span className="hidden sm:inline">Private &amp; shared with me</span>
         </button>
 
+        {filtered ? (
+          <button
+            type="button"
+            onClick={() => {
+              setQuery('')
+              start(() => router.replace('/', { scroll: false }))
+            }}
+            className="text-accent hover:underline ml-auto h-10 px-1 text-aux font-medium underline-offset-4"
+          >
+            Clear filters
+          </button>
+        ) : null}
+      </div>
+
+      {projects.length > 0 || tags.length > 0 ? (
+        <div className="border-border flex shrink-0 flex-col gap-2 border-b px-3 py-2.5 md:px-6">
         {projects.length > 0 ? (
-          <div className="flex min-w-0 flex-wrap items-center gap-1" role="group" aria-label="Filter by project">
+          <div className="flex items-center gap-2" role="group" aria-label="Filter by project">
+            <span className="pane-label w-[3.75rem] shrink-0">Project</span>
+            <div className="scroll-hint flex min-w-0 items-center gap-1.5 overflow-x-auto py-0.5 pr-6 md:flex-wrap md:pr-0">
             {projects.map((p) => {
               const on = pickedProject !== 'none' && pickedProject?.id === p.id
               return (
@@ -231,9 +249,9 @@ export const LabView = ({
                   aria-pressed={on}
                   onClick={() => push({ project: on ? '' : p.name })}
                   className="rounded-[5px] transition-opacity hover:opacity-100"
-                  style={{ opacity: filters.project && !on ? 0.6 : 1 }}
+                 
                 >
-                  <ProjectLabel project={p} active={on} />
+                  <ProjectLabel project={p} active={on} className="h-8 px-2.5" />
                 </button>
               )
             })}
@@ -242,23 +260,21 @@ export const LabView = ({
               aria-pressed={pickedProject === 'none'}
               onClick={() => push({ project: pickedProject === 'none' ? '' : 'none' })}
               className={cn(
-                'border-border h-[1.25rem] rounded-[5px] border border-dashed px-1.5 text-[0.6875rem] leading-none font-medium transition-[opacity,color]',
-                pickedProject === 'none' ? 'text-fg border-border-strong bg-surface-raised' : 'text-fg-subtle hover:text-fg',
-                filters.project && pickedProject !== 'none' && 'opacity-60 hover:opacity-100',
+                'border-border h-8 shrink-0 rounded-[5px] border border-dashed px-2 text-aux leading-none font-medium whitespace-nowrap transition-[opacity,color]',
+                pickedProject === 'none' ? 'text-fg border-border-strong bg-surface-raised' : 'text-fg-muted hover:text-fg',
               )}
               title="Subjects that belong to no project"
             >
               No project
             </button>
+            </div>
           </div>
         ) : null}
 
-        {projects.length > 0 && tags.length > 0 ? (
-          <span className="bg-border hidden h-4 w-px shrink-0 sm:block" aria-hidden />
-        ) : null}
-
         {tags.length > 0 ? (
-          <div className="flex min-w-0 flex-wrap items-center gap-1" role="group" aria-label="Filter by tag">
+          <div className="flex items-center gap-2" role="group" aria-label="Filter by tag">
+            <span className="pane-label w-[3.75rem] shrink-0">Tag</span>
+            <div className="scroll-hint flex min-w-0 items-center gap-1.5 overflow-x-auto py-0.5 pr-6 md:flex-wrap md:pr-0">
             {tags.map((tag) => {
               const on = filters.tag === tag.name
               return (
@@ -268,28 +284,17 @@ export const LabView = ({
                   aria-pressed={on}
                   onClick={() => push({ tag: on ? '' : tag.name })}
                   className="rounded-full transition-opacity hover:opacity-100"
-                  style={{ opacity: filters.tag && !on ? 0.6 : 1 }}
+                 
                 >
-                  <TagChip tag={tag} active={on} />
+                  <TagChip tag={tag} active={on} className="h-8 px-3" />
                 </button>
               )
             })}
+            </div>
           </div>
         ) : null}
-
-        {filtered ? (
-          <button
-            type="button"
-            onClick={() => {
-              setQuery('')
-              start(() => router.replace('/', { scroll: false }))
-            }}
-            className="text-fg-subtle hover:text-fg ml-auto text-[0.75rem] transition-colors"
-          >
-            Clear filters
-          </button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {stages.length === 0 ? (
         <div className="min-h-0 flex-1 overflow-y-auto">

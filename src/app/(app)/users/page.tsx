@@ -24,11 +24,8 @@ const UsersPage = async () => {
           <span className="-ml-1.5 md:hidden"><MobileNavButton /></span>
           <div>
             <h1 className="font-display headline text-2xl leading-none">Users</h1>
-            <p className="text-fg-subtle mt-2 max-w-2xl text-[0.75rem] leading-relaxed">
-              Manage workspace access, roles, password resets, and each user&apos;s agent identities.
-              Disabling a user revokes their browser sessions and active agent keys immediately, and
-              hands their open tasks to someone you choose. A password is never set from here: a reset
-              sends the person a single-use link, and only they choose what it becomes.
+            <p className="text-fg-muted mt-2 max-w-2xl text-aux leading-relaxed">
+              Add people, set their role, and turn accounts off.
             </p>
           </div>
         </header>

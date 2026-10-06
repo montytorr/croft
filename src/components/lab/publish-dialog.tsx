@@ -49,13 +49,13 @@ export const PublishDialog = ({
         className="bg-surface border-border enter-sheet raised-lg relative w-full max-w-md rounded-xl border p-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="text-fg-subtle flex items-center gap-1.5 text-[0.6875rem]">
+        <p className="text-fg-subtle flex items-center gap-1.5 text-aux">
           <Globe size={11} aria-hidden /> Publish {subjectRef}
         </p>
         <h2 id="publish-title" className="font-display headline text-fg mt-2 text-[1.125rem] leading-snug">
           Publish “{subjectTitle}” to the lab?
         </h2>
-        <div id="publish-body" className="text-fg-muted mt-2 flex flex-col gap-2 text-[0.8125rem] leading-relaxed">
+        <div id="publish-body" className="text-fg-muted mt-2 flex flex-col gap-2 text-ui leading-relaxed">
           <p>Everyone in the lab will see it: the write-up, its todos, notes, files and log, and it shows up in search.</p>
           <p className="text-fg font-medium">This cannot be undone. A published subject cannot be made private again.</p>
         </div>
