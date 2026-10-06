@@ -215,7 +215,7 @@ const Editor = ({
               {preview.trim() ? (
                 <MarkdownView prose="writeup">{preview}</MarkdownView>
               ) : (
-                <p className="writeup text-fg-subtle italic">Your write-up will appear here.</p>
+                <p className="writeup text-fg-subtle">Your write-up will appear here.</p>
               )}
             </div>
           </div>
