@@ -14,6 +14,9 @@ import { JetBrains_Mono, Newsreader, Schibsted_Grotesk } from 'next/font/google'
 export const sans = Schibsted_Grotesk({
   subsets: ['latin', 'latin-ext'],
   variable: '--font-schibsted',
+  // The interface sets empty states and markdown emphasis in italic; without
+  // the drawn italic the browser slants the upright, which reads as another face.
+  style: ['normal', 'italic'],
   display: 'swap',
 })
 
