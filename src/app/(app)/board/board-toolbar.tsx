@@ -84,7 +84,7 @@ const FilterMenu = ({
         aria-haspopup="menu"
         aria-label={`Filter by ${label}`}
         className={cn(
-          'flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-[0.75rem]',
+          'flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-2 text-aux',
           'transition-[color,background-color,border-color] duration-[var(--dur-1)] ease-[var(--ease-out)]',
           selected.length > 0
             ? 'border-accent/70 text-accent bg-accent-subtle'
@@ -117,7 +117,7 @@ const FilterMenu = ({
                 checked={selected.includes(o.value)}
                 className="accent-accent size-[0.75rem]"
               />
-              <span className="text-fg-muted min-w-0 truncate text-[0.75rem]">{o.label}</span>
+              <span className="text-fg-muted min-w-0 truncate text-aux">{o.label}</span>
             </button>
           ))}
           {options.length === 0 && <EmptyState compact title="Nothing to filter by yet." />}

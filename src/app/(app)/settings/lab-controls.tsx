@@ -85,7 +85,7 @@ export const EditableName = ({
           setDraft(value)
           setEditing(true)
         }}
-        className="text-fg min-w-0 truncate rounded px-1 text-left text-[0.8125rem] enabled:hover:bg-surface-hover disabled:cursor-default"
+        className="text-fg min-w-0 truncate rounded px-1 text-left text-ui enabled:hover:bg-surface-hover disabled:cursor-default"
         title={disabled ? undefined : 'Rename'}
       >
         {value}
@@ -110,7 +110,7 @@ export const EditableName = ({
         if (e.key === 'Enter') void commit()
         if (e.key === 'Escape') setEditing(false)
       }}
-      className="h-[1.625rem] min-w-0 flex-1"
+      className="h-9 min-w-0 flex-1"
     />
   )
 }
@@ -151,7 +151,7 @@ export const HandoffInputs = ({
         maxLength={32}
         spellCheck={false}
         autoCapitalize="none"
-        className={cn('h-[1.625rem] w-[6.5rem] font-mono text-[0.75rem]', className)}
+        className={cn('h-9 w-[6.5rem] font-mono text-aux', className)}
       />
       <datalist id={listId}>
         {HANDOFF_TRACKER_SUGGESTIONS.map((name) => (
@@ -168,7 +168,7 @@ export const HandoffInputs = ({
         maxLength={100}
         spellCheck={false}
         autoCapitalize="none"
-        className={cn('h-[1.625rem] w-[8.5rem] font-mono text-[0.75rem]', className)}
+        className={cn('h-9 w-[8.5rem] font-mono text-aux', className)}
       />
     </>
   )
@@ -233,7 +233,7 @@ export const AddRow = ({
         onKeyDown={(e) => e.key === 'Enter' && void add()}
         placeholder={placeholder}
         aria-label={placeholder}
-        className="h-[1.75rem] min-w-[10rem] flex-1"
+        className="h-9 min-w-[10rem] flex-1"
       />
       {withHandoff ? (
         <HandoffInputs
@@ -242,7 +242,7 @@ export const AddRow = ({
           onTracker={setTracker}
           onTarget={setTarget}
           onKeyDown={(e) => e.key === 'Enter' && void add()}
-          className="h-[1.75rem]"
+          className="h-9"
         />
       ) : null}
       {withCategory ? (
@@ -250,7 +250,7 @@ export const AddRow = ({
           value={category}
           onChange={(e) => setCategory(e.target.value as StageCategory)}
           aria-label="Category"
-          className="border-border bg-surface text-fg-muted h-[1.75rem] rounded-md border px-2 text-[0.75rem]"
+          className="border-border bg-surface text-fg-muted h-9 rounded-md border px-2 text-aux"
         >
           {STAGE_CATEGORIES.map((c) => (
             <option key={c} value={c}>
@@ -259,10 +259,10 @@ export const AddRow = ({
           ))}
         </select>
       ) : null}
-      <Button size="sm" variant="primary" onClick={() => void add()} disabled={!name.trim() || pending} className="h-[1.75rem] px-3">
+      <Button size="sm" variant="primary" onClick={() => void add()} disabled={!name.trim() || pending} className="h-9 px-3">
         {pending ? <Spinner /> : <><Plus size={13} aria-hidden /> Add</>}
       </Button>
-      {handoffError ? <p className="text-danger enter-rise w-full text-[0.75rem]">{handoffError}</p> : null}
+      {handoffError ? <p className="text-danger enter-rise w-full text-aux">{handoffError}</p> : null}
     </div>
   )
 }

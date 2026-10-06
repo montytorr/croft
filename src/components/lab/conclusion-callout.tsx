@@ -59,8 +59,8 @@ export const ConclusionCallout = ({
     >
       <span aria-hidden className="absolute inset-y-0 left-0 w-[3px]" style={{ backgroundColor: tone }} />
       <div className="mb-1.5 flex items-center gap-2">
-        <span className="text-fg-muted text-[0.625rem] font-medium tracking-[0.08em] uppercase">Conclusion</span>
-        {concludedAt ? <RelativeTime iso={concludedAt} className="text-fg-subtle text-[0.6875rem]" /> : null}
+        <span className="text-fg-muted text-micro font-medium tracking-[0.08em] uppercase">Conclusion</span>
+        {concludedAt ? <RelativeTime iso={concludedAt} className="text-fg-subtle text-aux" /> : null}
         {!editing ? (
           <button
             type="button"
@@ -68,7 +68,7 @@ export const ConclusionCallout = ({
               setDraft(conclusion)
               setEditing(true)
             }}
-            className="text-fg-subtle hover:text-fg ml-auto text-[0.6875rem] transition-colors"
+            className="text-fg-subtle hover:text-fg ml-auto text-aux transition-colors"
           >
             Edit
           </button>
@@ -94,7 +94,7 @@ export const ConclusionCallout = ({
             <Button size="sm" variant="ghost" onClick={() => setEditing(false)} className="px-3 font-normal">
               Cancel
             </Button>
-            <span className="text-fg-subtle text-[0.6875rem]">⌘↵ save · esc cancel</span>
+            <span className="text-fg-subtle text-aux">⌘↵ save · esc cancel</span>
           </div>
         </>
       ) : (

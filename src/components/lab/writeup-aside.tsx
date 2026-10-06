@@ -17,7 +17,7 @@ const Heading = ({ children, onMore, more }: { children: React.ReactNode; onMore
   <div className="mb-3 flex min-h-6 items-center gap-2">
     <h3 className="pane-label">{children}</h3>
     {onMore ? (
-      <button type="button" onClick={onMore} className="text-fg-subtle hover:text-fg ml-auto flex items-center gap-1 text-[0.6875rem] transition-colors">
+      <button type="button" onClick={onMore} className="text-fg-subtle hover:text-fg ml-auto flex items-center gap-1 text-aux transition-colors">
         {more}
         <ArrowRight size={11} aria-hidden />
       </button>
@@ -76,8 +76,8 @@ export const WriteUpAside = ({
                   type="button"
                   onClick={() => jump(i)}
                   className={cn(
-                    'text-fg-muted hover:text-fg hover:border-fg-subtle -ml-px block w-full truncate border-l border-transparent py-[0.1875rem] text-left text-[0.75rem] transition-colors',
-                    entry.level === 1 ? 'pl-3 font-medium' : entry.level === 2 ? 'pl-3' : 'pl-6 text-[0.71875rem]',
+                    'text-fg-muted hover:text-fg hover:border-fg-subtle -ml-px block w-full truncate border-l border-transparent py-[0.1875rem] text-left text-aux transition-colors',
+                    entry.level === 1 ? 'pl-3 font-medium' : entry.level === 2 ? 'pl-3' : 'pl-6 text-aux',
                   )}
                 >
                   {entry.text}
@@ -93,7 +93,7 @@ export const WriteUpAside = ({
           Open todos
         </Heading>
         {open.length === 0 ? (
-          <p className="text-fg-subtle text-[0.75rem]">{todos.length ? 'Everything is settled.' : 'None yet.'}</p>
+          <p className="text-fg-subtle text-aux">{todos.length ? 'Everything is settled.' : 'None yet.'}</p>
         ) : (
           <ul className="flex flex-col">
             {open.slice(0, 6).map((todo) => (
@@ -103,13 +103,13 @@ export const WriteUpAside = ({
                   className="row-hover -mx-1.5 flex min-h-8 items-center gap-2 rounded-md px-1.5 py-1"
                 >
                   <StatusIcon status={laneOf(todo)} size={12} />
-                  <span className="text-fg min-w-0 flex-1 line-clamp-2 text-[0.75rem] leading-snug">{todo.title}</span>
-                  {todo.handoff ? <span className="text-fg-subtle font-mono text-[0.625rem]">{todo.handoff.ref}</span> : null}
+                  <span className="text-fg min-w-0 flex-1 line-clamp-2 text-aux leading-snug">{todo.title}</span>
+                  {todo.handoff ? <span className="text-fg-subtle font-mono text-aux">{todo.handoff.ref}</span> : null}
                 </Link>
               </li>
             ))}
             {open.length > 6 ? (
-              <li className="text-fg-subtle pt-1 text-[0.6875rem]">and {open.length - 6} more</li>
+              <li className="text-fg-subtle pt-1 text-aux">and {open.length - 6} more</li>
             ) : null}
           </ul>
         )}
@@ -120,7 +120,7 @@ export const WriteUpAside = ({
           Notes
         </Heading>
         {notes.length === 0 ? (
-          <p className="text-fg-subtle text-[0.75rem]">No notes from anyone yet.</p>
+          <p className="text-fg-subtle text-aux">No notes from anyone yet.</p>
         ) : (
           <ul className="flex flex-col gap-1.5">
             {notes.slice(0, 3).map((note) => (
@@ -130,11 +130,11 @@ export const WriteUpAside = ({
                   onClick={() => openTab('notes')}
                   className="bg-surface border-border hover:border-border-strong block w-full rounded-md border px-2.5 py-1.5 text-left transition-colors"
                 >
-                  <span className="text-fg-subtle flex items-center gap-1.5 text-[0.65625rem]">
+                  <span className="text-fg-subtle flex items-center gap-1.5 text-aux">
                     <span className="text-fg-muted truncate">{note.author.name}</span>
                     <RelativeTime iso={note.created_at} className="ml-auto shrink-0" />
                   </span>
-                  <span className="text-fg mt-0.5 line-clamp-2 font-serif text-[0.8125rem] leading-snug">{gist(note.body)}</span>
+                  <span className="text-fg mt-0.5 line-clamp-2 font-serif text-ui leading-snug">{gist(note.body)}</span>
                 </button>
               </li>
             ))}

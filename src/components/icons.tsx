@@ -244,7 +244,7 @@ const TYPE_LABEL: Record<TaskType, string> = {
  * one set of chips rather than three styles.
  */
 const PILL =
-  'inline-flex h-[1.25rem] shrink-0 items-center gap-1.5 rounded-full border pr-2 pl-1.5 text-[0.6875rem] leading-none whitespace-nowrap ' +
+  'inline-flex h-[1.25rem] shrink-0 items-center gap-1.5 rounded-full border pr-2 pl-1.5 text-aux leading-none whitespace-nowrap ' +
   'transition-[color,background-color,border-color] duration-[var(--dur-2)] ease-[var(--ease-out)]'
 
 // An unsupported color-mix is simply ignored, leaving the border the class

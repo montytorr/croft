@@ -43,18 +43,18 @@ const Preview = ({
       className="flex flex-1 flex-col gap-3 rounded-md border p-3 transition-colors duration-[var(--dur-2)] ease-[var(--ease-out)]"
       style={{ background: ground.bg, color: ground.fg, borderColor: ground.border }}
     >
-      <div className="flex items-center gap-2 text-[0.8125rem] font-semibold tracking-tight">
+      <div className="flex items-center gap-2 text-ui font-semibold tracking-tight">
         <BrandMark size={20} colour={mark} className="rounded-[5px]" />
         <span className="truncate">{name}</span>
       </div>
-      <div className="rounded-md px-2 py-1 text-[0.75rem]" style={{ background: tokens.accentSubtle }}>
+      <div className="rounded-md px-2 py-1 text-aux" style={{ background: tokens.accentSubtle }}>
         Lab
       </div>
-      <p className="text-[0.75rem]" style={{ color: ground.muted }}>
+      <p className="text-aux" style={{ color: ground.muted }}>
         Nothing in progress. <span style={{ color: tokens.accent }}>See the backlog</span>
       </p>
       <span
-        className="inline-flex h-7 w-fit items-center rounded-md px-3 text-[0.75rem] font-medium"
+        className="inline-flex h-9 w-fit items-center rounded-md px-3 text-aux font-medium"
         style={{ background: tokens.accent, color: tokens.accentFg }}
       >
         New subject
@@ -104,9 +104,7 @@ export const BrandingSection = ({ initial }: { initial: BrandingValue }) => {
       title="Branding"
       description={
         <>
-          What this instance is called and its colour, for everyone who signs in: the sidebar, tab titles,
-          the login page, the favicon and link previews. The mark stays the croft, drawn in the accent, so
-          someone who uses more than one Croft can tell at a glance which one this is.
+          The name and colour everyone sees: sidebar, sign-in page and browser tab.
         </>
       }
       footer={
@@ -115,7 +113,7 @@ export const BrandingSection = ({ initial }: { initial: BrandingValue }) => {
             <p
               role={message.tone === 'error' ? 'alert' : 'status'}
               className={cn(
-                'enter-rise min-w-0 flex-1 basis-60 rounded-md px-2.5 py-1.5 text-xs',
+                'enter-rise min-w-0 flex-1 basis-60 rounded-md px-2.5 py-1.5 text-aux',
                 message.tone === 'error' ? 'text-danger bg-danger-subtle' : 'text-fg-muted',
               )}
             >
@@ -137,7 +135,7 @@ export const BrandingSection = ({ initial }: { initial: BrandingValue }) => {
     >
       <div className="flex flex-col gap-4">
         <label className="flex flex-col gap-1">
-          <span className="text-fg-subtle text-[0.6875rem] font-medium">Name</span>
+          <span className="text-fg-subtle text-aux font-medium">Name</span>
           <Input
             value={name}
             maxLength={60}
@@ -148,7 +146,7 @@ export const BrandingSection = ({ initial }: { initial: BrandingValue }) => {
         </label>
 
         <div className="flex flex-col gap-1">
-          <span className="text-fg-subtle text-[0.6875rem] font-medium">Accent</span>
+          <span className="text-fg-subtle text-aux font-medium">Accent</span>
           <div className="flex flex-wrap items-center gap-2">
             {PRESETS.map((preset) => (
               <button
@@ -182,7 +180,7 @@ export const BrandingSection = ({ initial }: { initial: BrandingValue }) => {
               className={cn('w-28 font-mono', !valid && 'border-danger')}
             />
           </div>
-          <p className="text-fg-subtle text-[0.6875rem]">
+          <p className="text-fg-subtle text-aux">
             Each theme gets a variant of it that stays readable on its background, so the colour may come out
             a little lighter in dark mode.
           </p>

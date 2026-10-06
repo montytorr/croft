@@ -50,7 +50,7 @@ export const MarkdownEditor = ({
       immediatelyRender: false,
       editorProps: {
         attributes: {
-          class: 'outline-none min-h-32 text-sm leading-relaxed',
+          class: 'outline-none min-h-32 text-ui leading-relaxed',
         },
       },
       onUpdate: () => setState('dirty'),
@@ -106,7 +106,7 @@ export const MarkdownEditor = ({
 
   if (!editing) {
     return (
-      <div className="group relative">
+      <div className="group relative pointer-coarse:pt-11">
         {/* The PROP, not the state. `value` is seeded once at mount, so
             rendering it here meant a description rewritten by an agent never
             appeared until a full reload — the body was the one part of the
@@ -117,7 +117,7 @@ export const MarkdownEditor = ({
         {initial.trim() ? (
           <MarkdownView>{initial}</MarkdownView>
         ) : (
-          <p className="text-fg-subtle text-sm">No description.</p>
+          <p className="text-fg-subtle text-ui">No description.</p>
         )}
         <button
           type="button"
@@ -128,12 +128,12 @@ export const MarkdownEditor = ({
             setSourceReason(richEditLoss(initial))
             setEditing(true)
           }}
-          className="text-fg-subtle hover:text-fg border-border hover:border-border-strong bg-surface-raised absolute -top-1 right-0 rounded-md border px-2 py-0.5 text-[0.6875rem] opacity-0 transition-[opacity,color,border-color] duration-[var(--dur-1)] ease-[var(--ease-out)] group-hover:opacity-100 focus-visible:opacity-100"
+          className="text-fg-muted hover:text-fg border-border hover:border-border-strong bg-surface-raised absolute -top-1 right-0 rounded-md border px-3 py-1 text-aux opacity-0 pointer-coarse:top-0 pointer-coarse:h-9 pointer-coarse:opacity-100 transition-[opacity,color,border-color] duration-[var(--dur-1)] ease-[var(--ease-out)] group-hover:opacity-100 focus-visible:opacity-100"
         >
           Edit
         </button>
         {state === 'saved' && (
-          <span className="enter-rise text-status-done absolute -top-1 right-14 text-[0.6875rem]">saved</span>
+          <span className="enter-rise text-status-done absolute -top-1 right-14 text-aux">saved</span>
         )}
       </div>
     )
@@ -158,14 +158,14 @@ export const MarkdownEditor = ({
             autoFocus
             spellCheck
             aria-label="Description, as markdown"
-            className="text-fg block min-h-32 w-full resize-y bg-transparent font-mono text-[0.8125rem] leading-relaxed outline-none [field-sizing:content]"
+            className="text-fg block min-h-32 w-full resize-y bg-transparent font-mono text-ui leading-relaxed outline-none [field-sizing:content]"
           />
         ) : (
           <EditorContent editor={editor} className="prose-editor" />
         )}
       </div>
       {sourceReason && (
-        <p className="text-fg-subtle mt-1.5 text-[0.6875rem]">Editing as markdown. {sourceReason}</p>
+        <p className="text-fg-subtle mt-1.5 text-aux">Editing as markdown. {sourceReason}</p>
       )}
       <div className="mt-2 flex items-center gap-2">
         <Button
@@ -188,9 +188,9 @@ export const MarkdownEditor = ({
         >
           Cancel
         </Button>
-        <span className="text-fg-subtle text-[0.6875rem]">⌘↵ save · esc cancel</span>
+        <span className="text-fg-subtle text-aux">⌘↵ save · esc cancel</span>
         {state === 'error' && (
-          <span className="text-danger text-[0.6875rem]">Save failed — nothing was changed.</span>
+          <span className="text-danger text-aux">Save failed — nothing was changed.</span>
         )}
       </div>
     </div>

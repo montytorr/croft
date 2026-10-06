@@ -35,7 +35,7 @@ const Keys = ({ keys }: { keys: string[] }) => (
   <span className="ml-auto flex shrink-0 items-center gap-1">
     {keys.map((k, i) =>
       k === 'then' ? (
-        <span key={i} className="text-fg-subtle text-[0.6875rem]">
+        <span key={i} className="text-fg-subtle text-aux">
           then
         </span>
       ) : (
@@ -50,7 +50,7 @@ const Keys = ({ keys }: { keys: string[] }) => (
 // The selected row carries the trail marker: the accent-subtle fill and a
 // two-pixel edge of the accent at the left.
 const itemClass =
-  'group relative flex h-[2.375rem] cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-[0.8125rem] ' +
+  'group relative flex h-[2.375rem] cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-ui ' +
   'transition-colors duration-[var(--dur-1)] ease-[var(--ease-out)] ' +
   'data-[selected=true]:bg-accent-subtle ' +
   'before:absolute before:inset-y-2 before:left-0 before:w-[2px] before:rounded-full before:bg-accent ' +
@@ -62,7 +62,7 @@ const iconClass = 'text-fg-subtle transition-colors duration-[var(--dur-1)] grou
 const groupClass =
   '[&_[cmdk-group-heading]]:text-fg-subtle [&_[cmdk-group-heading]]:px-2.5 ' +
   '[&_[cmdk-group-heading]]:pt-2.5 [&_[cmdk-group-heading]]:pb-1 ' +
-  '[&_[cmdk-group-heading]]:text-[0.65625rem] [&_[cmdk-group-heading]]:font-medium ' +
+  '[&_[cmdk-group-heading]]:text-aux [&_[cmdk-group-heading]]:font-medium ' +
   '[&_[cmdk-group-heading]]:tracking-[0.06em] [&_[cmdk-group-heading]]:uppercase'
 
 /** Lab projects are filters on the lab, so the palette jumps to the lab filtered to one. */
@@ -147,7 +147,7 @@ export const CommandPalette = ({ labProjects }: { labProjects: Pick<LabProject, 
             value={query}
             onValueChange={setQuery}
             placeholder="Search subjects and todos, or jump somewhere…"
-            className="placeholder:text-fg-subtle text-fg h-[3.25rem] w-full bg-transparent text-[0.9375rem] outline-none"
+            className="placeholder:text-fg-subtle text-fg h-[3.25rem] w-full bg-transparent text-ui outline-none"
           />
           {loading ? (
             <span className="text-fg-subtle shrink-0">
@@ -177,7 +177,7 @@ export const CommandPalette = ({ labProjects }: { labProjects: Pick<LabProject, 
                 <span className="min-w-0 flex-1 truncate">
                   All results for <span className="text-fg-muted">{query.trim()}</span>
                 </span>
-                <span className="text-fg-subtle shrink-0 text-[0.625rem]">
+                <span className="text-fg-subtle shrink-0 text-aux">
                   filters, resolutions, shareable link
                 </span>
               </Command.Item>
@@ -196,7 +196,7 @@ export const CommandPalette = ({ labProjects }: { labProjects: Pick<LabProject, 
                     className={itemClass}
                   >
                     <FlaskConical size={13} className={iconClass} />
-                    <code className="text-fg-subtle w-[4.25rem] shrink-0 truncate text-[0.6875rem] tabular">{hit.ref}</code>
+                    <code className="text-fg-subtle w-[4.25rem] shrink-0 truncate text-aux tabular">{hit.ref}</code>
                     <span className="min-w-0 flex-1 truncate">{hit.title}</span>
                   </Command.Item>
                 ))}
@@ -217,7 +217,7 @@ export const CommandPalette = ({ labProjects }: { labProjects: Pick<LabProject, 
                     className={itemClass}
                   >
                     <StatusIcon status={hit.status} size={13} />
-                    <code className="text-fg-subtle w-[4.25rem] shrink-0 truncate text-[0.6875rem] tabular">
+                    <code className="text-fg-subtle w-[4.25rem] shrink-0 truncate text-aux tabular">
                       {hit.ref}
                     </code>
                     <span className="min-w-0 flex-1 truncate">{hit.title}</span>
@@ -225,11 +225,11 @@ export const CommandPalette = ({ labProjects }: { labProjects: Pick<LabProject, 
                       <span className="bg-status-done size-[0.375rem] shrink-0 rounded-full" title="Has a resolution" />
                     )}
                     {hit.loose && (
-                      <span className="text-fg-subtle shrink-0 text-[0.625rem]" title="Loose match">
+                      <span className="text-fg-subtle shrink-0 text-aux" title="Loose match">
                         ~
                       </span>
                     )}
-                    <span className="text-fg-subtle shrink-0 text-[0.625rem] tabular">
+                    <span className="text-fg-subtle shrink-0 text-aux tabular">
                       ~{hit.tokens}
                     </span>
                   </Command.Item>
@@ -315,7 +315,7 @@ export const CommandPalette = ({ labProjects }: { labProjects: Pick<LabProject, 
                         aria-hidden
                       />
                       <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                      <span className="text-fg-subtle shrink-0 text-[0.625rem]">in the lab</span>
+                      <span className="text-fg-subtle shrink-0 text-aux">in the lab</span>
                     </Command.Item>
                   ))}
                 </Command.Group>

@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 export const HandoffBadge = ({ handoff, className }: { handoff: Handoff | null | undefined; className?: string }) => {
   if (!handoff) return null
   const classes = cn(
-    'border-border text-fg-muted inline-flex h-[1.125rem] shrink-0 items-center gap-1 rounded border px-1.5 font-mono text-[0.6875rem]',
+    'border-border text-fg-muted inline-flex h-[1.125rem] shrink-0 items-center gap-1 rounded border px-1.5 font-mono text-aux',
     handoff.url && 'hover:border-border-strong hover:text-fg transition-colors',
     className,
   )

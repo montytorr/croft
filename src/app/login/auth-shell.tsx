@@ -24,7 +24,7 @@ export const AuthShell = ({ children }: { children: React.ReactNode }) => {
     <main className="bg-bg grid min-h-dvh lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
       {/* The story, on a screen wide enough to tell it. */}
       <section className="border-border bg-bg-elevated relative hidden flex-col justify-between overflow-hidden border-r p-12 lg:flex">
-        <div className="relative flex items-center gap-2.5 text-[0.9375rem] font-semibold tracking-tight">
+        <div className="relative flex items-center gap-2.5 text-ui font-semibold tracking-tight">
           <BrandMark size={26} className="rounded-[6px]" />
           <span>{name}</span>
         </div>
@@ -49,7 +49,7 @@ export const AuthShell = ({ children }: { children: React.ReactNode }) => {
           {PILLARS.map(({ icon: Icon, title, body }) => (
             <li key={title} className="flex gap-2.5">
               <Icon size={15} className="text-fg-muted mt-0.5 shrink-0" aria-hidden />
-              <span className="text-[0.75rem] leading-snug">
+              <span className="text-aux leading-snug">
                 <span className="text-fg font-medium">{title}</span>
                 <span className="text-fg-subtle block">{body}</span>
               </span>
@@ -60,7 +60,7 @@ export const AuthShell = ({ children }: { children: React.ReactNode }) => {
 
       <section className="relative flex items-center justify-center px-6 py-12">
         <div className="relative w-full max-w-[21rem]">
-          <div className="mb-10 flex items-center gap-2.5 text-[0.9375rem] font-semibold tracking-tight lg:hidden">
+          <div className="mb-10 flex items-center gap-2.5 text-ui font-semibold tracking-tight lg:hidden">
             <BrandMark size={26} className="rounded-[6px]" />
             <span>{name}</span>
           </div>
@@ -73,7 +73,7 @@ export const AuthShell = ({ children }: { children: React.ReactNode }) => {
 
 /** The one error line every form on these pages uses. */
 export const AuthError = ({ children }: { children: React.ReactNode }) => (
-  <p className="text-danger bg-danger-subtle flex items-start gap-2 rounded-md px-3 py-2 text-xs" role="alert">
+  <p className="text-danger bg-danger-subtle flex items-start gap-2 rounded-md px-3 py-2 text-aux" role="alert">
     <CircleAlert size={14} className="mt-px shrink-0" aria-hidden />
     {children}
   </p>

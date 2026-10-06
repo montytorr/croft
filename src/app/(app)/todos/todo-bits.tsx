@@ -39,12 +39,12 @@ export const SubjectChip = ({
     title={`${subject.ref} · ${subject.title}${subject.project ? ` · ${subject.project.name}` : ''}`}
     className={cn(
       'group/subject text-fg-muted hover:text-fg relative z-10 inline-flex min-w-0 items-center gap-1.5 rounded',
-      'text-[0.6875rem] leading-none transition-colors duration-[var(--dur-1)]',
+      'text-aux leading-none transition-colors duration-[var(--dur-1)]',
       className,
     )}
   >
     <ProjectDot color={subject.project?.color} />
-    <span className="text-fg-subtle group-hover/subject:text-fg-muted shrink-0 font-mono text-[0.6875rem]">{subject.ref}</span>
+    <span className="text-fg-subtle group-hover/subject:text-fg-muted shrink-0 font-mono text-aux">{subject.ref}</span>
     <LockMark visibility={subject.visibility} size={10} />
     <span className={cn('min-w-0 truncate', titleClassName)}>{subject.title}</span>
   </Link>

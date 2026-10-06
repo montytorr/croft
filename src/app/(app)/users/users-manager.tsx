@@ -17,18 +17,18 @@ const errorMessage = (value: unknown) => value instanceof Error ? value.message 
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
 
-export const MAIL_NOT_CONFIGURED = 'Email is not set up on this Croft: set RESEND_API_KEY and CROFT_MAIL_FROM.'
+export const MAIL_NOT_CONFIGURED = 'Email is not set up here, so reset links cannot be sent. Ask whoever runs this server to turn it on.'
 
 type ResetNotice = { ok: true; to: string } | { ok: false; error: string }
 
 const ResetOutcome = ({ notice }: { notice: ResetNotice | undefined }) =>
   notice === undefined ? null : notice.ok ? (
-    <p role="status" className="text-status-in-review inline-flex items-center gap-1.5 text-[0.6875rem]">
+    <p role="status" className="text-status-in-review inline-flex items-center gap-1.5 text-aux">
       <MailCheck size={12} aria-hidden />
       Sent to <span className="font-mono">{notice.to}</span>
     </p>
   ) : (
-    <p role="alert" className="text-danger text-[0.6875rem] leading-relaxed">{notice.error}</p>
+    <p role="alert" className="text-danger text-aux leading-relaxed">{notice.error}</p>
   )
 
 /**
@@ -177,7 +177,7 @@ export const UsersManager = ({
       <section className="surface-card overflow-hidden">
         <header className="border-border flex items-center gap-2 border-b px-4 py-3">
           <UserRoundPlus size={15} className="text-fg-muted" aria-hidden />
-          <h2 className="text-[0.8125rem] font-medium">Create user</h2>
+          <h2 className="text-ui font-medium">Create user</h2>
         </header>
         <div className="grid gap-3 px-4 py-4 sm:grid-cols-2">
           <Field label="Display name">
@@ -205,18 +205,18 @@ export const UsersManager = ({
 
       <section>
         <div className="mb-3 flex items-baseline gap-2">
-          <h2 className="text-fg-muted text-[0.65625rem] font-medium tracking-[0.06em] uppercase">Workspace users</h2>
-          <span className="text-fg-subtle tabular text-[0.6875rem]">{users.length}</span>
+          <h2 className="text-fg-muted text-micro font-medium tracking-[0.06em] uppercase">Workspace users</h2>
+          <span className="text-fg-subtle tabular text-aux">{users.length}</span>
           <span className="bg-border ml-1 h-px flex-1 self-center" />
         </div>
         <div className="stagger flex flex-col gap-3">
           {users.map((user) => (
             <article key={user.id} className={cn('surface-card p-4', !user.active && 'opacity-80')}>
               <div className="mb-3 flex flex-wrap items-center gap-2">
-                <strong className="text-[0.8125rem] font-medium">{user.displayName}</strong>
+                <strong className="text-ui font-medium">{user.displayName}</strong>
                 <span
                   className={cn(
-                    'rounded border px-1.5 py-0.5 text-[0.625rem] uppercase tracking-wide',
+                    'rounded border px-1.5 py-0.5 text-micro uppercase tracking-wide',
                     user.role === 'admin'
                       ? 'border-accent/40 bg-accent-subtle/60 text-accent'
                       : 'border-border text-fg-muted',
@@ -226,14 +226,14 @@ export const UsersManager = ({
                 </span>
                 <span
                   className={cn(
-                    'inline-flex items-center gap-1 text-[0.6875rem]',
+                    'inline-flex items-center gap-1 text-aux',
                     user.active ? 'text-status-in-review' : 'text-danger',
                   )}
                 >
                   <span aria-hidden className="size-1.5 rounded-full bg-current" />
                   {user.active ? 'Active' : 'Disabled'}
                 </span>
-                <span className="text-fg-subtle tabular ml-auto flex gap-3 text-[0.6875rem]">
+                <span className="text-fg-subtle tabular ml-auto flex gap-3 text-aux">
                   <span className={cn(!user.active && user.openTaskCount > 0 && 'text-danger')}>
                     {plural(user.openTaskCount, 'open task')}
                   </span>
@@ -293,7 +293,7 @@ export const UsersManager = ({
                   aria-label={`Hand over ${user.displayName}'s open tasks`}
                   className="border-border bg-surface-raised/30 enter-rise mt-3 rounded-md border p-3"
                 >
-                  <p className="text-[0.75rem] leading-relaxed">
+                  <p className="text-aux leading-relaxed">
                     {user.displayName} is the assignee of{' '}
                     <strong className="tabular font-medium">{plural(user.openTaskCount, 'open task')}</strong>.{' '}
                     {user.active
@@ -302,7 +302,7 @@ export const UsersManager = ({
                   </p>
                   {successorsFor(user).length === 0 ? (
                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <p className="text-danger text-[0.6875rem]">No other active user can take them over.</p>
+                      <p className="text-danger text-aux">No other active user can take them over.</p>
                       <Button type="button" size="sm" variant="quiet" onClick={() => setHandover(null)}>Cancel</Button>
                     </div>
                   ) : (
@@ -338,7 +338,7 @@ export const UsersManager = ({
               {user.active && (
                 <div className="border-border mt-4 border-t pt-3">
                   <details className="group">
-                    <summary className="text-fg-muted hover:text-fg flex w-fit cursor-pointer list-none items-center gap-1.5 text-[0.75rem] font-medium transition-colors duration-[var(--dur-1)] [&::-webkit-details-marker]:hidden">
+                    <summary className="text-fg-muted hover:text-fg flex w-fit cursor-pointer list-none items-center gap-1.5 text-aux font-medium transition-colors duration-[var(--dur-1)] [&::-webkit-details-marker]:hidden">
                       <ChevronRight size={12} aria-hidden className="transition-transform duration-[var(--dur-2)] ease-[var(--ease-out)] group-open:rotate-90" />
                       Password reset and agent keys
                     </summary>
@@ -355,9 +355,9 @@ export const UsersManager = ({
                           </Button>
                           <ResetOutcome notice={resets[user.id]} />
                         </div>
-                        <p className="text-fg-subtle text-[0.6875rem] leading-relaxed">
+                        <p className="text-fg-subtle text-aux leading-relaxed">
                           {mailReady
-                            ? `Emails ${user.displayName} a link to choose a new password. It works once, within the hour; their current password keeps working until they use it, and then every session they have is signed out. You never see the link.`
+                            ? `Emails ${user.displayName} a link to choose a new password. It works once, within the hour.`
                             : MAIL_NOT_CONFIGURED}
                         </p>
                       </div>
@@ -374,14 +374,14 @@ export const UsersManager = ({
                                 <li><EmptyState compact title="No agent keys." /></li>
                               )}
                               {(keys[user.id] ?? []).map((key) => (
-                                <li key={key.id} className="row-hover flex min-h-[2.25rem] flex-wrap items-center gap-2 px-2.5 py-1.5 text-[0.6875rem]">
+                                <li key={key.id} className="row-hover flex min-h-[2.25rem] flex-wrap items-center gap-2 px-2.5 py-1.5 text-aux">
                                   <span className={key.revoked ? 'line-through text-fg-subtle' : 'text-fg'}>{key.agentName}</span>
                                   <code className="text-fg-subtle">{key.keyPrefix}…</code>
                                   {!key.revoked && <Button type="button" size="sm" variant="danger" className="ml-auto h-6" onClick={() => revokeKey(user.id, key)}>Revoke</Button>}
                                 </li>
                               ))}
                             </ul>
-                            <p className="text-fg-subtle text-[0.6875rem] leading-relaxed">
+                            <p className="text-fg-subtle text-aux leading-relaxed">
                               Keys are paired by the person who holds them: they run <code className="font-mono">croft setup</code> and
                               approve it in their own browser. You can revoke a key here; you cannot mint one for them, since a key
                               reads everything its holder can, private subjects included.
@@ -398,7 +398,7 @@ export const UsersManager = ({
         </div>
       </section>
       {error && (
-        <p role="alert" className="text-danger bg-danger-subtle enter-rise rounded-md px-3 py-2 text-[0.75rem]">
+        <p role="alert" className="text-danger bg-danger-subtle enter-rise rounded-md px-3 py-2 text-aux">
           {error}
         </p>
       )}

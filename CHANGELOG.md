@@ -8,6 +8,13 @@ break an existing install is called out under **Breaking** with what to do about
 
 ## [Unreleased]
 
+### Changed
+
+- Readability pass. Interface text is 15px on a phone and 16px from 768px up (it was 14px); secondary text is 13px to 14px and nothing is under 13px except an uppercase, tracked group label at 12px. Every text colour in both themes now holds 4.5:1 on every ground it can sit on (`contrast.test.ts`), and `type-scale.test.ts` keeps small sizes from coming back.
+- The lab list shows the whole title on a phone, with the ref, project, counts, owner and time beneath it; a subject's stage and visibility are said in words at the top of its page; todo rows show their status in words; hover-only actions are visible on touch screens; rows that scroll sideways fade at the edge.
+- Shorter, plainer helper text on settings, users and keys. The API reference follows the theme. Search no longer shows a token estimate.
+- `npm run check:overflow` opens every page at 320 to 1440px against a running instance and fails on sideways overflow.
+
 ## [0.8.0] — 2026-10-04
 
 > **Upgrade every CLI with `croft setup`.** A 0.6 CLI no longer sees hand-offs (`croft sync` finds nothing, `croft push` is gone), and 0.6 and 0.7 CLIs get 404 from the removed routes.

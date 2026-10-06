@@ -95,7 +95,7 @@ export const LogPanel = ({ subjectRef, notes: initial }: { subjectRef: string; n
     <section aria-labelledby="log-heading">
       <h2 id="log-heading" className={cn(LABEL, 'mb-3 flex items-center gap-2')}>
         Log
-        <span className="bg-surface-raised text-fg-muted rounded-full px-1.5 py-px text-[0.625rem] tracking-normal tabular-nums">
+        <span className="bg-surface-raised text-fg-muted rounded-full px-1.5 py-px text-aux tracking-normal tabular-nums">
           {notes.length}
         </span>
       </h2>
@@ -122,7 +122,7 @@ export const LogPanel = ({ subjectRef, notes: initial }: { subjectRef: string; n
                 aria-checked={kind === k}
                 onClick={() => setKind(k)}
                 className={cn(
-                  'flex h-[1.5rem] items-center gap-1.5 rounded-md px-2 text-[0.71875rem] transition-colors duration-[var(--dur-1)]',
+                  'flex h-[1.5rem] items-center gap-1.5 rounded-md px-2 text-aux transition-colors duration-[var(--dur-1)]',
                   kind === k ? 'bg-surface-raised text-fg' : 'text-fg-subtle hover:text-fg',
                 )}
               >
@@ -131,7 +131,7 @@ export const LogPanel = ({ subjectRef, notes: initial }: { subjectRef: string; n
               </button>
             ))}
           </div>
-          <span className="text-fg-subtle ml-auto hidden text-[0.6875rem] sm:block">⌘↵</span>
+          <span className="text-fg-subtle ml-auto hidden text-aux sm:block">⌘↵</span>
           <Button size="sm" variant="primary" onClick={() => void submit()} disabled={!text.trim() || pending} className="px-3">
             {pending ? <Spinner /> : 'Add to log'}
           </Button>
@@ -139,7 +139,7 @@ export const LogPanel = ({ subjectRef, notes: initial }: { subjectRef: string; n
       </div>
 
       {notes.length === 0 ? (
-        <p className="text-fg-subtle text-[0.75rem]">Nothing logged yet. Dead ends are worth recording too.</p>
+        <p className="text-fg-subtle text-aux">Nothing logged yet. Dead ends are worth recording too.</p>
       ) : (
         <ol className="stagger flex flex-col">
           {notes.map((note) => (
@@ -150,17 +150,17 @@ export const LogPanel = ({ subjectRef, notes: initial }: { subjectRef: string; n
                 className="bg-border absolute top-[1.25rem] bottom-0 left-[0.3125rem] w-px group-last/entry:hidden"
               />
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-baseline gap-x-2 text-[0.6875rem]">
+                <div className="flex flex-wrap items-baseline gap-x-2 text-aux">
                   <span className="font-medium" style={{ color: tone(note.kind) }}>
                     {note.kind}
                   </span>
-                  <span className={note.actor_type === 'agent' ? 'text-fg-muted font-mono text-[0.65625rem]' : 'text-fg-muted'}>
+                  <span className={note.actor_type === 'agent' ? 'text-fg-muted font-mono text-aux' : 'text-fg-muted'}>
                     {note.actor_id}
                   </span>
                   <RelativeTime iso={note.created_at} className="text-fg-subtle ml-auto shrink-0" />
                 </div>
                 {serverWritten(note.kind) ? (
-                  <p className="text-fg-muted mt-0.5 text-[0.8125rem]">{note.note}</p>
+                  <p className="text-fg-muted mt-0.5 text-ui">{note.note}</p>
                 ) : (
                   <div className="mt-1">
                     <MarkdownView prose="writeup-sm">{note.note}</MarkdownView>

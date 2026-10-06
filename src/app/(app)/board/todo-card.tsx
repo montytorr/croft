@@ -49,7 +49,7 @@ export const TodoCard = ({
         {showProjectBadge && <ProjectIcon size={11} projectKey={task.project_key} />}
         <Link
           href={href}
-          className="text-fg-subtle hover:text-accent shrink-0 font-mono text-[0.6875rem]"
+          className="text-fg-subtle hover:text-accent shrink-0 font-mono text-aux"
           onClick={(e) => e.stopPropagation()}
         >
           {task.project_key}-{task.number}
@@ -72,7 +72,7 @@ export const TodoCard = ({
 
       <Link
         href={href}
-        className="text-fg hover:text-accent line-clamp-3 block text-[0.8125rem] leading-snug font-medium transition-colors duration-[var(--dur-1)]"
+        className="text-fg hover:text-accent line-clamp-3 block text-ui leading-snug font-medium transition-colors duration-[var(--dur-1)]"
         onClick={(e) => e.stopPropagation()}
       >
         {task.title}
@@ -85,7 +85,7 @@ export const TodoCard = ({
       ) : null}
 
       {task.blocked_reason ? (
-        <p className="text-danger mt-1 line-clamp-1 text-[0.6875rem]">blocked: {task.blocked_reason}</p>
+        <p className="text-danger mt-1 line-clamp-1 text-aux">blocked: {task.blocked_reason}</p>
       ) : null}
 
       {(showSubject && task.subject) || pushed || task.has_resolution || task.labels.length > 0 ? (
@@ -95,7 +95,7 @@ export const TodoCard = ({
           ) : null}
           <HandoffBadge handoff={task.handoff} />
           {task.has_resolution ? (
-            <span className="text-status-done text-[0.6875rem]">{task.resolution_kind ?? 'resolved'}</span>
+            <span className="text-status-done text-aux">{task.resolution_kind ?? 'resolved'}</span>
           ) : null}
           {task.labels.slice(0, 3).map((l) => (
             <LabelPill key={l}>{l}</LabelPill>

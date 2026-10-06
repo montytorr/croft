@@ -33,7 +33,7 @@ const TakeBackButton = ({ todo, onTakeBack }: { todo: PageTodo; onTakeBack?: (to
       type="button"
       onClick={() => onTakeBack(todo)}
       title={`Take ${todo.ref} back from ${todo.handoff.tracker}`}
-      className="text-fg-subtle hover:text-fg relative z-10 inline-flex h-[1.125rem] shrink-0 items-center gap-1 rounded px-1 text-[0.625rem] transition-colors"
+      className="text-fg-subtle hover:text-fg relative z-10 inline-flex h-[1.125rem] shrink-0 items-center gap-1 rounded px-1 text-aux transition-colors"
     >
       <Undo2 size={10} aria-hidden />
       Take back
@@ -41,9 +41,9 @@ const TakeBackButton = ({ todo, onTakeBack }: { todo: PageTodo; onTakeBack?: (to
   ) : null
 
 const HeldBy = ({ agent }: { agent: string }) => (
-  <span className="text-fg-subtle inline-flex min-w-0 items-center gap-1 text-[0.6875rem]" title={`Claimed by ${agent}`}>
+  <span className="text-fg-subtle inline-flex min-w-0 items-center gap-1 text-aux" title={`Claimed by ${agent}`}>
     <span className="bg-status-doing live-dot size-[0.375rem] shrink-0 rounded-full text-status-doing" aria-hidden />
-    <span className="text-fg-muted truncate font-mono text-[0.65625rem]">{agent}</span>
+    <span className="text-fg-muted truncate font-mono text-aux">{agent}</span>
   </span>
 )
 
@@ -77,7 +77,7 @@ const StatusControl = ({ todo, onChange }: { todo: PageTodo; onChange: (status: 
 }
 
 const closedTitle = (status: string) =>
-  status === 'done' || status === 'cancelled' ? 'text-fg-subtle line-through decoration-fg-subtle/40' : 'text-fg'
+  status === 'done' || status === 'cancelled' ? 'text-fg-muted line-through decoration-fg-subtle/60' : 'text-fg'
 
 const TodoRow = ({
   todo,
@@ -88,10 +88,10 @@ const TodoRow = ({
   onStatus: (todo: PageTodo, s: TaskStatus) => void
   onTakeBack?: (todo: PageTodo) => void
 }) => (
-  <li className="group/row row-hover relative flex h-[1.875rem] items-center gap-2 rounded-md px-2">
+  <li className="group/row row-hover relative flex min-h-12 items-center gap-2 rounded-md px-2 py-1.5 md:min-h-11">
     <StatusControl todo={todo} onChange={(s) => onStatus(todo, s)} />
-    <Link href={todoHref(todo)} className="min-w-0 flex-1 truncate text-[0.8125rem] after:absolute after:inset-0">
-      <span className={closedTitle(todo.status)}>{todo.title}</span>
+    <Link href={todoHref(todo)} className="min-w-0 flex-1 text-ui after:absolute after:inset-0">
+      <span className={cn('line-clamp-2 md:line-clamp-1', closedTitle(todo.status))}>{todo.title}</span>
     </Link>
     {todo.claimed_by ? <span className="hidden max-w-[10rem] sm:flex"><HeldBy agent={todo.claimed_by} /></span> : null}
     <HandoffBadge handoff={todo.handoff} className="relative z-10" />
@@ -101,8 +101,8 @@ const TodoRow = ({
         <Avatar name={todo.assignee.name} size={16} />
       </span>
     ) : null}
-    <span className="text-fg-subtle w-[3.25rem] shrink-0 text-right font-mono text-[0.65625rem]">{todo.ref}</span>
-    <RelativeTime iso={todo.updated_at} className="text-fg-subtle hidden w-[4.5rem] shrink-0 text-right text-[0.6875rem] md:block" />
+    <span className="text-fg-subtle w-[3.25rem] shrink-0 text-right font-mono text-aux">{todo.ref}</span>
+    <RelativeTime iso={todo.updated_at} className="text-fg-subtle hidden w-[4.5rem] shrink-0 text-right text-aux md:block" />
   </li>
 )
 
@@ -115,11 +115,11 @@ const TodoCard = ({ todo, lifted, onTakeBack }: { todo: PageTodo; lifted?: boole
       isHandedOff(todo) && 'bg-bg-elevated/60 border-dashed',
     )}
   >
-    <Link href={todoHref(todo)} className="text-[0.8125rem] leading-snug after:absolute after:inset-0" draggable={false}>
+    <Link href={todoHref(todo)} className="text-ui leading-snug after:absolute after:inset-0" draggable={false}>
       <span className={cn('line-clamp-3', closedTitle(todo.status))}>{todo.title}</span>
     </Link>
     <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-      <span className="text-fg-subtle font-mono text-[0.625rem]">{todo.ref}</span>
+      <span className="text-fg-subtle font-mono text-aux">{todo.ref}</span>
       {todo.claimed_by ? <HeldBy agent={todo.claimed_by} /> : null}
       <HandoffBadge handoff={todo.handoff} className="relative z-10" />
       <TakeBackButton todo={todo} onTakeBack={onTakeBack} />
@@ -153,11 +153,11 @@ const Lane = ({ status, todos, onTakeBack }: { status: TaskStatus; todos: PageTo
   return (
     <section
       aria-label={STATUS_LABEL[status]}
-      className="bg-bg-elevated flex min-h-[8rem] min-w-[13.5rem] flex-col rounded-lg"
+      className="bg-bg-elevated flex min-h-[8rem] min-w-[15rem] flex-col rounded-lg"
     >
-      <header className="flex h-8 shrink-0 items-center gap-1.5 px-2.5">
+      <header className="flex h-10 shrink-0 items-center gap-1.5 px-2.5">
         <StatusIcon status={status} size={12} />
-        <span className="text-fg text-[0.75rem] font-medium">{STATUS_LABEL[status]}</span>
+        <span className="text-fg text-ui font-medium">{STATUS_LABEL[status]}</span>
         <span className="count ml-auto">{todos.length}</span>
       </header>
       <div
@@ -169,7 +169,7 @@ const Lane = ({ status, todos, onTakeBack }: { status: TaskStatus; todos: PageTo
         )}
       >
         {todos.length === 0 ? (
-          <p className={cn('text-fg-subtle grid flex-1 place-items-center py-4 text-[0.6875rem]', isOver && 'text-accent')}>
+          <p className={cn('text-fg-subtle grid flex-1 place-items-center py-4 text-aux', isOver && 'text-accent')}>
             {isOver ? 'Drop here' : 'Nothing here'}
           </p>
         ) : (
@@ -316,7 +316,7 @@ export const TodosPanel = ({
       aria-pressed={view === value}
       onClick={() => setView(value)}
       className={cn(
-        'flex h-[1.5rem] items-center gap-1.5 rounded-[5px] px-2 text-[0.75rem] transition-colors duration-[var(--dur-1)]',
+        'flex h-[1.5rem] items-center gap-1.5 rounded-[5px] px-2 text-aux transition-colors duration-[var(--dur-1)]',
         view === value ? 'bg-surface text-fg ring-border shadow-[0_1px_0_var(--border)] ring-1' : 'text-fg-muted hover:text-fg',
       )}
     >
@@ -342,7 +342,7 @@ export const TodosPanel = ({
             maxLength={300}
             placeholder={todos.length ? 'Add a todo…' : 'What is the first concrete thing to do?'}
             aria-label="New todo"
-            className="text-fg placeholder:text-fg-subtle h-full min-w-0 flex-1 bg-transparent text-[0.8125rem] outline-none"
+            className="text-fg placeholder:text-fg-subtle h-full min-w-0 flex-1 bg-transparent text-ui outline-none"
           />
           {adding ? (
             <span className="text-fg-subtle px-1.5">
@@ -353,7 +353,7 @@ export const TodosPanel = ({
           ) : null}
         </div>
 
-        <p className="text-fg-subtle text-[0.75rem] tabular-nums">
+        <p className="text-fg-subtle text-aux tabular-nums">
           <span className="text-fg-muted">{tally.open}</span> open · {tally.done} done
         </p>
 
@@ -363,7 +363,7 @@ export const TodosPanel = ({
               type="button"
               aria-pressed={showCancelled}
               onClick={() => setShowCancelled((v) => !v)}
-              className={cn('h-[1.5rem] rounded-md px-2 text-[0.75rem] transition-colors', showCancelled ? 'text-fg bg-surface-raised' : 'text-fg-subtle hover:text-fg')}
+              className={cn('h-[1.5rem] rounded-md px-2 text-aux transition-colors', showCancelled ? 'text-fg bg-surface-raised' : 'text-fg-subtle hover:text-fg')}
             >
               {showCancelled ? 'Hide' : 'Show'} cancelled <span className="tabular-nums">({tally.cancelled})</span>
             </button>
@@ -377,16 +377,16 @@ export const TodosPanel = ({
 
       {view === 'list' ? (
         todos.length === 0 ? (
-          <p className="text-fg-subtle border-border rounded-lg border border-dashed px-4 py-8 text-center text-[0.8125rem]">
+          <p className="text-fg-subtle border-border rounded-lg border border-dashed px-4 py-8 text-center text-ui">
             No todos yet. A todo is one concrete piece of work an agent or a person can pick up.
           </p>
         ) : (
           <div className="flex flex-col gap-3">
             {listGroups(todos, showCancelled).map((group) => (
               <section key={group.status} aria-label={STATUS_LABEL[group.status]}>
-                <h3 className="border-border mb-0.5 flex h-7 items-center gap-1.5 border-b px-2">
+                <h3 className="border-border mb-0.5 flex h-9 items-center gap-1.5 border-b px-2">
                   <StatusIcon status={group.status} size={12} />
-                  <span className="text-fg-muted text-[0.75rem] font-medium">{STATUS_LABEL[group.status]}</span>
+                  <span className="text-fg-muted text-aux font-medium">{STATUS_LABEL[group.status]}</span>
                   <span className="count">{group.todos.length}</span>
                 </h3>
                 <ul className="flex flex-col">

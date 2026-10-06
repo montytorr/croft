@@ -18,7 +18,7 @@ type Mode = 'sign-in' | 'forgot' | 'sent'
 const SHOWN_FORGOT_FAILURES = new Set(['rate_limited', 'validation_failed', 'mail_not_configured', 'forbidden'])
 
 const LINK =
-  'text-fg-subtle hover:text-fg rounded-sm text-[0.75rem] transition-colors ' +
+  'text-fg-subtle hover:text-fg rounded-sm text-aux transition-colors ' +
   'focus-visible:ring-ring/40 focus-visible:outline-none focus-visible:ring-2'
 
 /**
@@ -103,11 +103,11 @@ export const LoginForm = ({ canReset = false }: { canReset?: boolean }) => {
       <AuthShell>
         <MailCheck size={22} className="text-fg-muted mb-4" aria-hidden />
         <h1 className="font-display headline text-fg text-[1.75rem] leading-tight">Check your email</h1>
-        <p className="text-fg-muted mt-3 text-[0.8125rem] leading-relaxed" role="status">
+        <p className="text-fg-muted mt-3 text-ui leading-relaxed" role="status">
           If <span className="text-fg font-medium break-all">{email.trim()}</span> belongs to an account on {name},
           a link to choose a new password is on its way. It works once, within the hour.
         </p>
-        <p className="text-fg-subtle mt-3 text-[0.75rem] leading-relaxed">
+        <p className="text-fg-subtle mt-3 text-aux leading-relaxed">
           Nothing arrived? Check the spam folder, or ask an administrator of this Croft to send you a reset link.
         </p>
         <button type="button" onClick={() => switchTo('sign-in')} className={`${LINK} mt-8 inline-flex items-center gap-1.5`}>
@@ -121,13 +121,13 @@ export const LoginForm = ({ canReset = false }: { canReset?: boolean }) => {
     return (
       <AuthShell>
         <h1 className="font-display headline text-fg text-[1.75rem] leading-tight">Forgot your password?</h1>
-        <p className="text-fg-muted mt-2 text-[0.8125rem] leading-relaxed">
+        <p className="text-fg-muted mt-2 text-ui leading-relaxed">
           Enter the email you sign in with. We’ll send a link to choose a new one.
         </p>
 
         <form onSubmit={onForgot} className="mt-8 flex flex-col gap-4">
           <label className="flex flex-col gap-1.5">
-            <span className="text-fg-muted text-xs font-medium">Email</span>
+            <span className="text-fg-muted text-aux font-medium">Email</span>
             <Input
               type="email"
               required
@@ -164,11 +164,11 @@ export const LoginForm = ({ canReset = false }: { canReset?: boolean }) => {
   return (
     <AuthShell>
       <h1 className="font-display headline text-fg text-[1.75rem] leading-tight">Welcome back</h1>
-      <p className="text-fg-muted mt-2 text-[0.8125rem]">Sign in to {name}.</p>
+      <p className="text-fg-muted mt-2 text-ui">Sign in to {name}.</p>
 
       <form onSubmit={onSubmit} className="mt-8 flex flex-col gap-4">
         <label className="flex flex-col gap-1.5">
-          <span className="text-fg-muted text-xs font-medium">Email</span>
+          <span className="text-fg-muted text-aux font-medium">Email</span>
           <Input
             type="email"
             required
@@ -183,7 +183,7 @@ export const LoginForm = ({ canReset = false }: { canReset?: boolean }) => {
 
         <div className="flex flex-col gap-1.5">
           <label className="flex flex-col gap-1.5">
-            <span className="text-fg-muted text-xs font-medium">Password</span>
+            <span className="text-fg-muted text-aux font-medium">Password</span>
             <span className="relative flex">
               <Input
                 type={reveal ? 'text' : 'password'}
@@ -228,7 +228,7 @@ export const LoginForm = ({ canReset = false }: { canReset?: boolean }) => {
 
       {/* Who can come in, and how agents do: the two questions the old
           "single-user" line answered wrongly once admins could add people. */}
-      <div className="border-border text-fg-subtle mt-10 flex flex-col gap-2 border-t pt-5 text-[0.75rem] leading-relaxed">
+      <div className="border-border text-fg-subtle mt-10 flex flex-col gap-2 border-t pt-5 text-aux leading-relaxed">
         <p>No account yet? An administrator of this Croft can add you.</p>
         <p>
           Agents don’t sign in here. They connect with an API key, which{' '}

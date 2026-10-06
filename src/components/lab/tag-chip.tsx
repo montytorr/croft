@@ -25,7 +25,7 @@ export const TagChip = ({
   return (
     <span
       className={cn(
-        'text-fg-muted inline-flex h-[1.25rem] max-w-full shrink-0 items-center gap-1 rounded-full border px-2 text-[0.6875rem] leading-none font-medium',
+        'text-fg-muted inline-flex h-6 max-w-full shrink-0 items-center gap-1 rounded-full border px-2 text-aux leading-none font-medium',
         active && 'text-fg',
         className,
       )}

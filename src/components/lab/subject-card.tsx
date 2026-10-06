@@ -14,7 +14,7 @@ export const TodoTally = ({ todos, className }: { todos: SubjectSummary['todos']
   if (total === 0) return null
   return (
     <span
-      className={cn('text-fg-subtle inline-flex shrink-0 items-center gap-1.5 text-[0.6875rem] tabular-nums', className)}
+      className={cn('text-fg-subtle inline-flex shrink-0 items-center gap-1.5 text-aux tabular-nums', className)}
       title={`${todos.open} open, ${todos.done} done`}
     >
       <span className="bg-border-strong/70 relative h-[3px] w-6 overflow-hidden rounded-full" aria-hidden>
@@ -23,7 +23,7 @@ export const TodoTally = ({ todos, className }: { todos: SubjectSummary['todos']
           style={{ width: `${(todos.done / total) * 100}%` }}
         />
       </span>
-      {todos.done}/{total}
+      {todos.done}/{total} done
     </span>
   )
 }
@@ -52,14 +52,14 @@ export const SubjectCard = ({
     <Link
       href={`/subjects/${subject.number}`}
       onClick={(e) => e.stopPropagation()}
-      className="text-fg hover:text-fg block text-[0.875rem] leading-snug font-medium text-pretty"
+      className="text-fg hover:text-fg block text-ui leading-snug font-medium text-pretty"
       draggable={false}
     >
       {subject.title}
     </Link>
 
     {subject.conclusion ? (
-      <p className="writeup-sm text-fg-muted mt-1.5 line-clamp-2 !text-[0.8125rem] !leading-snug">
+      <p className="writeup-sm text-fg-muted mt-1.5 line-clamp-2 !text-ui !leading-snug">
         {subject.conclusion}
       </p>
     ) : null}
@@ -70,13 +70,13 @@ export const SubjectCard = ({
           <TagChip key={tag.id} tag={tag} />
         ))}
         {subject.tags.length > 3 ? (
-          <span className="text-fg-subtle self-center text-[0.6875rem]">+{subject.tags.length - 3}</span>
+          <span className="text-fg-subtle self-center text-aux">+{subject.tags.length - 3}</span>
         ) : null}
       </div>
     ) : null}
 
     <div className="mt-2.5 flex items-center gap-2">
-      <span className="text-fg-subtle font-mono text-[0.65625rem]">{subject.ref}</span>
+      <span className="text-fg-subtle font-mono text-aux">{subject.ref}</span>
       <LockMark visibility={subject.visibility} members={subject.members.length} size={10} />
       {subject.project ? <ProjectLabel project={subject.project} className="min-w-0 shrink" /> : null}
       <TodoTally todos={subject.todos} />

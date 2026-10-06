@@ -43,7 +43,7 @@ export const MobileNav = ({
         onClick={() => setOpen(true)}
         aria-label="Open navigation"
         aria-expanded={open}
-        className="text-fg-muted hover:text-fg hover:bg-surface-hover grid size-[1.875rem] shrink-0 place-items-center rounded-md transition-colors md:hidden"
+        className="text-fg-muted hover:text-fg hover:bg-surface-hover grid size-11 shrink-0 place-items-center rounded-md transition-colors md:hidden"
       >
         <Menu size={16} aria-hidden />
       </button>

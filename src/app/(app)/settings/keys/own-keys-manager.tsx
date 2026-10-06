@@ -17,7 +17,7 @@ type Pending = { kind: 'key' | 'host'; id: string } | null
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
 
 const textButton =
-  'text-[0.75rem] transition-colors duration-[var(--dur-1)] disabled:pointer-events-none disabled:opacity-40'
+  'text-aux transition-colors duration-[var(--dur-1)] disabled:pointer-events-none disabled:opacity-40'
 
 /**
  * No `<form>` anywhere (CROFT-171): every action is a `type="button"` that
@@ -65,8 +65,7 @@ export const OwnKeysManager = ({ keys }: { keys: OwnKey[] }) => {
           title="No agent keys yet."
           hint={
             <>
-              Run <code>croft setup</code> on a machine and approve the link it opens: that pairs a key
-              for each agent runtime on the machine.
+              Run <code>croft setup</code> on a machine, then approve the link it opens.
             </>
           }
         />
@@ -81,7 +80,7 @@ export const OwnKeysManager = ({ keys }: { keys: OwnKey[] }) => {
           <p
             role="status"
             className={cn(
-              'enter-rise text-[0.75rem]',
+              'enter-rise text-aux',
               message.tone === 'error' ? 'text-danger' : 'text-fg-muted',
             )}
           >
@@ -143,7 +142,7 @@ const HostCard = ({
     group.paired && active.length > 0 ? (
       confirmingHost ? (
         <span className="flex items-center gap-3">
-          <span className="text-fg-muted text-[0.75rem]">Revoke {plural(active.length, 'key')}?</span>
+          <span className="text-fg-muted text-aux">Revoke {plural(active.length, 'key')}?</span>
           <button
             type="button"
             disabled={anyBusy}
@@ -236,12 +235,12 @@ const KeyRow = ({
     <li className="row-hover group flex min-h-[2.75rem] flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 md:px-5">
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex min-w-0 items-center gap-2">
-          <span className={cn('truncate text-[0.8125rem]', revoked ? 'text-fg-subtle line-through' : 'text-fg')}>
+          <span className={cn('truncate text-ui', revoked ? 'text-fg-subtle line-through' : 'text-fg')}>
             {ownKey.agentName}
           </span>
-          <code className="text-fg-subtle shrink-0 text-[0.6875rem]">{ownKey.keyPrefix}…</code>
+          <code className="text-fg-subtle shrink-0 text-aux">{ownKey.keyPrefix}…</code>
         </span>
-        <span className="text-fg-subtle flex flex-wrap items-center gap-x-1.5 text-[0.6875rem]">
+        <span className="text-fg-subtle flex flex-wrap items-center gap-x-1.5 text-aux">
           {/* A paired key's name is just runtime + host, both already on screen. */}
           {paired ? null : <span className="text-fg-muted truncate">{ownKey.name} ·</span>}
           <span>
@@ -259,7 +258,7 @@ const KeyRow = ({
       </div>
 
       {revoked ? (
-        <span className="text-fg-subtle shrink-0 text-[0.6875rem]">
+        <span className="text-fg-subtle shrink-0 text-aux">
           {ownKey.revokedAt ? (
             <>
               Revoked <RelativeTime iso={ownKey.revokedAt} />
@@ -273,7 +272,7 @@ const KeyRow = ({
         </span>
       ) : confirming ? (
         <span className="flex shrink-0 items-center gap-3">
-          <span className="text-fg-muted text-[0.75rem]">Revoke?</span>
+          <span className="text-fg-muted text-aux">Revoke?</span>
           <button
             type="button"
             disabled={anyBusy}
@@ -294,7 +293,7 @@ const KeyRow = ({
         </span>
       ) : (
         <span className="flex shrink-0 items-center gap-3">
-          <span className="text-fg-subtle text-[0.6875rem]">Active</span>
+          <span className="text-fg-subtle text-aux">Active</span>
           <button
             type="button"
             disabled={anyBusy}

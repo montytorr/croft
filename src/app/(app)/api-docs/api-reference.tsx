@@ -24,7 +24,7 @@ import { useEffect, useRef } from 'react'
 type ScalarApp = { destroy: () => void }
 type ScalarGlobal = {
   Scalar?: {
-    createApiReference: (selector: string, options: { url: string }) => ScalarApp
+    createApiReference: (selector: string, options: { url: string; forceDarkModeState?: 'dark' | 'light'; hideDarkModeToggle?: boolean }) => ScalarApp
   }
 }
 
@@ -40,7 +40,13 @@ export const ApiReference = ({ specUrl }: { specUrl: string }) => {
     const mount = () => {
       const scalar = (window as unknown as ScalarGlobal).Scalar
       if (!scalar || cancelled) return false
-      app.current = scalar.createApiReference('#scalar', { url: specUrl })
+      // Follows Croft's own theme: the reference was a white page inside a dark app.
+      const dark = document.documentElement.classList.contains('dark')
+      app.current = scalar.createApiReference('#scalar', {
+        url: specUrl,
+        forceDarkModeState: dark ? 'dark' : 'light',
+        hideDarkModeToggle: true,
+      })
       return true
     }
 

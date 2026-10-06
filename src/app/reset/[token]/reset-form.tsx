@@ -14,11 +14,11 @@ const MIN_PASSWORD = 12
 type State = 'idle' | 'saving' | 'done' | 'invalid'
 
 const LINK =
-  'text-fg-subtle hover:text-fg rounded-sm text-[0.75rem] transition-colors ' +
+  'text-fg-subtle hover:text-fg rounded-sm text-aux transition-colors ' +
   'focus-visible:ring-ring/40 focus-visible:outline-none focus-visible:ring-2'
 
 const PRIMARY_LINK =
-  'bg-accent text-accent-fg inline-flex h-9 items-center justify-center rounded-md px-4 text-[0.8125rem] font-medium ' +
+  'bg-accent text-accent-fg inline-flex h-9 items-center justify-center rounded-md px-4 text-ui font-medium ' +
   'transition-[filter] hover:brightness-110 focus-visible:ring-ring/40 focus-visible:outline-none focus-visible:ring-2'
 
 /**
@@ -69,7 +69,7 @@ export const ResetForm = ({ token }: { token: string }) => {
       <AuthShell>
         <CircleCheck size={22} className="text-status-in-review mb-4" aria-hidden />
         <h1 className="font-display headline text-fg text-[1.75rem] leading-tight">Password changed</h1>
-        <p className="text-fg-muted mt-3 text-[0.8125rem] leading-relaxed" role="status">
+        <p className="text-fg-muted mt-3 text-ui leading-relaxed" role="status">
           Every session that was signed in to {name} as you has been signed out. Sign in with the new password.
         </p>
         <Link href="/login" className={`${PRIMARY_LINK} mt-8 w-full`}>
@@ -84,7 +84,7 @@ export const ResetForm = ({ token }: { token: string }) => {
       <AuthShell>
         <LinkIcon size={22} className="text-fg-muted mb-4" aria-hidden />
         <h1 className="font-display headline text-fg text-[1.75rem] leading-tight">This link no longer works</h1>
-        <p className="text-fg-muted mt-3 text-[0.8125rem] leading-relaxed" role="alert">
+        <p className="text-fg-muted mt-3 text-ui leading-relaxed" role="alert">
           A reset link works once, within an hour of being sent, and only the newest one does. Ask for a new
           one from the sign-in page, or ask an administrator of this Croft to send it.
         </p>
@@ -100,13 +100,13 @@ export const ResetForm = ({ token }: { token: string }) => {
   return (
     <AuthShell>
       <h1 className="font-display headline text-fg text-[1.75rem] leading-tight">Choose a new password</h1>
-      <p className="text-fg-muted mt-2 text-[0.8125rem] leading-relaxed">
+      <p className="text-fg-muted mt-2 text-ui leading-relaxed">
         At least {MIN_PASSWORD} characters. Setting it signs this account out everywhere it is signed in.
       </p>
 
       <form onSubmit={onSubmit} className="mt-8 flex flex-col gap-4">
         <label className="flex flex-col gap-1.5">
-          <span className="text-fg-muted text-xs font-medium">New password</span>
+          <span className="text-fg-muted text-aux font-medium">New password</span>
           <span className="relative flex">
             <Input
               type={reveal ? 'text' : 'password'}
@@ -132,14 +132,14 @@ export const ResetForm = ({ token }: { token: string }) => {
             </button>
           </span>
           {tooShort ? (
-            <span className="text-fg-subtle text-[0.6875rem]">
+            <span className="text-fg-subtle text-aux">
               {MIN_PASSWORD - password.length} more character{MIN_PASSWORD - password.length === 1 ? '' : 's'}.
             </span>
           ) : null}
         </label>
 
         <label className="flex flex-col gap-1.5">
-          <span className="text-fg-muted text-xs font-medium">Confirm</span>
+          <span className="text-fg-muted text-aux font-medium">Confirm</span>
           <Input
             type={reveal ? 'text' : 'password'}
             name="confirm"
@@ -151,7 +151,7 @@ export const ResetForm = ({ token }: { token: string }) => {
             aria-invalid={mismatch}
             className="h-9"
           />
-          {mismatch ? <span className="text-danger text-[0.6875rem]">The two don’t match.</span> : null}
+          {mismatch ? <span className="text-danger text-aux">The two don’t match.</span> : null}
         </label>
 
         {error ? <AuthError>{error}</AuthError> : null}

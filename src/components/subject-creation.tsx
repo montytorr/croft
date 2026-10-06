@@ -23,7 +23,7 @@ const SubjectContext = createContext<Ctx>({ open: () => undefined })
 export const useCreateSubject = () => useContext(SubjectContext)
 
 const CHIP =
-  'border-border text-fg-muted hover:border-border-strong hover:text-fg relative flex h-[1.75rem] items-center gap-1.5 rounded-md border px-2 text-[0.75rem] transition-colors'
+  'border-border text-fg-muted hover:border-border-strong hover:text-fg relative flex h-9 items-center gap-1.5 rounded-md border px-2 text-aux transition-colors'
 
 const VISIBILITY_CHOICES: { value: SubjectVisibility; label: string; icon: typeof Lock }[] = [
   { value: 'lab', label: 'Lab', icon: Globe },
@@ -135,7 +135,7 @@ const CreateSubject = ({
         className="border-border bg-surface raised-lg enter-pop relative w-full max-w-[36rem] overflow-hidden rounded-xl border"
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="text-fg-subtle px-5 pt-4 text-[0.6875rem] font-medium tracking-[0.06em] uppercase">New subject</p>
+        <p className="text-fg-subtle px-5 pt-4 text-micro font-medium tracking-[0.06em] uppercase">New subject</p>
         <input
           ref={titleRef}
           value={title}
@@ -280,7 +280,7 @@ const CreateSubject = ({
             </button>
           ) : null}
 
-          <span className="text-fg-subtle ml-auto hidden text-[0.6875rem] sm:block">↵ create</span>
+          <span className="text-fg-subtle ml-auto hidden text-aux sm:block">↵ create</span>
           <Button variant="primary" size="sm" onClick={() => void submit()} disabled={!title.trim() || pending} className="px-3">
             {pending ? <Spinner /> : 'Create subject'}
           </Button>
@@ -288,9 +288,9 @@ const CreateSubject = ({
 
         {shared && pickingMembers ? (
           <div className="border-border enter-rise border-t px-5 py-3">
-            <p className="text-fg-subtle mb-1.5 text-[0.6875rem]">Shared with</p>
+            <p className="text-fg-subtle mb-1.5 text-aux">Shared with</p>
             {invitees.length === 0 ? (
-              <p className="text-fg-subtle text-[0.75rem]">Nobody else to add yet.</p>
+              <p className="text-fg-subtle text-aux">Nobody else to add yet.</p>
             ) : (
               <div className="flex flex-wrap gap-1" role="group" aria-label="Members">
                 {invitees.map((p) => {
@@ -302,7 +302,7 @@ const CreateSubject = ({
                       aria-pressed={on}
                       onClick={() => setMembers((current) => (on ? current.filter((id) => id !== p.id) : [...current, p.id]))}
                       className={cn(
-                        'flex h-[1.5rem] items-center gap-1.5 rounded-full border pr-2 pl-0.5 text-[0.75rem] transition-colors',
+                        'flex h-[1.5rem] items-center gap-1.5 rounded-full border pr-2 pl-0.5 text-aux transition-colors',
                         on ? 'border-accent text-fg bg-surface-raised' : 'border-border text-fg-muted hover:text-fg hover:border-border-strong',
                       )}
                     >
@@ -318,7 +318,7 @@ const CreateSubject = ({
         ) : null}
 
         {error ? (
-          <p className="text-danger bg-danger-subtle/60 border-border enter-rise border-t px-5 py-2 text-[0.75rem]" role="alert">
+          <p className="text-danger bg-danger-subtle/60 border-border enter-rise border-t px-5 py-2 text-aux" role="alert">
             {error}
           </p>
         ) : null}

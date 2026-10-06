@@ -97,7 +97,7 @@ export const ChildrenPanel = ({
         <button
           type="button"
           onClick={() => setAdding((a) => !a)}
-          className="text-fg-subtle hover:text-fg hover:bg-surface-hover -mr-1.5 ml-auto rounded px-1.5 py-px text-[0.6875rem] transition-colors duration-[var(--dur-1)]"
+          className="text-fg-subtle hover:text-fg hover:bg-surface-hover -mr-1.5 ml-auto rounded px-1.5 py-px text-aux transition-colors duration-[var(--dur-1)]"
         >
           {adding ? 'Cancel' : 'Add sub-task'}
         </button>
@@ -112,11 +112,11 @@ export const ChildrenPanel = ({
               <Link
                 href={`/projects/${c.project_key}/tasks/${c.number}`}
                 prefetch
-                className="text-fg min-w-0 flex-1 truncate text-[0.78125rem]"
+                className="text-fg min-w-0 flex-1 truncate text-ui"
               >
                 {c.title}
               </Link>
-              <code className="text-fg-subtle tabular shrink-0 text-[0.6875rem]">
+              <code className="text-fg-subtle tabular shrink-0 text-aux">
                 {c.project_key}-{c.number}
               </code>
               <button
@@ -125,7 +125,7 @@ export const ChildrenPanel = ({
                 onClick={() => void detach(c)}
                 title="Lift it back to the top level"
                 aria-label={`Detach ${c.project_key}-${c.number}`}
-                className="text-fg-subtle hover:text-fg shrink-0 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100"
+                className="text-fg-subtle hover:text-fg shrink-0 opacity-0 pointer-coarse:opacity-100 transition group-hover:opacity-100 focus-visible:opacity-100"
               >
                 <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
                   <path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
@@ -161,7 +161,7 @@ export const ChildrenPanel = ({
         />
       )}
 
-      {error && <p className="text-danger mt-1.5 text-[0.75rem]">{error}</p>}
+      {error && <p className="text-danger mt-1.5 text-aux">{error}</p>}
     </section>
   )
 }

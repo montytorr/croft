@@ -11,19 +11,19 @@ import { Activity, Columns3, FlaskConical, ListTodo, Plus, Search } from 'lucide
 /** A lab project as the sidebar lists it: its colour, its name, how many subjects it holds. */
 export type NavProject = Pick<LabProject, 'id' | 'name' | 'color'> & { subjects: number }
 
-const ROW = '1.875rem'
+const ROW = '2.5rem'
 
 /**
  * The active entry's marker, drawn once and moved rather than drawn on each
  * row, so navigating slides it from the old entry to the new one. Rows are a
- * fixed 1.875rem, so its position is the index and nothing is measured. Hidden
+ * fixed 2.5rem, so its position is the index and nothing is measured. Hidden
  * when nothing in the list is active.
  */
 const Marker = ({ index }: { index: number }) => (
   <span
     aria-hidden
     className={cn(
-      'bg-surface-raised pointer-events-none absolute inset-x-0.5 top-0 h-[1.875rem] rounded-md',
+      'bg-surface-raised pointer-events-none absolute inset-x-0.5 top-0 h-10 rounded-md',
       'transition-[transform,opacity] duration-[var(--dur-3)] ease-[var(--ease-out)]',
       'before:bg-accent before:absolute before:inset-y-[0.375rem] before:-left-[2px] before:w-[2px] before:rounded-full',
       index < 0 && 'opacity-0',
@@ -70,7 +70,7 @@ const tone = (color: string) => (/^#[0-9a-f]{3,8}$/i.test(color) ? color : 'var(
 
 const linkClass = (active: boolean) =>
   cn(
-    'group relative flex h-[1.875rem] items-center gap-2 rounded-md px-2 text-[0.8125rem]',
+    'group relative flex h-10 items-center gap-2 rounded-md px-2 text-ui',
     'transition-colors duration-100 ease-[var(--ease)]',
     // The marker is the fill and the accent edge: a raised background alone
     // is a very quiet way to answer "where am I".
@@ -111,7 +111,7 @@ const ProjectRows = ({
                 />
               </span>
               <span className="min-w-0 flex-1 truncate">{p.name}</span>
-              <span className="text-fg-subtle tabular shrink-0 text-[0.6875rem]">{p.subjects}</span>
+              <span className="text-fg-subtle tabular shrink-0 text-aux">{p.subjects}</span>
             </Link>
           </li>
         )
@@ -164,7 +164,7 @@ const ProjectsGroup = ({
         <Link
           href="/settings#lab-projects"
           onClick={onNavigate}
-          className="text-fg-subtle hover:text-fg flex h-[1.875rem] items-center px-2 text-[0.75rem] transition-colors"
+          className="text-fg-subtle hover:text-fg flex h-10 items-center px-2 text-aux transition-colors"
         >
           Add the first project
         </Link>

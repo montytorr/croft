@@ -88,7 +88,7 @@ export const SubjectWorkspace = ({
           role="tablist"
           aria-label="Sections"
           onKeyDown={onKeyDown}
-          className="flex items-center gap-1 overflow-x-auto px-4 py-2 [scrollbar-width:none] md:px-7"
+          className="scroll-hint flex items-center gap-1 overflow-x-auto px-4 py-2 [scrollbar-width:none] md:px-7"
         >
           {SUBJECT_TABS.map((t) => {
             const Icon = ICONS[t]
