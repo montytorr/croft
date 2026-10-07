@@ -139,7 +139,7 @@ export const ActivityPanel = ({ entries }: { entries: ActivityEntry[] }) => {
           setSeen(true)
           setOpen((o) => !o)
         }}
-        className={cn(LABEL, 'hover:text-fg flex items-center gap-1.5 transition-colors duration-[var(--dur-1)]')}
+        className={cn(LABEL, 'hover:text-fg flex h-6 items-center gap-1.5 transition-colors duration-[var(--dur-1)]')}
         aria-expanded={open}
       >
         <svg

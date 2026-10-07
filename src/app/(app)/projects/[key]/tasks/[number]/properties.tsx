@@ -121,7 +121,7 @@ const SelectRow = <T extends string>({
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value as T)}
-        className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-not-allowed"
+        className="control-overlay"
         aria-label={labels?.[value] ?? value}
       >
         {options.map((o) => (
@@ -413,7 +413,7 @@ export const Properties = ({
             <select
               value={shown.type}
               onChange={(e) => void patch({ type: e.target.value as TaskType })}
-              className="absolute inset-0 cursor-pointer opacity-0"
+              className="control-overlay"
               aria-label="Type"
             >
               {TASK_TYPES.map((t) => (
@@ -437,7 +437,7 @@ export const Properties = ({
             <select
               value={shown.assignee_user_id}
               onChange={(e) => onAssignee(e.target.value)}
-              className="absolute inset-0 cursor-pointer opacity-0"
+              className="control-overlay"
               aria-label="Assignee"
             >
               {/* The current assignee may have gone inactive since —

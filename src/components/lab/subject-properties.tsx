@@ -6,7 +6,7 @@ import { Archive, ArchiveRestore, Check, ChevronsUpDown, Plus, Tags, Trash2 } fr
 import { Avatar } from '@/components/icons'
 import { usePeople } from '@/components/people-context'
 import { RelativeTime } from '@/components/relative-time'
-import { Button } from '@/components/ui/control'
+import { Button, InlineInput } from '@/components/ui/control'
 import { useMutate } from '@/lib/api/use-mutate'
 import type { LabProject, Stage, Subject, Tag } from '@/lib/lab/types'
 import { nextPreset } from '@/lib/lab/ui-colours'
@@ -151,7 +151,7 @@ export const SubjectProperties = ({
               const stage = stages.find((s) => s.id === e.target.value)
               if (stage) void move(subject, stage)
             }}
-            className="absolute inset-0 cursor-pointer opacity-0"
+            className="control-overlay"
           >
             {stages.map((s) => (
               <option key={s.id} value={s.id}>
@@ -177,7 +177,7 @@ export const SubjectProperties = ({
               aria-label="Project"
               disabled={busy}
               onChange={(e) => void patch({ project: e.target.value || null })}
-              className="absolute inset-0 cursor-pointer opacity-0"
+              className="control-overlay"
             >
               <option value="">None</option>
               {subject.project && !projects.some((p) => p.id === subject.project?.id) ? (
@@ -213,7 +213,7 @@ export const SubjectProperties = ({
             aria-label="Owner"
             disabled={busy}
             onChange={(e) => void patch({ owner: e.target.value || null })}
-            className="absolute inset-0 cursor-pointer opacity-0"
+            className="control-overlay"
           >
             <option value="">Nobody</option>
             {subject.owner && !ownerKnown ? (
@@ -241,9 +241,9 @@ export const SubjectProperties = ({
                   setPickingTags((v) => !v)
                   setTagQuery('')
                 }}
-                className="text-fg-subtle hover:text-fg hover:border-border-strong border-border flex h-[1.25rem] items-center gap-1 rounded-full border border-dashed px-2 text-aux transition-colors"
+                className="control-chip"
               >
-                <Tags size={10} aria-hidden />
+                <Tags size={12} aria-hidden />
                 {pickingTags ? 'Done' : subject.tags.length ? 'Edit' : 'Add tags'}
               </button>
             ) : subject.tags.length === 0 ? (
@@ -253,7 +253,7 @@ export const SubjectProperties = ({
         </div>
         {pickingTags ? (
           <div className="border-border bg-surface enter-rise mt-1 flex flex-col rounded-lg border p-1">
-            <input
+            <InlineInput
               autoFocus
               value={tagQuery}
               onChange={(e) => setTagQuery(e.target.value)}
@@ -261,7 +261,7 @@ export const SubjectProperties = ({
               maxLength={40}
               placeholder={canCreateTags ? 'Find or create a tag…' : 'Find a tag…'}
               aria-label={canCreateTags ? 'Find or create a tag' : 'Find a tag'}
-              className="text-fg placeholder:text-fg-subtle h-10 w-full rounded-md bg-transparent px-2 text-ui outline-none"
+              className="mb-1"
             />
             <ul className="border-border flex flex-col border-t pt-1" role="group" aria-label="Tags">
               {shownTags.map((tag) => {
@@ -277,12 +277,10 @@ export const SubjectProperties = ({
                       className="hover:bg-surface-hover flex h-10 w-full items-center gap-2 rounded-md px-2 text-left text-ui transition-colors"
                     >
                       <span
-                        className={cn(
-                          'grid size-[0.875rem] shrink-0 place-items-center rounded-[4px] border',
-                          on ? 'border-accent bg-accent text-accent-fg' : 'border-border-strong',
-                        )}
+                        className="control-check"
+                        data-checked={on}
                       >
-                        {on ? <Check size={10} strokeWidth={3} aria-hidden /> : null}
+                        {on ? <Check size={12} strokeWidth={3} aria-hidden /> : null}
                       </span>
                       <span className="size-[0.4375rem] shrink-0 rounded-full" style={{ backgroundColor: tag.color || 'var(--fg-subtle)' }} />
                       <span className="text-fg truncate">{tag.name}</span>
@@ -334,7 +332,7 @@ export const SubjectProperties = ({
         {archived ? (
           <div className="flex flex-col gap-2">
             <p className="text-fg-muted text-aux">This subject is archived. It is out of the lab, not deleted.</p>
-            <Button size="sm" variant="secondary" disabled={busy} onClick={() => void patch({ archived: false })} className="self-start px-3">
+            <Button size="sm" variant="secondary" disabled={busy} onClick={() => void patch({ archived: false })} className="self-start">
               <ArchiveRestore size={13} aria-hidden /> Restore to the lab
             </Button>
           </div>
@@ -347,7 +345,7 @@ export const SubjectProperties = ({
               if (!window.confirm(`Archive “${subject.title}”? It leaves the lab but keeps its write-up, todos and log.`)) return
               if (await patch({ archived: true })) router.push('/')
             }}
-            className="-ml-2 px-2 font-normal"
+            className="-ml-2"
           >
             <Archive size={13} aria-hidden /> Archive subject
           </Button>
@@ -356,7 +354,7 @@ export const SubjectProperties = ({
 
       {canDelete ? (
         <section>
-          <Button size="sm" variant="danger" disabled={busy} onClick={() => setDeleting(true)} className="-ml-2 px-2 font-normal">
+          <Button size="sm" variant="danger" disabled={busy} onClick={() => setDeleting(true)} className="-ml-2">
             <Trash2 size={13} aria-hidden /> Delete subject
           </Button>
         </section>

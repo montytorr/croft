@@ -7,12 +7,12 @@ import { useState } from 'react'
 import { MarkdownView } from '@/components/markdown'
 import { cn } from '@/lib/utils'
 import { NOTE_KINDS, type NoteKind } from '@/schemas/task'
-import { Button } from '@/components/ui/control'
+import { Button, Select } from '@/components/ui/control'
 import { Spinner } from '@/components/spinner'
 import { EmptyState } from '@/components/empty-state'
 import type { Note } from '@/lib/data'
 import { useMutate } from '@/lib/api/use-mutate'
-import { COMPOSER, COUNT, LABEL } from './styles'
+import { COMPOSER, COMPOSER_FIELD, COUNT, LABEL } from './styles'
 
 /**
  * Each kind's colour, as a token so the label and its dot share it. Dead
@@ -145,21 +145,22 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit()
           }}
           placeholder="What did you try, find, or decide? Dead ends count."
-          className="text-fg placeholder:text-fg-subtle block max-h-[40vh] min-h-[3.625rem] w-full resize-y bg-transparent px-3 py-2.5 text-ui leading-relaxed outline-none"
+          className={COMPOSER_FIELD}
         />
 
         <div className="border-border/70 flex items-center gap-2 border-t px-2 py-1.5">
           <div className="relative flex items-center">
             <span
               aria-hidden
-              className="pointer-events-none absolute left-1.5 h-[0.375rem] w-[0.5rem] rounded-full transition-colors duration-[var(--dur-1)]"
+              className="pointer-events-none absolute left-2.5 size-[0.4375rem] rounded-full transition-colors duration-[var(--dur-1)]"
               style={{ backgroundColor: toneOf(kind) }}
             />
-            <select
+            <Select
+              size="sm"
               value={kind}
               onChange={(e) => setKind(e.target.value as NoteKind)}
               aria-label="Note kind"
-              className="hover:bg-surface-raised focus-visible:border-accent cursor-pointer appearance-none rounded-md border border-transparent bg-transparent py-1 pr-5 pl-4 text-aux outline-none transition-colors"
+              className="pl-6"
               style={{ color: toneOf(kind) }}
             >
               {NOTE_KINDS.map((k) => (
@@ -167,16 +168,7 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
                   {k}
                 </option>
               ))}
-            </select>
-            <svg
-              className="text-fg-subtle pointer-events-none absolute top-1/2 right-1 -translate-y-1/2"
-              width="9"
-              height="9"
-              viewBox="0 0 9 9"
-              aria-hidden
-            >
-              <path d="M1.5 3.2L4.5 6 7.5 3.2" stroke="currentColor" strokeWidth="1.3" fill="none" />
-            </svg>
+            </Select>
           </div>
 
           <span className="text-fg-subtle ml-auto hidden text-aux sm:block">
@@ -189,7 +181,7 @@ export const NotesPanel = ({ taskId, notes: initial }: { taskId: string; notes: 
             variant="primary"
             onClick={submit}
             disabled={!text.trim() || pending}
-            className="w-auto px-3"
+            className="w-auto"
           >
             {pending ? <Spinner /> : 'Add note'}
           </Button>

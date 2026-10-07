@@ -377,7 +377,7 @@ export const UsersManager = ({
                                 <li key={key.id} className="row-hover flex min-h-[2.25rem] flex-wrap items-center gap-2 px-2.5 py-1.5 text-aux">
                                   <span className={key.revoked ? 'line-through text-fg-subtle' : 'text-fg'}>{key.agentName}</span>
                                   <code className="text-fg-subtle">{key.keyPrefix}…</code>
-                                  {!key.revoked && <Button type="button" size="sm" variant="danger" className="ml-auto h-6" onClick={() => revokeKey(user.id, key)}>Revoke</Button>}
+                                  {!key.revoked && <Button type="button" size="sm" variant="danger" className="ml-auto" onClick={() => revokeKey(user.id, key)}>Revoke</Button>}
                                 </li>
                               ))}
                             </ul>

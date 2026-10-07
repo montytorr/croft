@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Button } from '@/components/ui/control'
+import { Button, Textarea } from '@/components/ui/control'
 import { Spinner } from '@/components/spinner'
 import { StageBadge } from './stage'
 import type { Stage } from '@/lib/lab/types'
@@ -70,7 +70,7 @@ export const ConclusionDialog = ({
             : 'What was learned, and what it means for the group. It is the first thing anyone reads on this subject.'}
         </p>
 
-        <textarea
+        <Textarea
           ref={ref}
           rows={5}
           value={value}
@@ -83,16 +83,16 @@ export const ConclusionDialog = ({
               ? 'Licence cost scales per seat; at our size it is three times the budget.'
               : 'Works for batch jobs under 10 GB; beyond that the cold start dominates.'
           }
-          className="writeup-sm border-border bg-bg text-fg placeholder:text-fg-subtle focus:border-accent mt-4 block w-full resize-y rounded-lg border px-3.5 py-3 outline-none transition-[border-color,box-shadow] duration-[var(--dur-1)] focus:shadow-[0_0_0_1px_var(--accent)]"
+          className="mt-4"
         />
 
         <div className="mt-4 flex items-center gap-2">
           <span className="text-fg-subtle hidden text-aux sm:block">⌘↵ to save</span>
           <div className="ml-auto flex gap-2">
-            <Button size="sm" variant="ghost" onClick={onCancel} className="px-3">
+            <Button size="sm" variant="ghost" onClick={onCancel}>
               Cancel
             </Button>
-            <Button size="sm" variant="primary" onClick={() => void submit()} disabled={!value.trim() || pending} className="px-3">
+            <Button size="sm" variant="primary" onClick={() => void submit()} disabled={!value.trim() || pending}>
               {pending ? <Spinner /> : `Conclude and move`}
             </Button>
           </div>

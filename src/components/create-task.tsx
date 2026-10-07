@@ -2,7 +2,7 @@
 
 import { Spinner } from '@/components/spinner'
 
-import { Button } from '@/components/ui/control'
+import { Button, Input, Textarea } from '@/components/ui/control'
 
 import { useRouter } from 'next/navigation'
 import { mutate } from '@/lib/api/mutate'
@@ -169,11 +169,7 @@ export const CreateTask = ({
   if (!open) return null
 
   // The select inside each chip is invisible, so the chip shows its focus.
-  const chip =
-    'relative flex h-9 items-center gap-1.5 rounded-md border border-border bg-surface px-2 text-aux ' +
-    'text-fg-muted transition-[color,background-color,border-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease-out)] ' +
-    'hover:border-border-strong hover:bg-surface-hover hover:text-fg ' +
-    'focus-within:border-accent focus-within:text-fg focus-within:ring-2 focus-within:ring-ring/50'
+  const chip = 'control-chip'
 
   const noSubjects = subjects !== null && subjects.length === 0
 
@@ -196,7 +192,7 @@ export const CreateTask = ({
           </span>
         </div>
 
-        <input
+        <Input
           ref={titleRef}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -208,15 +204,15 @@ export const CreateTask = ({
           }}
           placeholder="Todo title"
           aria-label="Title"
-          className="placeholder:text-fg-subtle text-fg w-full bg-transparent px-4 pt-3 pb-1 text-ui outline-none"
+          className="mx-4 mt-3 w-[calc(100%-2rem)]"
         />
 
-        <textarea
+        <Textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder="Description — markdown, optional"
           rows={3}
-          className="placeholder:text-fg-subtle w-full resize-none bg-transparent px-4 pb-3 text-ui leading-relaxed outline-none"
+          className="mx-4 mt-2 mb-3 w-[calc(100%-2rem)]"
         />
 
         {visibleSimilar.length > 0 && (
@@ -245,7 +241,7 @@ export const CreateTask = ({
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
                 disabled={noSubjects}
-                className="absolute inset-0 cursor-pointer opacity-0"
+                className="control-overlay"
                 aria-label="Subject"
               >
                 {chosen ? null : <option value="">Pick a subject</option>}
@@ -263,19 +259,19 @@ export const CreateTask = ({
               type="button"
               aria-pressed={subTask}
               onClick={() => setSubTask((on) => !on)}
-              className={cn(chip, 'font-mono', subTask && 'border-accent text-fg')}
+              className={cn(chip, subTask && 'border-accent text-fg')}
               title="File it under this todo instead of straight under its subject"
             >
               Sub-task of {parentRef}
             </button>
           ) : null}
 
-          <label className={cn(chip, 'pr-1')}>
+          <label className={chip}>
             <TypePill type={type} />
             <select
               value={type}
               onChange={(e) => setType(e.target.value as TaskType)}
-              className="absolute inset-0 cursor-pointer opacity-0"
+              className="control-overlay"
               aria-label="Type"
             >
               {TASK_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -288,7 +284,7 @@ export const CreateTask = ({
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as TaskStatus)}
-              className="absolute inset-0 cursor-pointer opacity-0"
+              className="control-overlay"
               aria-label="Status"
             >
               {TASK_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -301,7 +297,7 @@ export const CreateTask = ({
             <select
               value={priority}
               onChange={(e) => setPriority(e.target.value as TaskPriority)}
-              className="absolute inset-0 cursor-pointer opacity-0"
+              className="control-overlay"
               aria-label="Priority"
             >
               {TASK_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
@@ -314,7 +310,7 @@ export const CreateTask = ({
             <select
               value={assignee}
               onChange={(e) => setAssignee(e.target.value)}
-              className="absolute inset-0 cursor-pointer opacity-0"
+              className="control-overlay"
               aria-label="Assignee"
             >
               {people.map((p) => (
@@ -328,7 +324,7 @@ export const CreateTask = ({
             size="sm"
             onClick={() => void submit()}
             disabled={!ready || pending}
-            className="ml-auto h-9 px-3 text-aux"
+            className="ml-auto"
           >
             {pending ? (
               <span className="inline-flex items-center gap-1.5">

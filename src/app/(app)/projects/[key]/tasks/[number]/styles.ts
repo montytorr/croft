@@ -9,10 +9,11 @@ export const LABEL = 'pane-label'
 /** The count beside a label: the shared `.count` stone, not a trailing digit. */
 export const COUNT = 'count normal-case'
 
-/** A composer's shell: a flat card whose rim turns to the accent, doubled to 2px, while typing. */
-export const COMPOSER =
-  'surface-card overflow-hidden transition-[border-color,box-shadow] duration-[var(--dur-2)] ease-[var(--ease-out)] ' +
-  'focus-within:border-accent focus-within:ring-1 focus-within:ring-accent'
+/** A composer's shell: the shared field's rim around a textarea and its actions; it turns to the accent while typing. */
+export const COMPOSER = 'control-shell overflow-hidden'
+
+/** The textarea inside a composer: no rim of its own, the shell has it. */
+export const COMPOSER_FIELD = 'control-bare block max-h-[40vh] min-h-[3.625rem] w-full resize-y px-3 py-2.5 leading-relaxed'
 
 /**
  * The properties column: a solid pane beside the canvas, set off by one

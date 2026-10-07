@@ -109,6 +109,7 @@ export const EditableTitle = ({ taskId, initial }: { taskId: string; initial: st
         'border-accent bg-surface ring-accent block w-[calc(100%+0.75rem)] resize-none ring-1 outline-none',
       )}
       rows={1}
+      data-inline-edit
     />
   )
 }

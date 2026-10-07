@@ -71,6 +71,7 @@ export const SubjectTitle = ({ subjectRef, initial }: { subjectRef: string; init
       maxLength={300}
       rows={1}
       aria-label="Title"
+      data-inline-edit
       onChange={(e) => {
         setValue(e.target.value)
         e.target.style.height = 'auto'

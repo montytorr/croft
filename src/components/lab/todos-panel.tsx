@@ -52,19 +52,19 @@ const StatusControl = ({ todo, onChange }: { todo: PageTodo; onChange: (status: 
   const status = laneOf(todo)
   if (todo.handoff) {
     return (
-      <span className="grid size-5 shrink-0 place-items-center opacity-60" title={`Moves in ${todo.handoff.tracker}`}>
+      <span className="grid size-6 shrink-0 place-items-center opacity-60" title={`Moves in ${todo.handoff.tracker}`}>
         <StatusIcon status={status} size={13} />
       </span>
     )
   }
   return (
-    <span className="hover:bg-surface-raised relative z-10 grid size-5 shrink-0 place-items-center rounded transition-colors">
+    <span className="hover:bg-surface-raised relative z-10 grid size-6 shrink-0 place-items-center rounded transition-colors">
       <StatusIcon status={status} size={13} />
       <select
         value={status}
         aria-label={`Status of ${todo.ref}`}
         onChange={(e) => onChange(e.target.value as TaskStatus)}
-        className="absolute inset-0 cursor-pointer opacity-0"
+        className="control-overlay"
       >
         {TASK_STATUSES.map((s) => (
           <option key={s} value={s}>
@@ -328,7 +328,7 @@ export const TodosPanel = ({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="border-border focus-within:border-accent bg-surface flex h-[2rem] min-w-[14rem] flex-1 items-center gap-1.5 rounded-md border pr-1 pl-2.5 transition-[border-color,box-shadow] focus-within:shadow-[0_0_0_1px_var(--accent)] sm:max-w-[32rem]">
+        <div className="control-shell flex h-[var(--control-h)] min-w-[14rem] flex-1 items-center gap-1.5 pr-1 pl-2.5 sm:max-w-[32rem]">
           <Plus size={13} aria-hidden className="text-fg-subtle shrink-0" />
           <input
             value={title}
@@ -342,7 +342,7 @@ export const TodosPanel = ({
             maxLength={300}
             placeholder={todos.length ? 'Add a todo…' : 'What is the first concrete thing to do?'}
             aria-label="New todo"
-            className="text-fg placeholder:text-fg-subtle h-full min-w-0 flex-1 bg-transparent text-ui outline-none"
+            className="control-bare h-full min-w-0 flex-1"
           />
           {adding ? (
             <span className="text-fg-subtle px-1.5">

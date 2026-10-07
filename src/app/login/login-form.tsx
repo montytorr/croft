@@ -136,13 +136,12 @@ export const LoginForm = ({ canReset = false }: { canReset?: boolean }) => {
               disabled={pending}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="h-9"
             />
           </label>
 
           {error ? <AuthError>{error}</AuthError> : null}
 
-          <Button type="submit" variant="primary" disabled={pending} className="mt-2 h-9">
+          <Button type="submit" variant="primary" disabled={pending} className="mt-2">
             {pending ? (
               <span className="inline-flex items-center gap-2">
                 <Spinner />
@@ -177,7 +176,6 @@ export const LoginForm = ({ canReset = false }: { canReset?: boolean }) => {
             disabled={busy}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="h-9"
           />
         </label>
 
@@ -214,7 +212,7 @@ export const LoginForm = ({ canReset = false }: { canReset?: boolean }) => {
 
         {error ? <AuthError>{error}</AuthError> : null}
 
-        <Button type="submit" variant="primary" disabled={busy} className="mt-2 h-9">
+        <Button type="submit" variant="primary" disabled={busy} className="mt-2">
           {busy ? (
             <span className="inline-flex items-center gap-2">
               <Spinner />

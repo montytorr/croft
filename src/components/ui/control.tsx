@@ -1,33 +1,26 @@
 'use client'
 
-import { ChevronDown } from 'lucide-react'
 import { forwardRef } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
  * Form controls.
  *
- * Native selects cannot be styled beyond a point — the browser draws the
- * chevron and the control's metrics itself, which is why an unstyled `select`
- * looks foreign next to everything around it. `appearance-none` removes the
- * native chrome so the sizing, border and focus ring match the inputs, and the
- * chevron is drawn as an overlay. The dropdown list itself is still the OS
- * widget; that is the trade for keeping keyboard behaviour and accessibility
- * for free, and it is the right trade here.
+ * The look lives in globals.css, on the elements themselves: height, border,
+ * radius, ground, font, the select's chevron, and the hover, focus, disabled,
+ * invalid and placeholder states. A bare `<input>` is already right. What the
+ * components add is only what a bare element cannot say: that it fills its row
+ * (`w-full`), and the one compact size (`size="sm"`, 36px) for toolbars.
+ * There is no third size; a control that needs one is a different control.
+ *
+ * A native select cannot be styled past a point, and the list that opens is
+ * the platform's. That is the trade for keyboard behaviour and accessibility
+ * for free, and it is the right one here.
  */
 
-// Flat: focus turns the rim to the accent and doubles it to 2px, no halo.
-const base =
-  'w-full rounded-md border border-border bg-surface text-fg ' +
-  'transition-[color,background-color,border-color,box-shadow] duration-[var(--dur-1)] ease-[var(--ease)] ' +
-  'placeholder:text-fg-subtle ' +
-  'hover:border-border-strong hover:bg-surface-raised ' +
-  'focus:border-accent focus:bg-surface focus:outline-none focus:shadow-[0_0_0_1px_var(--accent)] ' +
-  'disabled:cursor-not-allowed disabled:opacity-50'
-
 const sizes = {
-  sm: 'h-9 px-2.5 text-aux',
-  md: 'h-11 px-3 text-ui md:h-10',
+  sm: 'control-sm',
+  md: '',
 } as const
 
 type Size = keyof typeof sizes
@@ -38,71 +31,48 @@ type WithSize<T> = Omit<T, 'size'> & { size?: Size }
 
 export const Input = forwardRef<HTMLInputElement, WithSize<React.ComponentProps<'input'>>>(
   ({ className, size = 'md', ...props }, ref) => (
-    <input ref={ref} className={cn(base, sizes[size], className)} {...props} />
+    <input ref={ref} className={cn('w-full', sizes[size], className)} {...props} />
   ),
 )
 Input.displayName = 'Input'
 
 export const Textarea = forwardRef<HTMLTextAreaElement, React.ComponentProps<'textarea'>>(
-  ({ className, ...props }, ref) => (
-    <textarea
-      ref={ref}
-      className={cn(base, 'resize-y px-2.5 py-2 text-ui leading-relaxed', className)}
-      {...props}
-    />
-  ),
+  ({ className, ...props }, ref) => <textarea ref={ref} className={cn('w-full', className)} {...props} />,
 )
 Textarea.displayName = 'Textarea'
 
 /**
- * The wrapper sizes to the select, and never shrinks below it.
- *
- * It carried `w-full`, so a select given an explicit width — w-36, w-40,
- * w-[130px]; every caller passes one — sat at its stated width inside a
- * full-width box, and the absolutely positioned chevron rendered against the
- * far edge of the row instead of against the control.
- *
- * `shrink-0` is the other half of the same problem: inside a flex row that
- * scrolls horizontally, a select with no minimum was squeezed narrower than its
- * own label, so "All projects" wrapped to two lines inside a 26px-tall control
- * and the second line was clipped. The row scrolls precisely so controls do not
- * have to shrink.
+ * `shrink-0` is not decoration: inside a flex row that scrolls sideways, a
+ * select with no minimum was squeezed narrower than its own label, so
+ * "All projects" wrapped inside a short control and the second line was
+ * clipped. The row scrolls precisely so controls do not have to shrink. The
+ * ellipsis in the base rule is for the case where the width is fixed and the
+ * choice is longer.
  */
-export const Select = forwardRef<HTMLSelectElement, WithSize<React.ComponentProps<'select'>>>(({ className, size = 'md', children, ...props }, ref) => (
-  <div className="relative inline-flex shrink-0 items-center">
-    <select
-      ref={ref}
-      className={cn(
-        base,
-        sizes[size],
-        // The WebKit prefix lives in a base rule in globals.css: written as a
-        // class, Tailwind reads the leading dash as a negative utility and
-        // emits nothing, so WebKit kept drawing its own arrow beside ours.
-        'cursor-pointer appearance-none pr-7',
-        className,
-      )}
-      {...props}
-    >
+export const Select = forwardRef<HTMLSelectElement, WithSize<React.ComponentProps<'select'>>>(
+  ({ className, size = 'md', children, ...props }, ref) => (
+    <select ref={ref} className={cn('shrink-0', sizes[size], className)} {...props}>
       {children}
     </select>
-    <ChevronDown
-      size={13}
-      aria-hidden
-      className="text-fg-subtle pointer-events-none absolute right-2"
-    />
-  </div>
-))
+  ),
+)
 Select.displayName = 'Select'
+
+// Every variant has a rim, transparent where the variant has none, so a button
+// is the same size in every variant and a disabled one can show its outline.
+// Disabled is one look for all of them: a flat ground, a solid hairline and the
+// muted ink, which is readable. Opacity is what made it unreadable.
+const DISABLED =
+  'disabled:border-border disabled:bg-bg-elevated disabled:text-fg-muted disabled:shadow-none disabled:brightness-100'
 
 const buttonVariants = {
   // Flat fill. Brightening on hover, not fading: on the dark ground a faded
   // accent looks disabled.
-  primary: 'bg-accent text-accent-fg hover:brightness-110',
-  secondary: 'border border-border bg-surface text-fg hover:bg-surface-raised hover:border-border-strong',
-  ghost: 'text-fg-muted hover:bg-surface-raised hover:text-fg',
-  quiet:
-    'border border-transparent text-fg-muted hover:border-border hover:bg-surface-raised hover:text-fg',
-  danger: 'text-danger hover:bg-danger-subtle',
+  primary: 'border-accent bg-accent text-accent-fg hover:brightness-110',
+  secondary: 'border-border-strong bg-surface text-fg hover:border-fg-subtle hover:bg-surface-raised',
+  ghost: 'border-transparent text-fg-muted hover:bg-surface-raised hover:text-fg',
+  quiet: 'border-transparent text-fg-muted hover:border-border hover:bg-surface-raised hover:text-fg',
+  danger: 'border-transparent text-danger hover:bg-danger-subtle',
 } as const
 
 export const Button = forwardRef<
@@ -113,13 +83,13 @@ export const Button = forwardRef<
     ref={ref}
     type="button"
     className={cn(
-      'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md font-medium',
+      'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border font-medium whitespace-nowrap',
       'transition-[background-color,border-color,color,box-shadow,filter,transform] duration-[var(--dur-1)] ease-[var(--ease)]',
-      'focus-visible:ring-ring/40 focus-visible:outline-none focus-visible:ring-2',
-      'disabled:pointer-events-none disabled:opacity-50',
-      'active:scale-[0.98]',
-      sizes[size],
+      'focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-2',
+      'active:scale-[0.98] disabled:active:scale-100',
+      size === 'sm' ? 'control-sm' : 'h-[var(--control-h)] px-3.5 text-ui',
       buttonVariants[variant],
+      DISABLED,
       className,
     )}
     {...props}
@@ -136,24 +106,11 @@ export const Field = ({ label, children }: { label: string; children: React.Reac
 )
 
 /**
- * The small inline input used inside popovers, pickers and rows.
- *
- * The same class string was hand-written in seven places, so they had drifted
- * apart on height, radius and focus treatment. One definition means one look.
+ * The compact input used inside popovers, pickers and rows. It is the shared
+ * field at the compact size, nothing more: it used to carry its own radius,
+ * ground and focus treatment, which is how seven of them drifted apart.
  */
 export const InlineInput = forwardRef<HTMLInputElement, React.ComponentProps<'input'>>(
-  ({ className, ...props }, ref) => (
-    <input
-      ref={ref}
-      className={cn(
-        'border-border bg-bg text-fg placeholder:text-fg-subtle h-9 w-full rounded-md border px-2 text-ui outline-none',
-        'transition-[border-color,box-shadow] duration-100',
-        'hover:border-border-strong focus:border-accent focus:shadow-[0_0_0_1px_var(--accent)]',
-        'disabled:cursor-not-allowed disabled:opacity-50',
-        className,
-      )}
-      {...props}
-    />
-  ),
+  ({ className, ...props }, ref) => <input ref={ref} className={cn('control-sm w-full', className)} {...props} />,
 )
 InlineInput.displayName = 'InlineInput'

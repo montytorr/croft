@@ -6,7 +6,7 @@ import { Columns3, List, Lock, Plus, Search, X } from 'lucide-react'
 import { MobileNavButton } from '@/components/mobile-nav-context'
 import { EmptyState } from '@/components/empty-state'
 import { Spinner } from '@/components/spinner'
-import { Button } from '@/components/ui/control'
+import { Button, Input } from '@/components/ui/control'
 import { cn } from '@/lib/utils'
 import { rememberLabView, type LabView as View } from '@/lib/lab/ui-view'
 import type { LabProject, Stage, SubjectSummary, Tag } from '@/lib/lab/types'
@@ -157,7 +157,7 @@ export const LabView = ({
               { value: 'board', label: 'Board', icon: Columns3 },
             ]}
           />
-          <Button variant="primary" size="sm" onClick={newSubject} className="h-10 px-3" title="New subject — c">
+          <Button variant="primary" size="sm" onClick={newSubject} title="New subject — c">
             <Plus size={14} aria-hidden />
             <span className="hidden sm:inline">New subject</span>
             <span className="hidden font-mono text-aux opacity-80 xl:inline">c</span>
@@ -168,8 +168,9 @@ export const LabView = ({
       <div className="border-border flex shrink-0 flex-wrap items-center gap-2 border-b px-3 py-2.5 md:px-6">
         <label className="relative flex w-full items-center sm:w-[15rem]">
           <Search size={13} aria-hidden className="text-fg-subtle pointer-events-none absolute left-2.5" />
-          <input
+          <Input
             ref={searchRef}
+            size="sm"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -180,7 +181,7 @@ export const LabView = ({
             }}
             placeholder="Filter subjects…"
             aria-label="Filter subjects"
-            className="border-border bg-surface text-fg placeholder:text-fg-subtle hover:border-border-strong focus:border-accent h-10 w-full rounded-md border pr-7 pl-8 text-ui outline-none transition-[border-color,box-shadow] focus:shadow-[0_0_0_1px_var(--accent)]"
+            className="pr-8 pl-8"
           />
           {running ? (
             <span className="text-fg-subtle absolute right-2.5"><Spinner size={11} /></span>
@@ -251,7 +252,7 @@ export const LabView = ({
                   className="rounded-[5px] transition-opacity hover:opacity-100"
                  
                 >
-                  <ProjectLabel project={p} active={on} className="h-8 px-2.5" />
+                  <ProjectLabel project={p} active={on} className="h-9 px-2.5" />
                 </button>
               )
             })}
@@ -260,8 +261,8 @@ export const LabView = ({
               aria-pressed={pickedProject === 'none'}
               onClick={() => push({ project: pickedProject === 'none' ? '' : 'none' })}
               className={cn(
-                'border-border h-8 shrink-0 rounded-[5px] border border-dashed px-2 text-aux leading-none font-medium whitespace-nowrap transition-[opacity,color]',
-                pickedProject === 'none' ? 'text-fg border-border-strong bg-surface-raised' : 'text-fg-muted hover:text-fg',
+                'control-chip shrink-0 font-medium',
+                pickedProject === 'none' && 'text-fg bg-surface-raised border-accent',
               )}
               title="Subjects that belong to no project"
             >
@@ -311,7 +312,7 @@ export const LabView = ({
             title="The field is unploughed"
             hint="A subject is anything worth finding out about: a technology to try, a proof of concept, an idea to build."
             action={
-              <Button variant="primary" size="sm" onClick={newSubject} className="px-3">
+              <Button variant="primary" size="sm" onClick={newSubject}>
                 <Plus size={14} aria-hidden /> New subject
               </Button>
             }

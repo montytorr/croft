@@ -86,7 +86,7 @@ export const LabelsSection = ({ labels }: { labels: LabelRow[] }) => {
                     type="button"
                     disabled={busy || !draft.trim()}
                     onClick={() => void apply(l.label, draft.trim())}
-                    className="text-accent shrink-0 text-aux disabled:opacity-40"
+                    className="text-accent disabled:text-fg-muted shrink-0 text-aux"
                   >
                     Save
                   </button>

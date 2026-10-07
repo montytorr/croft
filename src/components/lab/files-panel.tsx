@@ -275,7 +275,7 @@ export const FilesPanel = ({ subjectRef, files: initial }: { subjectRef: string;
             e.target.value = ''
           }}
         />
-        <Button size="sm" variant="secondary" onClick={() => input.current?.click()} className="px-3">
+        <Button size="sm" variant="secondary" onClick={() => input.current?.click()}>
           <Upload size={13} aria-hidden /> Upload
         </Button>
         <p className="text-fg-subtle text-aux">
@@ -300,7 +300,7 @@ export const FilesPanel = ({ subjectRef, files: initial }: { subjectRef: string;
         <button
           type="button"
           onClick={() => input.current?.click()}
-          className="border-border text-fg-subtle hover:text-fg-muted hover:border-border-strong flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-12 text-ui transition-colors"
+          className="border-border-strong bg-surface text-fg-muted hover:text-fg hover:border-fg-subtle flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border py-12 text-ui transition-colors"
         >
           <Paperclip size={18} strokeWidth={1.5} aria-hidden />
           No files yet. Drop screenshots, exports or a prototype here.

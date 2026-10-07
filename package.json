@@ -30,6 +30,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "check:overflow": "node scripts/check-overflow.mjs",
+    "audit:controls": "node scripts/audit-controls.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "operator:create": "node scripts/create-operator.mjs",
     "test": "vitest run",

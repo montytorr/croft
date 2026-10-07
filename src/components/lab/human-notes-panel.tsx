@@ -14,7 +14,7 @@ import type { SubjectHumanNote } from '@/lib/lab/types'
 import { cn } from '@/lib/utils'
 
 const FIELD =
-  'writeup-sm text-fg placeholder:text-fg-subtle block w-full resize-y bg-transparent px-3 py-2.5 outline-none [field-sizing:content]'
+  'control-bare block w-full resize-y px-3 py-2.5 leading-relaxed [field-sizing:content]'
 
 const Composer = ({
   initial = '',
@@ -43,7 +43,7 @@ const Composer = ({
   }
 
   return (
-    <div className="bg-surface border-border focus-within:border-accent overflow-hidden rounded-lg border transition-[border-color,box-shadow] duration-[var(--dur-2)] focus-within:shadow-[0_0_0_1px_var(--accent)]">
+    <div className="control-shell overflow-hidden">
       <textarea
         value={text}
         autoFocus={autoFocus}
@@ -63,11 +63,11 @@ const Composer = ({
         <span className="text-fg-subtle text-aux">Markdown · ⌘↵</span>
         <span className="ml-auto" />
         {onCancel ? (
-          <Button size="sm" variant="ghost" onClick={onCancel} className="px-2.5 font-normal">
+          <Button size="sm" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
         ) : null}
-        <Button size="sm" variant="primary" onClick={() => void submit()} disabled={!text.trim() || pending} className="px-3">
+        <Button size="sm" variant="primary" onClick={() => void submit()} disabled={!text.trim() || pending}>
           {pending ? <Spinner /> : submitLabel}
         </Button>
       </div>

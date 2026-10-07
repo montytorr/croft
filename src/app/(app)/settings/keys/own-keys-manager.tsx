@@ -17,7 +17,7 @@ type Pending = { kind: 'key' | 'host'; id: string } | null
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
 
 const textButton =
-  'text-aux transition-colors duration-[var(--dur-1)] disabled:pointer-events-none disabled:opacity-40'
+  'text-aux transition-colors duration-[var(--dur-1)] disabled:text-fg-muted'
 
 /**
  * No `<form>` anywhere (CROFT-171): every action is a `type="button"` that

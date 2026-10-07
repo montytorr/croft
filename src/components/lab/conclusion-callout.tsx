@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { MarkdownView } from '@/components/markdown'
 import { RelativeTime } from '@/components/relative-time'
-import { Button } from '@/components/ui/control'
+import { Button, Textarea } from '@/components/ui/control'
 import { Spinner } from '@/components/spinner'
 import { useMutate } from '@/lib/api/use-mutate'
 import type { Stage } from '@/lib/lab/types'
@@ -76,7 +76,7 @@ export const ConclusionCallout = ({
       </div>
       {editing ? (
         <>
-          <textarea
+          <Textarea
             autoFocus
             rows={4}
             value={draft}
@@ -85,13 +85,12 @@ export const ConclusionCallout = ({
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void save()
               if (e.key === 'Escape') setEditing(false)
             }}
-            className="writeup-sm border-border bg-surface text-fg focus:border-accent block w-full resize-y rounded-lg border px-3 py-2 outline-none focus:shadow-[0_0_0_1px_var(--accent)]"
           />
           <div className="mt-2 flex items-center gap-2">
-            <Button size="sm" variant="primary" onClick={() => void save()} disabled={saving || !draft.trim()} className="px-3">
+            <Button size="sm" variant="primary" onClick={() => void save()} disabled={saving || !draft.trim()}>
               {saving ? <Spinner /> : 'Save'}
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setEditing(false)} className="px-3 font-normal">
+            <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
               Cancel
             </Button>
             <span className="text-fg-subtle text-aux">⌘↵ save · esc cancel</span>

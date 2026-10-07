@@ -143,9 +143,8 @@ export const MarkdownEditor = ({
     <div>
       <div
         className={cn(
-          'surface-card p-3 transition-[border-color,box-shadow] duration-[var(--dur-2)] ease-[var(--ease-out)]',
-          'focus-within:border-accent focus-within:ring-1 focus-within:ring-accent',
-          state === 'error' && 'border-danger focus-within:border-danger focus-within:ring-danger',
+          'control-shell p-3',
+          state === 'error' && 'border-danger focus-within:border-danger focus-within:shadow-[0_0_0_1px_var(--danger)]',
         )}
       >
         {sourceReason ? (
@@ -158,7 +157,7 @@ export const MarkdownEditor = ({
             autoFocus
             spellCheck
             aria-label="Description, as markdown"
-            className="text-fg block min-h-32 w-full resize-y bg-transparent font-mono text-ui leading-relaxed outline-none [field-sizing:content]"
+            className="control-bare block min-h-32 w-full resize-y leading-relaxed [field-sizing:content]"
           />
         ) : (
           <EditorContent editor={editor} className="prose-editor" />
@@ -173,7 +172,6 @@ export const MarkdownEditor = ({
           variant="primary"
           onClick={() => void save()}
           disabled={state === 'saving'}
-          className="px-3"
         >
           {state === 'saving' ? 'Saving…' : 'Save'}
         </Button>
@@ -184,7 +182,6 @@ export const MarkdownEditor = ({
             setEditing(false)
             setState('idle')
           }}
-          className="px-3 font-normal"
         >
           Cancel
         </Button>

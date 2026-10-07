@@ -3,9 +3,9 @@ import { readFileSync } from 'node:fs'
 
 /**
  * Every colour the interface sets text in, measured against every ground it can
- * land on, in both themes. WCAG 2 contrast: 4.5 for text. The only exceptions
- * are disabled controls, which are not text a person has to read, and borders,
- * which are not in this list at all.
+ * land on, in both themes. WCAG 2 contrast: 4.5 for text, and no exceptions for
+ * a disabled control: it is set in the muted ink on a flat ground, so its label
+ * is measured here like any other (CROFT-34). Borders are not in this list.
  */
 const css = readFileSync('src/app/globals.css', 'utf8')
 
@@ -60,6 +60,18 @@ describe.each([
     for (const ground of GROUNDS) {
       expect(ratio(tokens[ink]!, tokens[ground]!), `${ink} on ${ground}`).toBeGreaterThanOrEqual(4.5)
     }
+  })
+
+  it('keeps a disabled control readable: muted ink on the flat ground it sits on', () => {
+    for (const ground of ['bg-elevated', 'surface', 'bg']) {
+      expect(ratio(tokens['fg-muted']!, tokens[ground]!), `disabled label on ${ground}`).toBeGreaterThanOrEqual(4.5)
+    }
+    // The tick on a checked, disabled checkbox is a graphic: 3:1.
+    expect(ratio(tokens['bg-elevated']!, tokens['fg-muted']!)).toBeGreaterThanOrEqual(3)
+  })
+
+  it('keeps a placeholder readable on the field it is in', () => {
+    expect(ratio(tokens['fg-subtle']!, tokens.surface!)).toBeGreaterThanOrEqual(4.5)
   })
 
   it('keeps heather text readable on its own tint, and white or ink on its fill', () => {

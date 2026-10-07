@@ -139,7 +139,7 @@ export const ResolutionDialog = ({
           )}
 
           <div className="ml-auto flex gap-2">
-            <Button size="sm" variant="ghost" onClick={onCancel} className="w-auto px-3">
+            <Button size="sm" variant="ghost" onClick={onCancel} className="w-auto">
               Cancel
             </Button>
             <Button
@@ -147,7 +147,7 @@ export const ResolutionDialog = ({
               variant="primary"
               onClick={submit}
               disabled={!value.trim() || pending || !originalOk}
-              className="w-auto px-3"
+              className="w-auto"
             >
               {pending ? 'Saving…' : status === 'cancelled' ? 'Cancel task' : 'Close task'}
             </Button>
