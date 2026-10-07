@@ -63,10 +63,10 @@ export const TakeBackDialog = ({
           Nothing changes in {handoff.tracker}: that task stays where it is.
         </p>
         <div className="mt-5 flex justify-end gap-2">
-          <Button ref={cancelRef} type="button" size="sm" variant="ghost" onClick={onCancel} className="px-3">
+          <Button ref={cancelRef} type="button" size="sm" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
-          <Button type="submit" size="sm" disabled={pending} className="px-3">
+          <Button type="submit" size="sm" disabled={pending}>
             {pending ? <Spinner /> : 'Take back'}
           </Button>
         </div>

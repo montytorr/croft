@@ -17,7 +17,7 @@ const Heading = ({ children, onMore, more }: { children: React.ReactNode; onMore
   <div className="mb-3 flex min-h-6 items-center gap-2">
     <h3 className="pane-label">{children}</h3>
     {onMore ? (
-      <button type="button" onClick={onMore} className="text-fg-subtle hover:text-fg ml-auto flex items-center gap-1 text-aux transition-colors">
+      <button type="button" onClick={onMore} className="text-fg-subtle hover:text-fg ml-auto flex h-6 items-center gap-1 text-aux transition-colors">
         {more}
         <ArrowRight size={11} aria-hidden />
       </button>

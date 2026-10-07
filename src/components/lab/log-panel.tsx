@@ -100,7 +100,7 @@ export const LogPanel = ({ subjectRef, notes: initial }: { subjectRef: string; n
         </span>
       </h2>
 
-      <div className="surface-card focus-within:border-accent mb-6 overflow-hidden transition-[border-color,box-shadow] duration-[var(--dur-2)] focus-within:shadow-[0_0_0_1px_var(--accent)]">
+      <div className="control-shell mb-6 overflow-hidden">
         <textarea
           rows={2}
           value={text}
@@ -110,7 +110,7 @@ export const LogPanel = ({ subjectRef, notes: initial }: { subjectRef: string; n
           }}
           placeholder={KIND_HINT[kind] ?? 'Add to the log.'}
           aria-label="Log entry"
-          className="writeup-sm text-fg placeholder:text-fg-subtle block max-h-[40vh] min-h-[4rem] w-full resize-y bg-transparent px-3.5 py-3 outline-none"
+          className="control-bare block max-h-[40vh] min-h-[4rem] w-full resize-y px-3.5 py-3 leading-relaxed"
         />
         <div className="border-border/70 flex flex-wrap items-center gap-1 border-t px-2 py-1.5">
           <div role="radiogroup" aria-label="Kind" className="flex flex-wrap items-center gap-0.5">
@@ -132,7 +132,7 @@ export const LogPanel = ({ subjectRef, notes: initial }: { subjectRef: string; n
             ))}
           </div>
           <span className="text-fg-subtle ml-auto hidden text-aux sm:block">⌘↵</span>
-          <Button size="sm" variant="primary" onClick={() => void submit()} disabled={!text.trim() || pending} className="px-3">
+          <Button size="sm" variant="primary" onClick={() => void submit()} disabled={!text.trim() || pending}>
             {pending ? <Spinner /> : 'Add to log'}
           </Button>
         </div>

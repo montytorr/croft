@@ -177,7 +177,7 @@ export const BrandingSection = ({ initial }: { initial: BrandingValue }) => {
               onChange={(e) => setAccent(e.target.value.trim())}
               placeholder={STOCK_ACCENT}
               aria-invalid={!valid}
-              className={cn('w-28 font-mono', !valid && 'border-danger')}
+              className="w-28"
             />
           </div>
           <p className="text-fg-subtle text-aux">

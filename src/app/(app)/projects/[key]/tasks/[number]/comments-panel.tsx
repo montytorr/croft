@@ -12,7 +12,7 @@ import { Avatar } from '@/components/icons'
 import { Button } from '@/components/ui/control'
 import { useMutate } from '@/lib/api/use-mutate'
 import { cn } from '@/lib/utils'
-import { COMPOSER, COUNT, LABEL } from './styles'
+import { COMPOSER, COMPOSER_FIELD, COUNT, LABEL } from './styles'
 
 /** Conversation aimed at the human, kept separate from the agent work log. */
 export const CommentsPanel = ({
@@ -91,7 +91,7 @@ export const CommentsPanel = ({
           }}
           placeholder="Add a comment…"
           aria-label="Add a comment"
-          className="text-fg placeholder:text-fg-subtle block max-h-[40vh] min-h-[3.625rem] w-full resize-y bg-transparent px-3 py-2.5 text-ui leading-relaxed outline-none"
+          className={COMPOSER_FIELD}
         />
         <div className="border-border/70 flex items-center gap-2 border-t px-2 py-1.5">
           <span className="text-fg-subtle ml-auto hidden text-aux sm:block">
@@ -103,7 +103,7 @@ export const CommentsPanel = ({
             variant="primary"
             onClick={submit}
             disabled={!text.trim() || pending}
-            className="w-auto px-3"
+            className="w-auto"
           >
             {pending ? <Spinner /> : 'Post'}
           </Button>

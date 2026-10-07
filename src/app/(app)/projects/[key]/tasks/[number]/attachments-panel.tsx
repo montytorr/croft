@@ -321,7 +321,7 @@ export const AttachmentsPanel = ({
           type="button"
           onClick={() => input.current?.click()}
           disabled={pending > 0}
-          className="text-fg-subtle hover:text-fg ml-auto inline-flex items-center gap-1.5 text-aux transition-colors duration-[var(--dur-1)] disabled:opacity-50"
+          className="text-fg-subtle hover:text-fg disabled:text-fg-muted ml-auto inline-flex h-6 items-center gap-1.5 text-aux transition-colors duration-[var(--dur-1)]"
         >
           <Paperclip size={12} aria-hidden />
           {pending > 0 ? `Uploading${pending > 1 ? ` ${pending}` : ''}…` : dragging ? 'Drop to attach' : 'Attach'}

@@ -5,7 +5,7 @@ import { useCallback, useRef, useState } from 'react'
 import { Check, Globe, Lock, UserPlus, Users, X } from 'lucide-react'
 import { Avatar } from '@/components/icons'
 import { usePeople } from '@/components/people-context'
-import { Button } from '@/components/ui/control'
+import { Button, InlineInput } from '@/components/ui/control'
 import { useMutate } from '@/lib/api/use-mutate'
 import type { Subject, SubjectVisibility } from '@/lib/lab/types'
 import { cn } from '@/lib/utils'
@@ -83,7 +83,7 @@ const VisibilitySwitch = ({
               'flex h-[1.5rem] min-w-0 items-center justify-center gap-1 rounded-[5px] px-1.5 text-aux font-medium',
               'transition-[background-color,color,box-shadow] duration-[var(--dur-1)]',
               'focus-visible:ring-ring/40 focus-visible:outline-none focus-visible:ring-2',
-              'disabled:cursor-not-allowed disabled:opacity-60',
+              'disabled:cursor-not-allowed disabled:text-fg-muted',
               on
                 ? 'bg-surface text-fg shadow-[0_0_0_1px_var(--border-strong)]'
                 : 'text-fg-subtle hover:text-fg',
@@ -215,9 +215,9 @@ export const SubjectAccess = ({ subject }: { subject: Subject; isAdmin?: boolean
                   setAdding((v) => !v)
                   setQuery('')
                 }}
-                className="text-fg-subtle hover:text-fg hover:border-border-strong border-border flex h-[1.25rem] items-center gap-1 self-start rounded-full border border-dashed px-2 text-aux transition-colors"
+                className="control-chip self-start"
               >
-                <UserPlus size={10} aria-hidden />
+                <UserPlus size={12} aria-hidden />
                 {adding ? 'Done' : 'Add people'}
               </button>
             ) : null}
@@ -227,7 +227,7 @@ export const SubjectAccess = ({ subject }: { subject: Subject; isAdmin?: boolean
 
       {adding && manage && visibility === 'members' ? (
         <div className="border-border bg-surface enter-rise mt-1 flex flex-col rounded-lg border p-1">
-          <input
+          <InlineInput
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -239,7 +239,7 @@ export const SubjectAccess = ({ subject }: { subject: Subject; isAdmin?: boolean
             }}
             placeholder="Find a person…"
             aria-label="Find a person"
-            className="text-fg placeholder:text-fg-subtle h-10 w-full rounded-md bg-transparent px-2 text-ui outline-none"
+            className="mb-1"
           />
           <ul className="border-border flex max-h-[14rem] flex-col overflow-y-auto border-t pt-1" role="group" aria-label="People">
             {candidates.map((p) => {
@@ -255,12 +255,10 @@ export const SubjectAccess = ({ subject }: { subject: Subject; isAdmin?: boolean
                     className="hover:bg-surface-hover flex h-10 w-full items-center gap-2 rounded-md px-2 text-left text-ui transition-colors"
                   >
                     <span
-                      className={cn(
-                        'grid size-[0.875rem] shrink-0 place-items-center rounded-[4px] border',
-                        on ? 'border-accent bg-accent text-accent-fg' : 'border-border-strong',
-                      )}
+                      className="control-check"
+                      data-checked={on}
                     >
-                      {on ? <Check size={10} strokeWidth={3} aria-hidden /> : null}
+                      {on ? <Check size={12} strokeWidth={3} aria-hidden /> : null}
                     </span>
                     <Avatar name={p.name} size={16} />
                     <span className="text-fg truncate">
@@ -282,7 +280,7 @@ export const SubjectAccess = ({ subject }: { subject: Subject; isAdmin?: boolean
 
       {manage && visibility !== 'lab' ? (
         <div className="mt-2 flex flex-col gap-1.5">
-          <Button size="sm" variant="secondary" disabled={busy} onClick={() => setPublishing(true)} className="self-start px-3">
+          <Button size="sm" variant="secondary" disabled={busy} onClick={() => setPublishing(true)} className="self-start">
             <Globe size={13} aria-hidden /> Publish to the lab
           </Button>
           <p className="text-fg-subtle text-aux leading-relaxed">One-way: a published subject cannot be made private again.</p>

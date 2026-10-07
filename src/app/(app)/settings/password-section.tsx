@@ -55,7 +55,7 @@ export const PasswordSection = () => {
             <p className="text-fg-subtle min-w-0 flex-1 basis-60 text-aux leading-relaxed">
               Forgot it? Ask an administrator to email you a reset link.
             </p>
-            <Button type="submit" variant="primary" disabled={!canSubmit} className="w-auto px-4">
+            <Button type="submit" variant="primary" disabled={!canSubmit} className="w-auto">
               {state === 'saving' ? 'Changing…' : 'Change password'}
             </Button>
           </>

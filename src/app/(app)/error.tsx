@@ -25,12 +25,12 @@ const AppError = ({ error, reset }: { error: Error & { digest?: string }; reset:
         hint="Nothing was lost — this is a display failure, not a write. Retrying usually works."
         action={
           <>
-            <Button variant="primary" onClick={reset} className="px-3.5">
+            <Button variant="primary" onClick={reset}>
               Try again
             </Button>
             <Link
               href="/"
-              className="text-fg-muted hover:text-fg hover:bg-surface-raised inline-flex h-10 items-center rounded-md px-3.5 text-ui font-medium transition-colors duration-[var(--dur-1)] ease-[var(--ease-out)]"
+              className="text-fg-muted hover:text-fg hover:bg-surface-raised inline-flex h-[var(--control-h)] items-center rounded-md border border-transparent px-3.5 text-ui font-medium transition-colors duration-[var(--dur-1)] ease-[var(--ease-out)]"
             >
               Back to all tasks
             </Link>

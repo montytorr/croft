@@ -122,7 +122,7 @@ export const SearchControls = ({
             type="button"
             onClick={() => setDraft('')}
             aria-label="Clear the search"
-            className="text-fg-subtle hover:text-fg absolute right-2 z-10 shrink-0 sm:hidden"
+            className="text-fg-subtle hover:text-fg absolute right-1 z-10 grid size-6 shrink-0 place-items-center sm:hidden"
           >
             <X size={13} aria-hidden />
           </button>
@@ -147,7 +147,7 @@ export const SearchControls = ({
             committed.current = ''
             router.replace('/search')
           }}
-          className="text-fg-subtle hover:text-fg shrink-0 whitespace-nowrap text-aux transition-colors"
+          className="text-fg-subtle hover:text-fg inline-flex h-6 shrink-0 items-center whitespace-nowrap text-aux transition-colors"
         >
           Clear
         </button>

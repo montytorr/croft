@@ -78,7 +78,7 @@ const Row = ({ toast, onDismiss }: { toast: Toast; onDismiss: (id: number) => vo
         type="button"
         onClick={leave}
         aria-label="Dismiss"
-        className="text-fg-subtle hover:text-fg hover:bg-surface-hover -mr-1 grid size-5 shrink-0 place-items-center rounded transition-colors duration-[var(--dur-1)]"
+        className="text-fg-subtle hover:text-fg hover:bg-surface-hover -mr-1 grid size-6 shrink-0 place-items-center rounded transition-colors duration-[var(--dur-1)]"
       >
         <X size={13} />
       </button>

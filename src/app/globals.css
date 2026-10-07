@@ -327,6 +327,12 @@
   :focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: -1px;
+  }
+
+  /* The outline's corners, for things that have none of their own. A control
+     keeps its own radius: this rule used to square a round button, turn a
+     radio into a rounded square and take every focused field from 6px to 4px. */
+  :focus-visible:not(input, select, textarea, button, [role='button']) {
     border-radius: var(--radius-sm);
   }
 
@@ -837,6 +843,440 @@
   select::-ms-expand {
     display: none;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Form controls: one look.
+
+   Every field, select, textarea, checkbox and radio takes this look from the
+   element itself, so a bare <select> dropped into a new form is already
+   right and a component only has to say where it goes. The components in
+   ui/control.tsx add nothing but the width and the compact size.
+
+   Two sizes, and only two:
+     standard  44px on a phone, 40px from 768px up. Fields and buttons.
+     compact   36px. Toolbars, filters, chips, anything that sits in a row of
+               other small things. `.control-sm` (or size="sm") and nothing
+               in between.
+   The 16px floor on a touch screen is the rule at the end of this file; it
+   is why none of these set a smaller size with !important.
+
+   Disabled is solid and readable: the same ink as muted text on a flat
+   ground, no dashes and no opacity, because opacity is what took a disabled
+   button to 1:1 on its own ground. contrast.test.ts measures the pairs.
+   --------------------------------------------------------------------------- */
+
+:root {
+  --control-h: 2.75rem;
+  --control-h-sm: 2.25rem;
+  --control-px: 0.75rem;
+  --control-bg: var(--surface);
+  --control-border: var(--border-strong);
+  --control-border-hover: color-mix(in srgb, var(--fg-subtle) 55%, var(--border-strong));
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236e6469' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+:root.dark {
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239a8f95' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+@media (min-width: 48rem) {
+  :root { --control-h: 2.5rem; }
+}
+
+@layer base {
+  input:where(:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='hidden'], [type='button'], [type='submit'], [type='reset'], [type='image'])),
+  select,
+  textarea {
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+    height: var(--control-h);
+    padding: 0 var(--control-px);
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius);
+    background-color: var(--control-bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: var(--fs-ui);
+    font-weight: 400;
+    font-style: normal;
+    letter-spacing: -0.003em;
+    line-height: 1.25;
+    transition: border-color var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+  }
+
+  textarea {
+    height: auto;
+    min-height: var(--control-h);
+    padding-block: 0.5rem;
+    line-height: 1.5;
+    resize: vertical;
+  }
+
+  input:where(:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='hidden'], [type='button'], [type='submit'], [type='reset'], [type='image'])):hover:not(:disabled):not(:focus),
+  select:hover:not(:disabled):not(:focus),
+  textarea:hover:not(:disabled):not(:focus) {
+    border-color: var(--control-border-hover);
+  }
+
+  input:where(:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='hidden'], [type='button'], [type='submit'], [type='reset'], [type='image'])):focus,
+  select:focus,
+  textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+    outline: 2px solid transparent;
+    outline-offset: 0;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--fg-subtle);
+    opacity: 1;
+  }
+
+  input[type='search'] {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  input[type='search']::-webkit-search-cancel-button,
+  input[type='search']::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  /* Invalid says so without waiting for a stylesheet that knows about the
+     field: the attribute for forms that set it, and :user-invalid for the
+     ones that lean on the browser, which only fires after the field is touched. */
+  input[aria-invalid='true'],
+  input[aria-invalid='true']:focus,
+  select[aria-invalid='true'],
+  select[aria-invalid='true']:focus,
+  textarea[aria-invalid='true'],
+  textarea[aria-invalid='true']:focus {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 1px var(--danger);
+  }
+
+  input:user-invalid,
+  input:user-invalid:focus,
+  select:user-invalid,
+  select:user-invalid:focus,
+  textarea:user-invalid,
+  textarea:user-invalid:focus {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 1px var(--danger);
+  }
+
+  /* A select. The browser's arrow and its metrics are gone, so it is sized
+     like the fields beside it and draws its own chevron, in the theme's ink.
+     The right padding keeps a long choice clear of the chevron and the
+     ellipsis stands in for what does not fit; the list that opens is the
+     platform's, and takes its colours from color-scheme. */
+  select {
+    padding-right: 2.25rem;
+    background-image: var(--chevron);
+    background-repeat: no-repeat;
+    background-position: right 0.625rem center;
+    background-size: 1rem;
+    color-scheme: inherit;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  select option,
+  select optgroup {
+    background-color: var(--surface);
+    color: var(--fg);
+    font-style: normal;
+  }
+
+  select option:disabled {
+    color: var(--fg-muted);
+  }
+
+  input[type='file'] {
+    padding: 0 0.25rem;
+    color: var(--fg-muted);
+    font-size: var(--fs-aux);
+    line-height: calc(var(--control-h) - 2px);
+  }
+
+  input[type='file']::file-selector-button {
+    height: calc(var(--control-h) - 12px);
+    margin: 0 0.75rem 0 0;
+    padding: 0 0.75rem;
+    border: 1px solid var(--control-border);
+    border-radius: calc(var(--radius) - 1px);
+    background-color: var(--surface-raised);
+    color: var(--fg);
+    font: inherit;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  input:disabled,
+  select:disabled,
+  textarea:disabled {
+    border-color: var(--border);
+    border-style: solid;
+    background-color: var(--bg-elevated);
+    color: var(--fg-muted);
+    -webkit-text-fill-color: var(--fg-muted);
+    opacity: 1;
+    box-shadow: none;
+  }
+
+  input:disabled::placeholder,
+  textarea:disabled::placeholder {
+    color: var(--fg-muted);
+  }
+
+  /* Checkbox and radio. A 18px box in the theme's colours with a 24px target:
+     the pseudo-element reaches 3px past the box on every side, so the target
+     is the control's own and needs no label to be large enough. */
+  input[type='checkbox'],
+  input[type='radio'] {
+    -webkit-appearance: none;
+    appearance: none;
+    position: relative;
+    flex: none;
+    box-sizing: border-box;
+    width: 1.125rem;
+    height: 1.125rem;
+    margin: 0;
+    border: 1px solid var(--control-border);
+    border-radius: 4px;
+    background-color: var(--control-bg);
+    vertical-align: middle;
+    transition: border-color var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+  }
+
+  input[type='radio'] { border-radius: 50%; }
+
+  input[type='checkbox']::before,
+  input[type='radio']::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+  }
+
+  input[type='checkbox']::after,
+  input[type='radio']::after {
+    content: '';
+    position: absolute;
+    display: none;
+  }
+
+  input[type='checkbox']::after {
+    left: 50%;
+    top: 46%;
+    width: 0.3125rem;
+    height: 0.5625rem;
+    border: solid var(--accent-fg);
+    border-width: 0 2px 2px 0;
+    transform: translate(-50%, -50%) rotate(45deg);
+  }
+
+  input[type='radio']::after {
+    inset: 3px;
+    border-radius: 50%;
+    background-color: var(--accent);
+  }
+
+  input[type='checkbox']:hover:not(:disabled),
+  input[type='radio']:hover:not(:disabled) {
+    border-color: var(--control-border-hover);
+  }
+
+  input[type='checkbox']:checked,
+  input[type='checkbox']:indeterminate {
+    border-color: var(--accent);
+    background-color: var(--accent);
+  }
+
+  input[type='radio']:checked { border-color: var(--accent); }
+
+  input[type='checkbox']:checked::after,
+  input[type='radio']:checked::after { display: block; }
+
+  input[type='checkbox']:indeterminate::after {
+    display: block;
+    top: 50%;
+    width: 0.5rem;
+    height: 0;
+    border-width: 0 0 2px 0;
+    transform: translate(-50%, -50%);
+  }
+
+  input[type='checkbox']:focus-visible,
+  input[type='radio']:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  input[type='checkbox']:disabled,
+  input[type='radio']:disabled {
+    border-color: var(--border-strong);
+    background-color: var(--bg-elevated);
+    opacity: 1;
+  }
+
+  input[type='checkbox']:disabled:checked {
+    border-color: var(--fg-muted);
+    background-color: var(--fg-muted);
+  }
+
+  input[type='checkbox']:disabled:checked::after { border-color: var(--bg-elevated); }
+  input[type='radio']:disabled:checked::after { background-color: var(--fg-muted); }
+}
+
+@layer components {
+  /* The compact size. One, so a toolbar of mixed controls shares a line. */
+  .control-sm {
+    height: var(--control-h-sm);
+    padding-inline: 0.625rem;
+    font-size: var(--fs-aux);
+  }
+
+  textarea.control-sm {
+    height: auto;
+    min-height: var(--control-h-sm);
+  }
+
+  select.control-sm {
+    padding-right: 2rem;
+    background-position: right 0.5rem center;
+  }
+
+  /* A shell that is the control: a composer is a textarea and a row of actions
+     under one rim. The shell takes the field's rim and lights on focus-within,
+     the field inside it (.control-bare) gives up its own. */
+  .control-shell {
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius);
+    background-color: var(--control-bg);
+    transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+  }
+
+  .control-shell:hover:not(:focus-within) {
+    border-color: var(--control-border-hover);
+  }
+
+  .control-shell:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+
+  /* A picker that looks like a button and holds a real select: the compact
+     size, the field's rim, the same hover, focus and disabled. Disabled is read
+     off the select inside it, so the chip says "No subjects yet" in the muted
+     ink on a flat ground instead of going faint. */
+  .control-chip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    box-sizing: border-box;
+    max-width: 100%;
+    height: var(--control-h-sm);
+    padding-inline: 0.625rem;
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius);
+    background-color: var(--control-bg);
+    color: var(--fg-muted);
+    font-family: var(--font-sans);
+    font-size: var(--fs-aux);
+    font-weight: 400;
+    line-height: 1.25;
+    white-space: nowrap;
+    transition: border-color var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+  }
+
+  .control-chip:hover:not(:disabled):not([data-static]) {
+    border-color: var(--control-border-hover);
+    color: var(--fg);
+  }
+
+  .control-chip:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+    color: var(--fg);
+  }
+
+  .control-chip[aria-pressed='true'],
+  .control-chip[aria-expanded='true'] {
+    border-color: var(--accent);
+    color: var(--fg);
+  }
+
+  .control-chip:has(:disabled),
+  .control-chip:disabled,
+  .control-chip[aria-disabled='true'] {
+    border-color: var(--border);
+    background-color: var(--bg-elevated);
+    color: var(--fg-muted);
+    box-shadow: none;
+  }
+
+  /* The drawn tick beside a menu row that is checked or not: the same box as
+     a real checkbox, for rows where the whole row is the button. */
+  .control-check {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 1.125rem;
+    height: 1.125rem;
+    border: 1px solid var(--control-border);
+    border-radius: 4px;
+    background-color: var(--control-bg);
+    color: var(--accent-fg);
+  }
+
+  .control-check[data-checked='true'] {
+    border-color: var(--accent);
+    background-color: var(--accent);
+  }
+
+  /* A real select laid, unseen, over something that looks like a button: the
+     chip or the property row is what is drawn, the select is what is pressed. */
+  .control-overlay,
+  .control-overlay:hover,
+  .control-overlay:focus {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    padding: 0;
+    border-width: 0;
+    background-image: none;
+    box-shadow: none;
+    opacity: 0;
+  }
+
+  .control-bare,
+  .control-bare:hover,
+  .control-bare:focus {
+    height: auto;
+    min-height: 0;
+    padding: 0;
+    border-width: 0;
+    border-radius: 0;
+    background-color: transparent;
+    box-shadow: none;
+    outline: none;
+  }
+}
+
+/* A button that cannot be pressed keeps its shape and loses its fill. Unlayered
+   on purpose: a component's own `disabled:opacity-*` sits in the utilities layer
+   and would otherwise put the label back to a ratio nobody can read. */
+button:disabled,
+[role='button'][aria-disabled='true'] {
+  opacity: 1;
 }
 
 /* One rule for everyone who asked for less motion, rather than a media query

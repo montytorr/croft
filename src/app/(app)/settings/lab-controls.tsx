@@ -2,7 +2,7 @@
 
 import { useId, useState } from 'react'
 import { Plus } from 'lucide-react'
-import { Button, InlineInput } from '@/components/ui/control'
+import { Button, InlineInput, Select } from '@/components/ui/control'
 import { Spinner } from '@/components/spinner'
 import { CATEGORY_LABEL } from '@/components/lab/stage'
 import { STAGE_CATEGORIES, type StageCategory } from '@/lib/lab/types'
@@ -41,7 +41,7 @@ export const Swatch = ({
   return (
     <label
       className={cn(
-        'border-border-strong relative block size-[1.125rem] shrink-0 overflow-hidden rounded-full border',
+        'border-border-strong relative block size-6 shrink-0 overflow-hidden rounded-full border',
         !disabled && 'cursor-pointer hover:ring-2 hover:ring-[var(--border-strong)]',
       )}
       style={{ backgroundColor: draft }}
@@ -55,7 +55,7 @@ export const Swatch = ({
         aria-label={label}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => draft !== value && onCommit(draft)}
-        className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-default"
+        className="control-overlay"
       />
     </label>
   )
@@ -85,7 +85,7 @@ export const EditableName = ({
           setDraft(value)
           setEditing(true)
         }}
-        className="text-fg min-w-0 truncate rounded px-1 text-left text-ui enabled:hover:bg-surface-hover disabled:cursor-default"
+        className="text-fg min-h-6 min-w-0 truncate rounded px-1 text-left text-ui enabled:hover:bg-surface-hover disabled:cursor-default"
         title={disabled ? undefined : 'Rename'}
       >
         {value}
@@ -110,7 +110,7 @@ export const EditableName = ({
         if (e.key === 'Enter') void commit()
         if (e.key === 'Escape') setEditing(false)
       }}
-      className="h-9 min-w-0 flex-1"
+      className="min-w-0 flex-1"
     />
   )
 }
@@ -151,7 +151,7 @@ export const HandoffInputs = ({
         maxLength={32}
         spellCheck={false}
         autoCapitalize="none"
-        className={cn('h-9 w-[6.5rem] font-mono text-aux', className)}
+        className={cn('w-[6.5rem]', className)}
       />
       <datalist id={listId}>
         {HANDOFF_TRACKER_SUGGESTIONS.map((name) => (
@@ -168,7 +168,7 @@ export const HandoffInputs = ({
         maxLength={100}
         spellCheck={false}
         autoCapitalize="none"
-        className={cn('h-9 w-[8.5rem] font-mono text-aux', className)}
+        className={cn('w-[8.5rem]', className)}
       />
     </>
   )
@@ -233,7 +233,7 @@ export const AddRow = ({
         onKeyDown={(e) => e.key === 'Enter' && void add()}
         placeholder={placeholder}
         aria-label={placeholder}
-        className="h-9 min-w-[10rem] flex-1"
+        className="min-w-[10rem] flex-1"
       />
       {withHandoff ? (
         <HandoffInputs
@@ -242,24 +242,23 @@ export const AddRow = ({
           onTracker={setTracker}
           onTarget={setTarget}
           onKeyDown={(e) => e.key === 'Enter' && void add()}
-          className="h-9"
         />
       ) : null}
       {withCategory ? (
-        <select
+        <Select
+          size="sm"
           value={category}
           onChange={(e) => setCategory(e.target.value as StageCategory)}
           aria-label="Category"
-          className="border-border bg-surface text-fg-muted h-9 rounded-md border px-2 text-aux"
         >
           {STAGE_CATEGORIES.map((c) => (
             <option key={c} value={c}>
               {CATEGORY_LABEL[c]}
             </option>
           ))}
-        </select>
+        </Select>
       ) : null}
-      <Button size="sm" variant="primary" onClick={() => void add()} disabled={!name.trim() || pending} className="h-9 px-3">
+      <Button size="sm" variant="primary" onClick={() => void add()} disabled={!name.trim() || pending}>
         {pending ? <Spinner /> : <><Plus size={13} aria-hidden /> Add</>}
       </Button>
       {handoffError ? <p className="text-danger enter-rise w-full text-aux">{handoffError}</p> : null}

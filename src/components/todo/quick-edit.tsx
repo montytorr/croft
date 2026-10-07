@@ -49,7 +49,7 @@ export const QuickSelect = <T extends string>({
       onClick={(e) => e.stopPropagation()}
       aria-label={title}
       title={title}
-      className="absolute inset-0 cursor-pointer opacity-0"
+      className="control-overlay"
     >
       {options.map((o) => (
         <option key={o} value={o}>

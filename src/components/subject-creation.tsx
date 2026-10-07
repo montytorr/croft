@@ -7,7 +7,7 @@ import { Check, Globe, Lock, UserPlus, Users } from 'lucide-react'
 import { Avatar } from '@/components/icons'
 import { usePeople } from '@/components/people-context'
 import { Spinner } from '@/components/spinner'
-import { Button } from '@/components/ui/control'
+import { Button, Input, Textarea } from '@/components/ui/control'
 import { StageGlyph } from '@/components/lab/stage'
 import { TagChip } from '@/components/lab/tag-chip'
 import { VISIBILITY_HINT } from '@/components/lab/visibility'
@@ -22,8 +22,7 @@ const SubjectContext = createContext<Ctx>({ open: () => undefined })
 
 export const useCreateSubject = () => useContext(SubjectContext)
 
-const CHIP =
-  'border-border text-fg-muted hover:border-border-strong hover:text-fg relative flex h-9 items-center gap-1.5 rounded-md border px-2 text-aux transition-colors'
+const CHIP = 'control-chip'
 
 const VISIBILITY_CHOICES: { value: SubjectVisibility; label: string; icon: typeof Lock }[] = [
   { value: 'lab', label: 'Lab', icon: Globe },
@@ -136,7 +135,7 @@ const CreateSubject = ({
         onClick={(e) => e.stopPropagation()}
       >
         <p className="text-fg-subtle px-5 pt-4 text-micro font-medium tracking-[0.06em] uppercase">New subject</p>
-        <input
+        <Input
           ref={titleRef}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -149,9 +148,9 @@ const CreateSubject = ({
           maxLength={300}
           placeholder="What is worth finding out?"
           aria-label="Title"
-          className="font-display headline text-fg placeholder:text-fg-subtle w-full bg-transparent px-5 pt-1.5 pb-2 text-[1.25rem] outline-none"
+          className="mx-5 mt-2 w-[calc(100%-2.5rem)]"
         />
-        <textarea
+        <Textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
           onKeyDown={(e) => {
@@ -159,7 +158,7 @@ const CreateSubject = ({
           }}
           rows={3}
           placeholder="Why it matters, where to start — or leave the write-up for later."
-          className="writeup-sm text-fg placeholder:text-fg-subtle w-full resize-none bg-transparent px-5 pb-4 outline-none"
+          className="mx-5 mt-2 mb-4 w-[calc(100%-2.5rem)]"
         />
 
         {tags.length > 0 ? (
@@ -189,7 +188,7 @@ const CreateSubject = ({
               <select
                 value={stageId}
                 onChange={(e) => setStageId(e.target.value)}
-                className="absolute inset-0 cursor-pointer opacity-0"
+                className="control-overlay"
                 aria-label="Stage"
               >
                 {stages.map((s) => (
@@ -212,7 +211,7 @@ const CreateSubject = ({
               <select
                 value={projectId}
                 onChange={(e) => setProjectId(e.target.value)}
-                className="absolute inset-0 cursor-pointer opacity-0"
+                className="control-overlay"
                 aria-label="Project"
               >
                 <option value="">No project</option>
@@ -226,7 +225,7 @@ const CreateSubject = ({
           ) : null}
 
           {restricted ? (
-            <span className={cn(CHIP, 'hover:border-border hover:text-fg-muted')} title="A private or members subject is yours: you file it, you own it">
+            <span className={CHIP} data-static title="A private or members subject is yours: you file it, you own it">
               <Avatar name={ownerName} size={16} />
               You
             </span>
@@ -237,7 +236,7 @@ const CreateSubject = ({
               <select
                 value={owner}
                 onChange={(e) => setOwner(e.target.value)}
-                className="absolute inset-0 cursor-pointer opacity-0"
+                className="control-overlay"
                 aria-label="Owner"
               >
                 {people.map((p) => (
@@ -259,7 +258,7 @@ const CreateSubject = ({
                 setVisibility(next)
                 setPickingMembers(next === 'members' && members.length === 0)
               }}
-              className="absolute inset-0 cursor-pointer opacity-0"
+              className="control-overlay"
               aria-label="Who can see it"
             >
               <option value="lab">Lab — everyone</option>
@@ -273,17 +272,19 @@ const CreateSubject = ({
               type="button"
               aria-expanded={pickingMembers}
               onClick={() => setPickingMembers((v) => !v)}
-              className={cn(CHIP, 'border-dashed')}
+              className={CHIP}
             >
               <UserPlus size={12} aria-hidden />
               {memberIds.length ? `${memberIds.length} ${memberIds.length === 1 ? 'person' : 'people'}` : 'Add people'}
             </button>
           ) : null}
 
-          <span className="text-fg-subtle ml-auto hidden text-aux sm:block">↵ create</span>
-          <Button variant="primary" size="sm" onClick={() => void submit()} disabled={!title.trim() || pending} className="px-3">
-            {pending ? <Spinner /> : 'Create subject'}
-          </Button>
+          <div className="ml-auto flex items-center gap-3">
+            <span className="text-fg-subtle hidden text-aux sm:block">↵ create</span>
+            <Button variant="primary" size="sm" onClick={() => void submit()} disabled={!title.trim() || pending}>
+              {pending ? <Spinner /> : 'Create subject'}
+            </Button>
+          </div>
         </div>
 
         {shared && pickingMembers ? (

@@ -90,8 +90,8 @@ export const LabelEditor = ({
           'text-fg-subtle hover:text-fg rounded transition-[opacity,color,background-color] duration-[var(--dur-2)] ease-[var(--ease-out)]',
           'hover:bg-[color-mix(in_oklab,var(--fg)_7%,transparent)]',
           labels.length === 0 && alwaysVisible
-            ? 'inline-flex h-[1.125rem] items-center gap-1 px-1 text-aux'
-            : 'grid size-[1.125rem] place-items-center',
+            ? 'inline-flex h-6 items-center gap-1 px-1 text-aux'
+            : 'grid size-6 place-items-center',
           !alwaysVisible && labels.length === 0 && !open
             ? 'opacity-0 pointer-coarse:opacity-100 group-hover:opacity-100 focus-visible:opacity-100'
             : 'opacity-100',
@@ -132,7 +132,7 @@ export const LabelEditor = ({
                   readOnly
                   tabIndex={-1}
                   checked={labels.includes(l)}
-                  className="accent-accent size-[0.75rem]"
+
                 />
                 <span className="text-fg-muted min-w-0 truncate text-aux">{l}</span>
               </button>
@@ -149,7 +149,6 @@ export const LabelEditor = ({
               }}
               placeholder="New label…"
               aria-label="New label"
-              className="h-9 text-aux"
             />
           </div>
         </div>

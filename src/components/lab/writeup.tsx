@@ -144,7 +144,7 @@ const Editor = ({
         <button
           type="button"
           onClick={() => setPane((p) => (p === 'edit' ? 'preview' : 'edit'))}
-          className="text-fg-muted hover:text-fg flex items-center gap-1.5 text-aux lg:hidden"
+          className="text-fg-muted hover:text-fg flex h-9 items-center gap-1.5 text-aux lg:hidden"
         >
           {pane === 'edit' ? <Eye size={14} aria-hidden /> : <PenLine size={14} aria-hidden />}
           {pane === 'edit' ? 'Preview' : 'Edit'}
@@ -159,10 +159,10 @@ const Editor = ({
           </span>
         )}
         <span className="text-fg-subtle hidden text-aux md:block">⌘↵ save</span>
-        <Button variant="ghost" size="sm" onClick={cancel} disabled={state === 'saving'} className="hidden px-3 font-normal sm:inline-flex">
+        <Button variant="ghost" size="sm" onClick={cancel} disabled={state === 'saving'} className="hidden sm:inline-flex">
           Cancel
         </Button>
-        <Button variant="primary" size="sm" onClick={() => void save()} disabled={state === 'saving' || uploads > 0} className="shrink-0 px-3.5">
+        <Button variant="primary" size="sm" onClick={() => void save()} disabled={state === 'saving' || uploads> 0} className="shrink-0">
           {state === 'saving' ? <Spinner /> : 'Save write-up'}
         </Button>
       </header>
@@ -201,7 +201,8 @@ const Editor = ({
                 }}
                 spellCheck={false}
                 placeholder={PLACEHOLDER}
-                className="text-fg placeholder:text-fg-subtle block min-h-[70vh] w-full resize-none bg-transparent font-mono text-ui leading-[1.85] outline-none [field-sizing:content]"
+                data-surface
+                className="control-bare block min-h-[70vh] w-full resize-none font-mono leading-[1.85] [field-sizing:content]"
             />
           </div>
         </section>
@@ -285,7 +286,7 @@ export const WriteUp = ({
             setSeed(text)
             setEditing(true)
           }}
-          className="ml-auto px-3"
+          className="ml-auto"
         >
           <PenLine size={13} aria-hidden />
           {text.trim() ? 'Edit write-up' : 'Start writing'}

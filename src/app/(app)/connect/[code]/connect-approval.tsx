@@ -200,17 +200,12 @@ const PendingCard = ({
                 onClick={() => toggle(runtime)}
                 disabled={expired || busy !== null || locked(runtime)}
                 title={locked(runtime) ? 'Only an administrator can approve this key.' : undefined}
-                className="border-border hover:bg-surface-raised flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors duration-[var(--dur-1)] disabled:cursor-not-allowed disabled:opacity-50"
+                className="control-chip h-[var(--control-h)] w-full text-ui"
               >
-                <span
-                  aria-hidden
-                  className={`grid size-[0.75rem] shrink-0 place-items-center rounded-[3px] border ${
-                    checked ? 'border-accent bg-accent' : 'border-border-strong'
-                  }`}
-                >
-                  {checked ? <Check size={9} className="text-white" strokeWidth={3} /> : null}
+                <span aria-hidden className="control-check" data-checked={checked}>
+                  {checked ? <Check size={12} strokeWidth={3} /> : null}
                 </span>
-                <span className="text-fg text-ui">{runtime}</span>
+                <span className="text-ui">{runtime}</span>
                 {privileged ? (
                   <span className="text-fg-subtle ml-auto text-aux">
                     {view.isAdmin ? 'acts on everyone’s claims' : 'administrators only'}

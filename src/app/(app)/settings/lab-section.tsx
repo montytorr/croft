@@ -13,6 +13,7 @@ import { CATEGORY_LABEL, StageGlyph } from '@/components/lab/stage'
 import { TagChip } from '@/components/lab/tag-chip'
 import { mutate } from '@/lib/api/mutate'
 import { STAGE_CATEGORIES, type LabProject, type Stage, type StageCategory, type Tag } from '@/lib/lab/types'
+import { Select } from '@/components/ui/control'
 import { cn } from '@/lib/utils'
 import { SettingsCard } from './settings-card'
 import { AddRow, EditableName, LabColours, Swatch } from './lab-controls'
@@ -72,18 +73,18 @@ const StageRow = ({
           />
         </div>
         {canEdit ? (
-          <select
+          <Select
+            size="sm"
             value={stage.category}
             onChange={(e) => void onPatch(stage.id, { category: e.target.value as StageCategory })}
             aria-label={`Category of ${stage.name}`}
-            className="border-border bg-surface text-fg-muted hover:border-border-strong h-9 shrink-0 rounded-md border px-2 text-aux"
           >
             {STAGE_CATEGORIES.map((c) => (
               <option key={c} value={c}>
                 {CATEGORY_LABEL[c]}
               </option>
             ))}
-          </select>
+          </Select>
         ) : (
           <span className="text-fg-subtle shrink-0 text-aux">{CATEGORY_LABEL[stage.category]}</span>
         )}

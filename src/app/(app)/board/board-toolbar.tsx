@@ -115,7 +115,7 @@ const FilterMenu = ({
                 readOnly
                 tabIndex={-1}
                 checked={selected.includes(o.value)}
-                className="accent-accent size-[0.75rem]"
+                
               />
               <span className="text-fg-muted min-w-0 truncate text-aux">{o.label}</span>
             </button>
@@ -177,7 +177,6 @@ export const BoardToolbar = ({
         size="sm"
         value={filters.groupBy}
         onChange={(e) => onChange({ ...filters, groupBy: e.target.value as GroupBy })}
-        className="w-[8.125rem]"
         aria-label="Group columns by"
       >
         {GROUP_BY_VALUES.map((g) => (
@@ -200,7 +199,6 @@ export const BoardToolbar = ({
             onViewChange({ ...filters, swimlane: value as Swimlane }, { ...lab, lane: null })
           }
         }}
-        className="w-[9.5rem]"
         aria-label="Swimlanes"
       >
         {SWIMLANE_VALUES.filter((s) => s === 'none' || s !== filters.groupBy).map((s) => (

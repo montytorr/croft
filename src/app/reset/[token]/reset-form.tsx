@@ -18,7 +18,7 @@ const LINK =
   'focus-visible:ring-ring/40 focus-visible:outline-none focus-visible:ring-2'
 
 const PRIMARY_LINK =
-  'bg-accent text-accent-fg inline-flex h-9 items-center justify-center rounded-md px-4 text-ui font-medium ' +
+  'border-accent bg-accent text-accent-fg inline-flex h-[var(--control-h)] items-center justify-center rounded-md border px-3.5 text-ui font-medium ' +
   'transition-[filter] hover:brightness-110 focus-visible:ring-ring/40 focus-visible:outline-none focus-visible:ring-2'
 
 /**
@@ -149,14 +149,13 @@ export const ResetForm = ({ token }: { token: string }) => {
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
             aria-invalid={mismatch}
-            className="h-9"
           />
           {mismatch ? <span className="text-danger text-aux">The two don’t match.</span> : null}
         </label>
 
         {error ? <AuthError>{error}</AuthError> : null}
 
-        <Button type="submit" variant="primary" disabled={!canSubmit} className="mt-2 h-9">
+        <Button type="submit" variant="primary" disabled={!canSubmit} className="mt-2">
           {saving ? (
             <span className="inline-flex items-center gap-2">
               <Spinner />

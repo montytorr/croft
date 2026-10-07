@@ -97,7 +97,7 @@ export const ChildrenPanel = ({
         <button
           type="button"
           onClick={() => setAdding((a) => !a)}
-          className="text-fg-subtle hover:text-fg hover:bg-surface-hover -mr-1.5 ml-auto rounded px-1.5 py-px text-aux transition-colors duration-[var(--dur-1)]"
+          className="text-fg-subtle hover:text-fg hover:bg-surface-hover -mr-1.5 ml-auto inline-flex h-6 items-center rounded px-1.5 text-aux transition-colors duration-[var(--dur-1)]"
         >
           {adding ? 'Cancel' : 'Add sub-task'}
         </button>

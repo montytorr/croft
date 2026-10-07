@@ -61,10 +61,10 @@ export const PublishDialog = ({
         </div>
 
         <div className="mt-5 flex justify-end gap-2">
-          <Button ref={cancelRef} size="sm" variant="ghost" onClick={onCancel} className="px-3">
+          <Button ref={cancelRef} size="sm" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
-          <Button size="sm" variant="primary" onClick={() => void confirm()} disabled={pending} className="px-3">
+          <Button size="sm" variant="primary" onClick={() => void confirm()} disabled={pending}>
             {pending ? <Spinner /> : 'Publish to the lab'}
           </Button>
         </div>
